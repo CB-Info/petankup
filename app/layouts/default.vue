@@ -1,17 +1,23 @@
 <script setup lang="ts">
 // Layout shell : header sticky + zone de contenu centrée mobile-first.
-// Couleurs hardcodées en hexa (et pas via les rampes) parce qu'elles
-// proviennent des tokens neutres de la charte (#FAFAF6 / #F2F0EB / …),
-// indépendants du système 50→950 de Tailwind.
+// Couleurs neutres servies par les variables --app-* de main.css, qui
+// basculent automatiquement en dark via la classe `.dark` posée sur
+// <html> par @nuxtjs/color-mode (intégré par Nuxt UI).
 </script>
 
 <template>
-  <div class="min-h-screen bg-[#FAFAF6] text-[#2C2A25]">
-    <header class="sticky top-0 z-10 border-b border-[#E5E2DB] bg-[#F2F0EB]">
-      <div class="mx-auto flex min-h-14 max-w-2xl items-center px-4 py-3">
+  <div class="min-h-screen bg-(--app-bg) text-(--app-text)">
+    <header class="sticky top-0 z-10 border-b border-(--app-border) bg-(--app-surface)">
+      <div class="mx-auto flex min-h-14 max-w-2xl items-center justify-between gap-2 px-4 py-3">
         <NuxtLink to="/" class="text-lg font-semibold text-horizon-900">
           Pétankup
         </NuxtLink>
+        <ClientOnly>
+          <UColorModeButton variant="ghost" color="neutral" />
+          <template #fallback>
+            <div class="size-8" />
+          </template>
+        </ClientOnly>
       </div>
     </header>
 

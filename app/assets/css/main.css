@@ -32,3 +32,57 @@
   --color-sand-900: #4A4425;
   --color-sand-950: #2D2912;
 }
+
+/* Tokens sémantiques de l'app (neutres + danger).
+   En light mode : valeurs de la charte « Couleurs — Light mode ».
+   En dark mode  : valeurs de la charte « Couleurs — Dark mode ».
+   Utilisés dans les templates via `bg-(--app-bg)`, `text-(--app-text)`, etc. */
+:root {
+  --app-bg: #FAFAF6;
+  --app-surface: #F2F0EB;
+  --app-border: #E5E2DB;
+  --app-text: #2C2A25;
+  --app-text-subtle: #5C5A54;
+  --app-text-muted: #8A8880;
+  --app-danger-bg: #FCE8E8;
+  --app-danger-text: #A03030;
+}
+
+/* En dark mode, on inverse les sémantiques ET on bascule les rampes
+   horizon (bleu → brun fumé) et sand (sable doré → parchemin). Les
+   composants qui utilisent `text-horizon-900` deviennent ainsi clairs
+   sur fond sombre, sans avoir à les modifier au cas par cas. */
+.dark {
+  --app-bg: #1E1916;
+  --app-surface: #2A2420;
+  --app-border: #3D3530;
+  --app-text: #F0E3C3;
+  --app-text-subtle: #B0A498;
+  --app-text-muted: #7A7068;
+  --app-danger-bg: #3A1E1E;
+  --app-danger-text: #E06060;
+
+  --color-horizon-50: #2D2320;
+  --color-horizon-100: #3D322C;
+  --color-horizon-200: #4E3F38;
+  --color-horizon-300: #594640;
+  --color-horizon-400: #634C44;
+  --color-horizon-500: #7E6258;
+  --color-horizon-600: #9A7E72;
+  --color-horizon-700: #AF9385;
+  --color-horizon-800: #C4A898;
+  --color-horizon-900: #E0CFC5;
+  --color-horizon-950: #EFE0D8;
+
+  --color-sand-50: #2E2A20;
+  --color-sand-100: #4A4230;
+  --color-sand-200: #6B6040;
+  --color-sand-300: #857A58;
+  --color-sand-400: #A09570;
+  --color-sand-500: #C9B990;
+  --color-sand-600: #DDD0A8;
+  --color-sand-800: #EBE0C0;
+  --color-sand-700: #E2D2B0;
+  --color-sand-900: #F0E3C3;
+  --color-sand-950: #F8EFD8;
+}

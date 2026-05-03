@@ -30,7 +30,7 @@ function close() {
     title="Supprimer le tournoi"
   >
     <template #body>
-      <p class="text-sm text-[#2C2A25]">
+      <p class="text-sm text-(--app-text)">
         Supprimer le tournoi «&nbsp;<strong>{{ tournamentName }}</strong>&nbsp;» ?
         Toutes les équipes et matchs seront perdus.
       </p>

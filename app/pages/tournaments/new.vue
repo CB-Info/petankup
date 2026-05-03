@@ -87,7 +87,7 @@ useHead({ title: "Nouveau tournoi — Pétankup" });
         </UFormField>
 
         <UFormField label="Format">
-          <p class="text-[#5C5A54]">Championnat (toutes rondes)</p>
+          <p class="text-(--app-text-subtle)">Championnat (toutes rondes)</p>
         </UFormField>
 
         <UButton

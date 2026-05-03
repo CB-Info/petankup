@@ -46,15 +46,15 @@ function rowBgClass(rank: number): string {
 
 function rankNumberClass(rank: number): string {
   if (rank <= 3) return 'font-semibold text-horizon-900'
-  return 'text-[#8A8880]'
+  return 'text-(--app-text-muted)'
 }
 </script>
 
 <template>
   <div class="space-y-2">
-    <div class="overflow-hidden rounded-xl border border-[#E5E2DB] bg-white">
+    <div class="overflow-hidden rounded-xl border border-(--app-border) bg-(--app-surface)">
       <table class="w-full text-sm">
-        <thead class="bg-[#F2F0EB] text-[#5C5A54]">
+        <thead class="bg-(--app-surface) text-(--app-text-subtle)">
           <tr>
             <th
               scope="col"
@@ -109,7 +109,7 @@ function rankNumberClass(rank: number): string {
           <tr
             v-for="row in rows"
             :key="row.teamId"
-            class="border-t border-[#E5E2DB]"
+            class="border-t border-(--app-border)"
             :class="rowBgClass(row.rank)"
           >
             <td
@@ -143,7 +143,7 @@ function rankNumberClass(rank: number): string {
       </table>
     </div>
 
-    <p class="text-xs text-[#8A8880]">
+    <p class="text-xs text-(--app-text-muted)">
       V&nbsp;: victoires · D&nbsp;: défaites · PM&nbsp;: points marqués ·
       PE&nbsp;: points encaissés · Diff&nbsp;: différence
     </p>
