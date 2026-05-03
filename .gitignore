@@ -34,3 +34,9 @@ skills-lock.json
 
 # Docs & references
 references/
+.gitattributes
+
+# macOS metadata
+.DS_Store
+__MACOSX/
+._*
