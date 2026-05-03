@@ -3,7 +3,7 @@ import type { Match, Team, TournamentStatus } from '../../types'
 
 const route = useRoute()
 const tournamentStore = useTournamentStore()
-const { currentTournament, teams, matches } = storeToRefs(tournamentStore)
+const { currentTournament, teams, matches, ranking } = storeToRefs(tournamentStore)
 
 const tournamentId = computed(() => route.params.tournamentId as string)
 
@@ -146,6 +146,90 @@ function teamNameClass(match: Match, teamId: string): string {
   if (match.status !== 'completed') return 'text-horizon-900'
   if (match.winnerId === teamId) return 'font-semibold text-horizon-900'
   return 'text-[#5C5A54]'
+}
+
+// Le classement est calculé par le store via computeRanking, qui ne tient
+// compte que des matchs `completed`. On joint ici avec les noms d'équipe
+// pour l'affichage — séparation propre logique métier / présentation.
+type RankingRow = {
+  teamId: string
+  rank: number
+  teamName: string
+  wins: number
+  losses: number
+  pointsFor: number
+  pointsAgainst: number
+  pointDifference: number
+}
+
+const rankingRows = computed<RankingRow[]>(() => {
+  return ranking.value.map((entry) => {
+    const team = getTeamById(entry.teamId)
+    return {
+      teamId: entry.teamId,
+      rank: entry.rank,
+      teamName: team?.name ?? '—',
+      wins: entry.wins,
+      losses: entry.losses,
+      pointsFor: entry.pointsFor,
+      pointsAgainst: entry.pointsAgainst,
+      pointDifference: entry.pointDifference,
+    }
+  })
+})
+
+const completedMatchCount = computed(
+  () => matches.value.filter(match => match.status === 'completed').length,
+)
+
+const pendingMatchCount = computed(
+  () => matches.value.filter(match => match.status === 'pending').length,
+)
+
+const hasAnyCompletedMatch = computed(() => completedMatchCount.value > 0)
+
+const allMatchesAreCompleted = computed(
+  () => matches.value.length > 0 && pendingMatchCount.value === 0,
+)
+
+const canCompleteTournament = computed(
+  () =>
+    tournamentStatus.value === 'in_progress' && allMatchesAreCompleted.value,
+)
+
+function formatPointDifference(pointDifference: number): string {
+  if (pointDifference > 0) return `+${pointDifference}`
+  return String(pointDifference)
+}
+
+function rankingRowBgClass(rank: number): string {
+  if (rank === 1) return 'bg-sand-50'
+  return ''
+}
+
+function rankNumberClass(rank: number): string {
+  if (rank <= 3) return 'font-semibold text-horizon-900'
+  return 'text-[#8A8880]'
+}
+
+const completeModalOpen = ref(false)
+const isCompletingTournament = ref(false)
+
+function askCompleteConfirmation() {
+  if (!canCompleteTournament.value) return
+  completeModalOpen.value = true
+}
+
+function confirmCompleteTournament() {
+  if (isCompletingTournament.value) return
+  isCompletingTournament.value = true
+  try {
+    tournamentStore.completeTournament()
+  }
+  finally {
+    isCompletingTournament.value = false
+    completeModalOpen.value = false
+  }
 }
 </script>
 
@@ -391,9 +475,158 @@ function teamNameClass(match: Match, teamId: string): string {
       </template>
 
       <template #ranking>
-        <p class="py-6 text-center text-sm text-[#5C5A54]">
-          À venir (ticket #8c)
-        </p>
+        <div class="space-y-4">
+          <div
+            v-if="!hasAnyCompletedMatch"
+            class="rounded-xl border border-dashed border-[#E5E2DB] bg-[#F2F0EB] p-6 text-center"
+          >
+            <p class="text-sm text-[#5C5A54]">
+              Le classement apparaîtra après le premier match.
+            </p>
+          </div>
+
+          <div
+            v-else
+            class="space-y-4"
+          >
+            <div class="overflow-hidden rounded-xl border border-[#E5E2DB] bg-white">
+              <table class="w-full text-sm">
+                <thead class="bg-[#F2F0EB] text-[#5C5A54]">
+                  <tr>
+                    <th
+                      scope="col"
+                      class="px-2 py-2 text-left font-medium"
+                    >
+                      <span class="sr-only">Position</span>#
+                    </th>
+                    <th
+                      scope="col"
+                      class="px-2 py-2 text-left font-medium"
+                    >
+                      Équipe
+                    </th>
+                    <th
+                      scope="col"
+                      class="px-2 py-2 text-right font-medium"
+                      title="Victoires"
+                    >
+                      V
+                    </th>
+                    <th
+                      scope="col"
+                      class="px-2 py-2 text-right font-medium"
+                      title="Défaites"
+                    >
+                      D
+                    </th>
+                    <th
+                      scope="col"
+                      class="px-2 py-2 text-right font-medium"
+                      title="Points marqués"
+                    >
+                      PM
+                    </th>
+                    <th
+                      scope="col"
+                      class="px-2 py-2 text-right font-medium"
+                      title="Points encaissés"
+                    >
+                      PE
+                    </th>
+                    <th
+                      scope="col"
+                      class="px-2 py-2 pr-3 text-right font-medium"
+                      title="Différence de points"
+                    >
+                      Diff
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="row in rankingRows"
+                    :key="row.teamId"
+                    class="border-t border-[#E5E2DB]"
+                    :class="rankingRowBgClass(row.rank)"
+                  >
+                    <td
+                      class="px-2 py-3 tabular-nums"
+                      :class="rankNumberClass(row.rank)"
+                    >
+                      {{ row.rank }}
+                    </td>
+                    <td class="px-2 py-3">
+                      <span class="block truncate font-medium text-horizon-900">
+                        {{ row.teamName }}
+                      </span>
+                    </td>
+                    <td class="px-2 py-3 text-right tabular-nums">
+                      {{ row.wins }}
+                    </td>
+                    <td class="px-2 py-3 text-right tabular-nums">
+                      {{ row.losses }}
+                    </td>
+                    <td class="px-2 py-3 text-right tabular-nums">
+                      {{ row.pointsFor }}
+                    </td>
+                    <td class="px-2 py-3 text-right tabular-nums">
+                      {{ row.pointsAgainst }}
+                    </td>
+                    <td class="px-2 py-3 pr-3 text-right tabular-nums">
+                      {{ formatPointDifference(row.pointDifference) }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p class="text-xs text-[#8A8880]">
+              V&nbsp;: victoires · D&nbsp;: défaites · PM&nbsp;: points marqués ·
+              PE&nbsp;: points encaissés · Diff&nbsp;: différence
+            </p>
+
+            <div
+              v-if="tournamentStatus === 'in_progress'"
+              class="space-y-2"
+            >
+              <UButton
+                v-if="canCompleteTournament"
+                icon="i-lucide-trophy"
+                color="primary"
+                size="lg"
+                block
+                @click="askCompleteConfirmation"
+              >
+                Terminer le tournoi
+              </UButton>
+              <p
+                v-else
+                class="text-center text-sm text-[#5C5A54]"
+              >
+                {{ pendingMatchCount }}
+                {{ pendingMatchCount > 1 ? 'matchs restants à jouer' : 'match restant à jouer' }}
+              </p>
+            </div>
+
+            <div
+              v-else-if="tournamentIsCompleted"
+              class="space-y-3 rounded-xl border border-[#E5E2DB] bg-[#F2F0EB] p-4 text-center"
+            >
+              <p class="text-sm text-[#5C5A54]">
+                Tournoi terminé le {{ formatDate(currentTournament.updatedAt) }}
+              </p>
+              <UButton
+                :to="`/tournaments/${tournamentId}/results`"
+                variant="soft"
+                color="primary"
+                icon="i-lucide-trophy"
+                block
+              >
+                Voir les résultats
+              </UButton>
+            </div>
+          </div>
+        </div>
       </template>
     </UTabs>
 
@@ -413,6 +646,13 @@ function teamNameClass(match: Match, teamId: string): string {
       :match="matchBeingScored"
       :team-a="matchBeingScoredTeamA"
       :team-b="matchBeingScoredTeamB"
+    />
+
+    <TournamentCompleteConfirmModal
+      v-model:open="completeModalOpen"
+      :tournament-name="currentTournament.name"
+      :is-submitting="isCompletingTournament"
+      @confirmed="confirmCompleteTournament"
     />
   </div>
 </template>
