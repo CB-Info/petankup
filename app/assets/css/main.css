@@ -1,2 +1,34 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
+
+/* Rampes custom de la charte graphique (cf. CLAUDE.md > Charte graphique).
+   Les nuances 50, 100, 200, 400, 500, 600, 800, 900 viennent directement de
+   la charte. Les nuances 300, 700, 950 sont interpolées (Nuxt UI exige une
+   rampe complète 50→950 pour générer toutes les variantes utilitaires). */
+@theme static {
+  /* Bleu horizon → utilisé comme `primary` dans app.config.ts */
+  --color-horizon-50: #E8F2F5;
+  --color-horizon-100: #C4DEE5;
+  --color-horizon-200: #9DC8D3;
+  --color-horizon-300: #8CB9C6;
+  --color-horizon-400: #7BAAB9;
+  --color-horizon-500: #5A8A98;
+  --color-horizon-600: #3D6E7C;
+  --color-horizon-700: #345F6E;
+  --color-horizon-800: #2B5060;
+  --color-horizon-900: #1A3540;
+  --color-horizon-950: #112830;
+
+  /* Sable doré → utilisé comme `secondary` dans app.config.ts */
+  --color-sand-50: #F5F2E4;
+  --color-sand-100: #EDE7C8;
+  --color-sand-200: #E3DAAB;
+  --color-sand-300: #DED39E;
+  --color-sand-400: #D9CC92;
+  --color-sand-500: #C2B574;
+  --color-sand-600: #A89C5A;
+  --color-sand-700: #91874D;
+  --color-sand-800: #7A7240;
+  --color-sand-900: #4A4425;
+  --color-sand-950: #2D2912;
+}
