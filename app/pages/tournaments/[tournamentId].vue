@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { Team, TournamentStatus } from '../../types'
+import type { Match, Team, TournamentStatus } from '../../types'
 
 const route = useRoute()
 const tournamentStore = useTournamentStore()
-const { currentTournament, teams } = storeToRefs(tournamentStore)
+const { currentTournament, teams, matches } = storeToRefs(tournamentStore)
 
 const tournamentId = computed(() => route.params.tournamentId as string)
 
@@ -78,6 +78,74 @@ function confirmDelete() {
     tournamentStore.deleteTeam(teamPendingDeletion.value.id)
   }
   teamPendingDeletion.value = null
+}
+
+const teamsById = computed<Record<string, Team>>(() => {
+  return Object.fromEntries(teams.value.map(team => [team.id, team]))
+})
+
+function getTeamById(teamId: string): Team | null {
+  return teamsById.value[teamId] ?? null
+}
+
+type RoundGroup = { round: number, matches: Match[] }
+
+// Les matchs sont stockés à plat avec un champ `round` ; on les regroupe
+// pour l'affichage par manche, en triant par numéro de manche croissant.
+const matchesByRound = computed<RoundGroup[]>(() => {
+  const groupedMatches = new Map<number, Match[]>()
+  for (const match of matches.value) {
+    const existingMatchesInRound = groupedMatches.get(match.round) ?? []
+    existingMatchesInRound.push(match)
+    groupedMatches.set(match.round, existingMatchesInRound)
+  }
+  return [...groupedMatches.entries()]
+    .sort(([roundA], [roundB]) => roundA - roundB)
+    .map(([round, matchesInRound]) => ({ round, matches: matchesInRound }))
+})
+
+const tournamentStatus = computed(() => currentTournament.value?.status)
+
+const tournamentIsCompleted = computed(
+  () => tournamentStatus.value === 'completed',
+)
+
+const hasEnoughTeamsToStart = computed(() => teams.value.length >= 2)
+
+const isGeneratingMatches = ref(false)
+
+async function startTournament() {
+  if (isGeneratingMatches.value) return
+  isGeneratingMatches.value = true
+  try {
+    tournamentStore.generateMatches()
+    activeTab.value = String(tabItems.findIndex(tab => tab.slot === 'matches'))
+  }
+  finally {
+    isGeneratingMatches.value = false
+  }
+}
+
+const scoreModalOpen = ref(false)
+const matchBeingScored = ref<Match | null>(null)
+
+function openScoreModal(match: Match) {
+  if (tournamentIsCompleted.value) return
+  matchBeingScored.value = match
+  scoreModalOpen.value = true
+}
+
+const matchBeingScoredTeamA = computed(() =>
+  matchBeingScored.value ? getTeamById(matchBeingScored.value.teamAId) : null,
+)
+const matchBeingScoredTeamB = computed(() =>
+  matchBeingScored.value ? getTeamById(matchBeingScored.value.teamBId) : null,
+)
+
+function teamNameClass(match: Match, teamId: string): string {
+  if (match.status !== 'completed') return 'text-horizon-900'
+  if (match.winnerId === teamId) return 'font-semibold text-horizon-900'
+  return 'text-[#5C5A54]'
 }
 </script>
 
@@ -227,9 +295,99 @@ function confirmDelete() {
       </template>
 
       <template #matches>
-        <p class="py-6 text-center text-sm text-[#5C5A54]">
-          À venir (ticket #8b)
-        </p>
+        <div class="space-y-4">
+          <div
+            v-if="tournamentStatus === 'draft' && !hasEnoughTeamsToStart"
+            class="rounded-xl border border-dashed border-[#E5E2DB] bg-[#F2F0EB] p-6 text-center"
+          >
+            <p class="text-sm text-[#5C5A54]">
+              Ajoutez au moins 2 équipes pour lancer le tournoi.
+            </p>
+          </div>
+
+          <div
+            v-else-if="tournamentStatus === 'draft'"
+            class="space-y-3 rounded-xl border border-dashed border-[#E5E2DB] bg-[#F2F0EB] p-6 text-center"
+          >
+            <h2 class="text-base font-semibold text-horizon-900">
+              Les équipes sont prêtes
+            </h2>
+            <p class="text-sm text-[#5C5A54]">
+              Lancez le tournoi pour générer le calendrier des matchs.
+            </p>
+            <UButton
+              icon="i-lucide-play"
+              color="primary"
+              size="lg"
+              :loading="isGeneratingMatches"
+              block
+              @click="startTournament"
+            >
+              Lancer le tournoi
+            </UButton>
+          </div>
+
+          <div
+            v-else
+            class="space-y-6"
+          >
+            <section
+              v-for="roundGroup in matchesByRound"
+              :key="roundGroup.round"
+              class="space-y-3"
+            >
+              <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-[#5C5A54]">
+                Manche {{ roundGroup.round }}
+              </h2>
+              <ul class="space-y-2">
+                <li
+                  v-for="match in roundGroup.matches"
+                  :key="match.id"
+                >
+                  <UCard :ui="{ body: 'p-4 sm:p-4' }">
+                    <div class="flex items-center gap-3">
+                      <p
+                        class="min-w-0 flex-1 truncate text-sm"
+                        :class="teamNameClass(match, match.teamAId)"
+                      >
+                        {{ getTeamById(match.teamAId)?.name ?? '—' }}
+                      </p>
+
+                      <div class="shrink-0">
+                        <button
+                          v-if="match.status === 'completed'"
+                          type="button"
+                          class="rounded-md px-2 py-1 text-base font-semibold tabular-nums text-horizon-900 hover:bg-horizon-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          :disabled="tournamentIsCompleted"
+                          @click="openScoreModal(match)"
+                        >
+                          {{ match.scoreA }} - {{ match.scoreB }}
+                        </button>
+                        <UButton
+                          v-else
+                          variant="soft"
+                          color="primary"
+                          size="sm"
+                          :disabled="tournamentIsCompleted"
+                          @click="openScoreModal(match)"
+                        >
+                          Saisir le score
+                        </UButton>
+                      </div>
+
+                      <p
+                        class="min-w-0 flex-1 truncate text-right text-sm"
+                        :class="teamNameClass(match, match.teamBId)"
+                      >
+                        {{ getTeamById(match.teamBId)?.name ?? '—' }}
+                      </p>
+                    </div>
+                  </UCard>
+                </li>
+              </ul>
+            </section>
+          </div>
+        </div>
       </template>
 
       <template #ranking>
@@ -248,6 +406,13 @@ function confirmDelete() {
       v-model:open="deleteModalOpen"
       :team="teamPendingDeletion"
       @confirmed="confirmDelete"
+    />
+
+    <ScoreInputModal
+      v-model:open="scoreModalOpen"
+      :match="matchBeingScored"
+      :team-a="matchBeingScoredTeamA"
+      :team-b="matchBeingScoredTeamB"
     />
   </div>
 </template>
