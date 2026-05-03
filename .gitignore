@@ -25,4 +25,6 @@ logs
 
 # Claude Code
 CLAUDE.md
+skills-lock.json
 .claude/
+.agents/
