@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TournamentStatus } from '~/types'
+import type { TournamentStatus } from '../types'
 
 const tournamentStore = useTournamentStore()
 const { tournaments } = storeToRefs(tournamentStore)

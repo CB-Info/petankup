@@ -21,7 +21,8 @@
     "tailwindcss": "^4.2.4",
     "typescript": "^6.0.3",
     "vue": "^3.5.33",
-    "vue-router": "^5.0.6"
+    "vue-router": "^5.0.6",
+    "zod": "^4.4.2"
   },
   "devDependencies": {
     "@vue/test-utils": "^2.4.10",

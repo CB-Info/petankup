@@ -28,3 +28,9 @@ CLAUDE.md
 skills-lock.json
 .claude/
 .agents/
+
+# VS Code
+.vscode/
+
+# Docs & references
+references/
