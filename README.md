@@ -1,4 +1,4 @@
-# Petankup — Pétanque Tournament Manager
+# Pétankup — Pétanque Tournament Manager
 
 Application web privée mobile-first pour gérer des tournois de pétanque entre
 amis. MVP local-only (localStorage), pas de backend en V1.

@@ -10,7 +10,7 @@
     <header class="sticky top-0 z-10 border-b border-[#E5E2DB] bg-[#F2F0EB]">
       <div class="mx-auto flex min-h-14 max-w-2xl items-center px-4 py-3">
         <NuxtLink to="/" class="text-lg font-semibold text-horizon-900">
-          Pétanque
+          Pétankup
         </NuxtLink>
       </div>
     </header>

@@ -1,59 +1,53 @@
 <script setup lang="ts">
-const tournamentStore = useTournamentStore()
+const tournamentStore = useTournamentStore();
 
 // `toLocaleDateString('en-CA')` renvoie le format ISO (YYYY-MM-DD) dans
 // la timezone locale — évite le piège de `toISOString()`, qui passe en
 // UTC et peut renvoyer la date du lendemain en fin de soirée locale.
 function todayLocalIso(): string {
-  return new Date().toLocaleDateString('en-CA')
+  return new Date().toLocaleDateString("en-CA");
 }
 
 const state = reactive({
-  name: '',
+  name: "",
   date: todayLocalIso(),
-  location: '',
-  description: '',
-})
+  location: "",
+  description: "",
+});
 
-const isSubmitting = ref(false)
+const isSubmitting = ref(false);
 
 async function onSubmit() {
-  if (isSubmitting.value) return
-  isSubmitting.value = true
+  if (isSubmitting.value) return;
+  isSubmitting.value = true;
   try {
-    const trimmedLocation = state.location.trim()
-    const trimmedDescription = state.description.trim()
+    const trimmedLocation = state.location.trim();
+    const trimmedDescription = state.description.trim();
     const createdTournament = tournamentStore.createTournament({
       name: state.name.trim(),
       date: state.date,
-      format: 'round_robin',
-      location: trimmedLocation === '' ? undefined : trimmedLocation,
-      description: trimmedDescription === '' ? undefined : trimmedDescription,
-    })
-    await navigateTo(`/tournaments/${createdTournament.id}`)
-  }
-  finally {
-    isSubmitting.value = false
+      format: "round_robin",
+      location: trimmedLocation === "" ? undefined : trimmedLocation,
+      description: trimmedDescription === "" ? undefined : trimmedDescription,
+    });
+    await navigateTo(`/tournaments/${createdTournament.id}`);
+  } finally {
+    isSubmitting.value = false;
   }
 }
+
+useHead({ title: "Nouveau tournoi — Pétankup" });
 </script>
 
 <template>
   <div class="space-y-4">
-    <UButton
-      to="/"
-      variant="ghost"
-      color="neutral"
-      size="sm"
-    >
+    <UButton to="/" variant="ghost" color="neutral" size="sm">
       ← Retour à l'accueil
     </UButton>
 
     <UCard>
       <template #header>
-        <h1 class="text-xl font-semibold text-horizon-900">
-          Créer un tournoi
-        </h1>
+        <h1 class="text-xl font-semibold text-horizon-900">Créer un tournoi</h1>
       </template>
 
       <UForm
@@ -62,11 +56,7 @@ async function onSubmit() {
         class="space-y-4"
         @submit="onSubmit"
       >
-        <UFormField
-          label="Nom du tournoi"
-          name="name"
-          required
-        >
+        <UFormField label="Nom du tournoi" name="name" required>
           <UInput
             v-model="state.name"
             placeholder="Ex : Tournoi de l'été"
@@ -74,22 +64,11 @@ async function onSubmit() {
           />
         </UFormField>
 
-        <UFormField
-          label="Date"
-          name="date"
-          required
-        >
-          <UInput
-            v-model="state.date"
-            type="date"
-            class="w-full"
-          />
+        <UFormField label="Date" name="date" required>
+          <UInput v-model="state.date" type="date" class="w-full" />
         </UFormField>
 
-        <UFormField
-          label="Lieu"
-          name="location"
-        >
+        <UFormField label="Lieu" name="location">
           <UInput
             v-model="state.location"
             placeholder="Ex : Parc Bordelais"
@@ -97,10 +76,7 @@ async function onSubmit() {
           />
         </UFormField>
 
-        <UFormField
-          label="Description"
-          name="description"
-        >
+        <UFormField label="Description" name="description">
           <UTextarea
             v-model="state.description"
             placeholder="Notes, règles spéciales..."
@@ -111,9 +87,7 @@ async function onSubmit() {
         </UFormField>
 
         <UFormField label="Format">
-          <p class="text-[#5C5A54]">
-            Championnat (toutes rondes)
-          </p>
+          <p class="text-[#5C5A54]">Championnat (toutes rondes)</p>
         </UFormField>
 
         <UButton
