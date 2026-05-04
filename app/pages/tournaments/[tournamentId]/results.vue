@@ -60,7 +60,7 @@ const podiumDisplayOrder = computed<PodiumEntry[]>(() => {
 // Hauteurs différenciées des marches via padding vertical — pas de
 // hauteur fixe pour rester adaptatif aux noms longs.
 function stepBgClass(rank: number): string {
-  if (rank === 1) return "bg-sand-50 border-sand-200";
+  if (rank === 1) return "bg-secondary-50 border-secondary-200";
   return "bg-(--app-surface) border-(--app-border)";
 }
 
@@ -71,13 +71,13 @@ function stepPaddingClass(rank: number): string {
 }
 
 function rankNumberSizeClass(rank: number): string {
-  if (rank === 1) return "text-5xl font-bold text-horizon-900";
-  return "text-3xl font-semibold text-horizon-900";
+  if (rank === 1) return "text-5xl font-bold text-primary-900";
+  return "text-3xl font-semibold text-primary-900";
 }
 
 function teamNameWeightClass(rank: number): string {
-  if (rank === 1) return "font-semibold text-horizon-900";
-  return "font-medium text-horizon-900";
+  if (rank === 1) return "font-semibold text-primary-900";
+  return "font-medium text-primary-900";
 }
 
 useHead(() => ({
@@ -89,14 +89,14 @@ useHead(() => ({
 
 <template>
   <div v-if="!currentTournament" class="space-y-4 py-12 text-center">
-    <h1 class="text-xl font-semibold text-horizon-900">Tournoi introuvable</h1>
+    <h1 class="text-xl font-semibold text-primary-900">Tournoi introuvable</h1>
     <UButton to="/" variant="ghost" color="neutral" icon="i-lucide-arrow-left">
       Retour à l'accueil
     </UButton>
   </div>
 
   <div v-else-if="!tournamentIsCompleted" class="space-y-4 py-12 text-center">
-    <h1 class="text-xl font-semibold text-horizon-900">
+    <h1 class="text-xl font-semibold text-primary-900">
       Ce tournoi n'est pas encore terminé
     </h1>
     <p class="text-sm text-(--app-text-subtle)">
@@ -129,7 +129,7 @@ useHead(() => ({
         >
           Résultats
         </p>
-        <h1 class="truncate text-2xl font-semibold text-horizon-900">
+        <h1 class="truncate text-2xl font-semibold text-primary-900">
           {{ currentTournament.name }}
         </h1>
         <p class="text-sm text-(--app-text-subtle)">
@@ -181,25 +181,25 @@ useHead(() => ({
         <dl class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
           <div>
             <dt class="text-(--app-text-subtle)">Date</dt>
-            <dd class="font-medium text-horizon-900">
+            <dd class="font-medium text-primary-900">
               {{ formatDate(currentTournament.date) }}
             </dd>
           </div>
           <div v-if="currentTournament.location">
             <dt class="text-(--app-text-subtle)">Lieu</dt>
-            <dd class="truncate font-medium text-horizon-900">
+            <dd class="truncate font-medium text-primary-900">
               {{ currentTournament.location }}
             </dd>
           </div>
           <div>
             <dt class="text-(--app-text-subtle)">Équipes</dt>
-            <dd class="font-medium tabular-nums text-horizon-900">
+            <dd class="font-medium tabular-nums text-primary-900">
               {{ teams.length }}
             </dd>
           </div>
           <div>
             <dt class="text-(--app-text-subtle)">Matchs joués</dt>
-            <dd class="font-medium tabular-nums text-horizon-900">
+            <dd class="font-medium tabular-nums text-primary-900">
               {{ completedMatchCount }}
             </dd>
           </div>

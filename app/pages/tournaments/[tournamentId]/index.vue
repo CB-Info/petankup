@@ -143,8 +143,8 @@ const matchBeingScoredTeamB = computed(() =>
 );
 
 function teamNameClass(match: Match, teamId: string): string {
-  if (match.status !== "completed") return "text-horizon-900";
-  if (match.winnerId === teamId) return "font-semibold text-horizon-900";
+  if (match.status !== "completed") return "text-primary-900";
+  if (match.winnerId === teamId) return "font-semibold text-primary-900";
   return "text-(--app-text-subtle)";
 }
 
@@ -223,7 +223,7 @@ useHead(() => ({
 
 <template>
   <div v-if="!currentTournament" class="space-y-4 py-12 text-center">
-    <h1 class="text-xl font-semibold text-horizon-900">Tournoi introuvable</h1>
+    <h1 class="text-xl font-semibold text-primary-900">Tournoi introuvable</h1>
     <UButton to="/" variant="ghost" color="neutral" icon="i-lucide-arrow-left">
       Retour à l'accueil
     </UButton>
@@ -253,7 +253,7 @@ useHead(() => ({
       </div>
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0 space-y-1">
-          <h1 class="truncate text-2xl font-semibold text-horizon-900">
+          <h1 class="truncate text-2xl font-semibold text-primary-900">
             {{ currentTournament.name }}
           </h1>
           <p class="text-sm text-(--app-text-subtle)">
@@ -280,7 +280,7 @@ useHead(() => ({
             v-if="teams.length === 0"
             class="space-y-3 rounded-xl border border-dashed border-(--app-border) bg-(--app-surface) p-6 text-center"
           >
-            <h2 class="text-base font-semibold text-horizon-900">
+            <h2 class="text-base font-semibold text-primary-900">
               Aucune équipe pour l'instant
             </h2>
             <p class="text-sm text-(--app-text-subtle)">
@@ -315,7 +315,7 @@ useHead(() => ({
                 <UCard>
                   <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0 space-y-1">
-                      <p class="truncate font-semibold text-horizon-900">
+                      <p class="truncate font-semibold text-primary-900">
                         {{ team.name }}
                       </p>
                       <p class="truncate text-sm text-(--app-text-subtle)">
@@ -363,7 +363,7 @@ useHead(() => ({
             v-else-if="tournamentStatus === 'draft'"
             class="space-y-3 rounded-xl border border-dashed border-(--app-border) bg-(--app-surface) p-6 text-center"
           >
-            <h2 class="text-base font-semibold text-horizon-900">
+            <h2 class="text-base font-semibold text-primary-900">
               Les équipes sont prêtes
             </h2>
             <p class="text-sm text-(--app-text-subtle)">
@@ -407,7 +407,7 @@ useHead(() => ({
                         <button
                           v-if="match.status === 'completed'"
                           type="button"
-                          class="rounded-md px-2 py-1 text-base font-semibold tabular-nums text-horizon-900 hover:bg-horizon-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          class="rounded-md px-2 py-1 text-base font-semibold tabular-nums text-primary-900 hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-60"
                           :disabled="tournamentIsCompleted"
                           @click="openScoreModal(match)"
                         >

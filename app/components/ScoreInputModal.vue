@@ -110,7 +110,7 @@ function close() {
           <div class="space-y-2">
             <label
               for="score-a-input"
-              class="block truncate text-sm font-medium text-horizon-900"
+              class="block truncate text-sm font-medium text-primary-900"
             >
               {{ teamA?.name ?? 'Équipe A' }}
             </label>
@@ -128,7 +128,7 @@ function close() {
           <div class="space-y-2">
             <label
               for="score-b-input"
-              class="block truncate text-sm font-medium text-horizon-900"
+              class="block truncate text-sm font-medium text-primary-900"
             >
               {{ teamB?.name ?? 'Équipe B' }}
             </label>

@@ -40,12 +40,12 @@ function formatPointDifference(pointDifference: number): string {
 }
 
 function rowBgClass(rank: number): string {
-  if (rank === 1) return 'bg-sand-50'
+  if (rank === 1) return 'bg-secondary-50'
   return ''
 }
 
 function rankNumberClass(rank: number): string {
-  if (rank <= 3) return 'font-semibold text-horizon-900'
+  if (rank <= 3) return 'font-semibold text-primary-900'
   return 'text-(--app-text-muted)'
 }
 </script>
@@ -119,7 +119,7 @@ function rankNumberClass(rank: number): string {
               {{ row.rank }}
             </td>
             <td class="px-2 py-3">
-              <span class="block truncate font-medium text-horizon-900">
+              <span class="block truncate font-medium text-primary-900">
                 {{ row.teamName }}
               </span>
             </td>

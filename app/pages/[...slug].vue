@@ -4,7 +4,7 @@ useHead({ title: "Page introuvable — Pétankup" });
 
 <template>
   <div class="space-y-4 py-12 text-center">
-    <h1 class="text-2xl font-semibold text-horizon-900">Page introuvable</h1>
+    <h1 class="text-2xl font-semibold text-primary-900">Page introuvable</h1>
     <p class="text-sm text-(--app-text-subtle)">
       La page que vous cherchez n'existe pas ou a été déplacée.
     </p>

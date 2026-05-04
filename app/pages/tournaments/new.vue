@@ -47,7 +47,7 @@ useHead({ title: "Nouveau tournoi — Pétankup" });
 
     <UCard>
       <template #header>
-        <h1 class="text-xl font-semibold text-horizon-900">Créer un tournoi</h1>
+        <h1 class="text-xl font-semibold text-primary-900">Créer un tournoi</h1>
       </template>
 
       <UForm
