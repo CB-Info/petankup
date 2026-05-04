@@ -60,7 +60,7 @@ useHead({ title: "Pétankup — Gestion de tournois" });
       <h2 class="text-lg font-semibold text-primary-900">
         Aucun tournoi pour l'instant
       </h2>
-      <p class="mt-2 text-(--app-text-subtle)">Créez votre premier tournoi de pétanque</p>
+      <p class="mt-2 text-toned">Créez votre premier tournoi de pétanque</p>
       <UButton
         to="/tournaments/new"
         color="primary"
@@ -86,12 +86,12 @@ useHead({ title: "Pétankup — Gestion de tournois" });
                   <h3 class="truncate font-semibold text-primary-900">
                     {{ tournament.name }}
                   </h3>
-                  <p class="text-sm text-(--app-text-subtle)">
+                  <p class="text-sm text-toned">
                     {{ formatDate(tournament.date) }}
                   </p>
                   <p
                     v-if="tournament.location"
-                    class="truncate text-sm text-(--app-text-subtle)"
+                    class="truncate text-sm text-toned"
                   >
                     {{ tournament.location }}
                   </p>

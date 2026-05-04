@@ -32,7 +32,7 @@ function close() {
     title="Supprimer l'équipe"
   >
     <template #body>
-      <p class="text-sm text-(--app-text)">
+      <p class="text-sm text-default">
         Supprimer l'équipe «&nbsp;<strong>{{ team?.name }}</strong>&nbsp;» ?
         Cette action est irréversible.
       </p>

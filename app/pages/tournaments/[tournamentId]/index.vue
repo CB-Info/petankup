@@ -145,7 +145,7 @@ const matchBeingScoredTeamB = computed(() =>
 function teamNameClass(match: Match, teamId: string): string {
   if (match.status !== "completed") return "text-primary-900";
   if (match.winnerId === teamId) return "font-semibold text-primary-900";
-  return "text-(--app-text-subtle)";
+  return "text-toned";
 }
 
 // Le classement est calculé par le store via computeRanking et affiché
@@ -256,7 +256,7 @@ useHead(() => ({
           <h1 class="truncate text-2xl font-semibold text-primary-900">
             {{ currentTournament.name }}
           </h1>
-          <p class="text-sm text-(--app-text-subtle)">
+          <p class="text-sm text-toned">
             {{ formatDate(currentTournament.date) }}
             <template v-if="currentTournament.location">
               · {{ currentTournament.location }}
@@ -272,18 +272,18 @@ useHead(() => ({
     <UTabs v-model="activeTab" :items="tabItems" class="w-full">
       <template #teams>
         <div class="space-y-4">
-          <p v-if="tournamentIsLocked" class="text-sm text-(--app-text-subtle)">
+          <p v-if="tournamentIsLocked" class="text-sm text-toned">
             Le tournoi a démarré, les équipes ne peuvent plus être modifiées.
           </p>
 
           <div
             v-if="teams.length === 0"
-            class="space-y-3 rounded-xl border border-dashed border-(--app-border) bg-(--app-surface) p-6 text-center"
+            class="space-y-3 rounded-xl border border-dashed border-default bg-elevated p-6 text-center"
           >
             <h2 class="text-base font-semibold text-primary-900">
               Aucune équipe pour l'instant
             </h2>
-            <p class="text-sm text-(--app-text-subtle)">
+            <p class="text-sm text-toned">
               Ajoutez les équipes participantes au tournoi
             </p>
             <UButton
@@ -318,7 +318,7 @@ useHead(() => ({
                       <p class="truncate font-semibold text-primary-900">
                         {{ team.name }}
                       </p>
-                      <p class="truncate text-sm text-(--app-text-subtle)">
+                      <p class="truncate text-sm text-toned">
                         {{ team.players.join(" · ") }}
                       </p>
                     </div>
@@ -352,21 +352,21 @@ useHead(() => ({
         <div class="space-y-4">
           <div
             v-if="tournamentStatus === 'draft' && !hasEnoughTeamsToStart"
-            class="rounded-xl border border-dashed border-(--app-border) bg-(--app-surface) p-6 text-center"
+            class="rounded-xl border border-dashed border-default bg-elevated p-6 text-center"
           >
-            <p class="text-sm text-(--app-text-subtle)">
+            <p class="text-sm text-toned">
               Ajoutez au moins 2 équipes pour lancer le tournoi.
             </p>
           </div>
 
           <div
             v-else-if="tournamentStatus === 'draft'"
-            class="space-y-3 rounded-xl border border-dashed border-(--app-border) bg-(--app-surface) p-6 text-center"
+            class="space-y-3 rounded-xl border border-dashed border-default bg-elevated p-6 text-center"
           >
             <h2 class="text-base font-semibold text-primary-900">
               Les équipes sont prêtes
             </h2>
-            <p class="text-sm text-(--app-text-subtle)">
+            <p class="text-sm text-toned">
               Lancez le tournoi pour générer le calendrier des matchs.
             </p>
             <UButton
@@ -388,7 +388,7 @@ useHead(() => ({
               class="space-y-3"
             >
               <h2
-                class="text-xs font-semibold uppercase tracking-[0.08em] text-(--app-text-subtle)"
+                class="text-xs font-semibold uppercase tracking-[0.08em] text-toned"
               >
                 Manche {{ roundGroup.round }}
               </h2>
@@ -444,9 +444,9 @@ useHead(() => ({
         <div class="space-y-4">
           <div
             v-if="!hasAnyCompletedMatch"
-            class="rounded-xl border border-dashed border-(--app-border) bg-(--app-surface) p-6 text-center"
+            class="rounded-xl border border-dashed border-default bg-elevated p-6 text-center"
           >
-            <p class="text-sm text-(--app-text-subtle)">
+            <p class="text-sm text-toned">
               Le classement apparaîtra après le premier match.
             </p>
           </div>
@@ -465,7 +465,7 @@ useHead(() => ({
               >
                 Terminer le tournoi
               </UButton>
-              <p v-else class="text-center text-sm text-(--app-text-subtle)">
+              <p v-else class="text-center text-sm text-toned">
                 {{ pendingMatchCount }}
                 {{
                   pendingMatchCount > 1
@@ -477,9 +477,9 @@ useHead(() => ({
 
             <div
               v-else-if="tournamentIsCompleted"
-              class="space-y-3 rounded-xl border border-(--app-border) bg-(--app-surface) p-4 text-center"
+              class="space-y-3 rounded-xl border border-default bg-elevated p-4 text-center"
             >
-              <p class="text-sm text-(--app-text-subtle)">
+              <p class="text-sm text-toned">
                 Tournoi terminé le {{ formatDate(currentTournament.updatedAt) }}
               </p>
               <UButton

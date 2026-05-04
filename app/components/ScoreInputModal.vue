@@ -147,7 +147,7 @@ function close() {
 
         <p
           v-if="errorMessage"
-          class="rounded-lg bg-(--app-danger-bg) px-3 py-2 text-sm text-(--app-danger-text)"
+          class="rounded-lg bg-(--petankup-danger-bg) px-3 py-2 text-sm text-(--petankup-danger-text)"
           role="alert"
         >
           {{ errorMessage }}
