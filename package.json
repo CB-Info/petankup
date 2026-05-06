@@ -10,7 +10,7 @@
     "generate": "nuxt generate",
     "test": "vitest",
     "typecheck": "nuxt typecheck",
-    "gen:types": "supabase gen types typescript --project-id huypyznoomigdwopigem --schema public > app/types/database.ts"
+    "gen:types": "npx supabase gen types typescript --project-id huypyznoomigdwopigem --schema public > app/types/database.ts"
   },
   "dependencies": {
     "@nuxt/eslint": "^1.15.2",
