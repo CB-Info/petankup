@@ -60,8 +60,8 @@ const podiumDisplayOrder = computed<PodiumEntry[]>(() => {
 // Hauteurs différenciées des marches via padding vertical — pas de
 // hauteur fixe pour rester adaptatif aux noms longs.
 function stepBgClass(rank: number): string {
-  if (rank === 1) return "bg-sand-50 border-sand-200";
-  return "bg-(--app-surface) border-(--app-border)";
+  if (rank === 1) return "bg-secondary-50 border-secondary-200";
+  return "bg-elevated border-default";
 }
 
 function stepPaddingClass(rank: number): string {
@@ -71,13 +71,13 @@ function stepPaddingClass(rank: number): string {
 }
 
 function rankNumberSizeClass(rank: number): string {
-  if (rank === 1) return "text-5xl font-bold text-horizon-900";
-  return "text-3xl font-semibold text-horizon-900";
+  if (rank === 1) return "text-5xl font-bold text-primary-900";
+  return "text-3xl font-semibold text-primary-900";
 }
 
 function teamNameWeightClass(rank: number): string {
-  if (rank === 1) return "font-semibold text-horizon-900";
-  return "font-medium text-horizon-900";
+  if (rank === 1) return "font-semibold text-primary-900";
+  return "font-medium text-primary-900";
 }
 
 useHead(() => ({
@@ -89,17 +89,17 @@ useHead(() => ({
 
 <template>
   <div v-if="!currentTournament" class="space-y-4 py-12 text-center">
-    <h1 class="text-xl font-semibold text-horizon-900">Tournoi introuvable</h1>
+    <h1 class="text-xl font-semibold text-primary-900">Tournoi introuvable</h1>
     <UButton to="/" variant="ghost" color="neutral" icon="i-lucide-arrow-left">
       Retour à l'accueil
     </UButton>
   </div>
 
   <div v-else-if="!tournamentIsCompleted" class="space-y-4 py-12 text-center">
-    <h1 class="text-xl font-semibold text-horizon-900">
+    <h1 class="text-xl font-semibold text-primary-900">
       Ce tournoi n'est pas encore terminé
     </h1>
-    <p class="text-sm text-(--app-text-subtle)">
+    <p class="text-sm text-toned">
       Les résultats seront disponibles une fois le tournoi terminé.
     </p>
     <UButton
@@ -125,14 +125,14 @@ useHead(() => ({
       </UButton>
       <div class="space-y-1">
         <p
-          class="text-xs font-semibold uppercase tracking-[0.08em] text-(--app-text-subtle)"
+          class="text-xs font-semibold uppercase tracking-[0.08em] text-toned"
         >
           Résultats
         </p>
-        <h1 class="truncate text-2xl font-semibold text-horizon-900">
+        <h1 class="truncate text-2xl font-semibold text-primary-900">
           {{ currentTournament.name }}
         </h1>
-        <p class="text-sm text-(--app-text-subtle)">
+        <p class="text-sm text-toned">
           {{ formatDate(currentTournament.date) }}
           <template v-if="currentTournament.location">
             · {{ currentTournament.location }}
@@ -163,7 +163,7 @@ useHead(() => ({
           </p>
           <p
             v-if="entry.team.players.length > 0"
-            class="mt-1 line-clamp-2 text-xs text-(--app-text-subtle) sm:text-sm"
+            class="mt-1 line-clamp-2 text-xs text-toned sm:text-sm"
           >
             {{ entry.team.players.join(" · ") }}
           </p>
@@ -173,33 +173,33 @@ useHead(() => ({
 
     <section aria-label="Récapitulatif" class="space-y-3">
       <h2
-        class="text-xs font-semibold uppercase tracking-[0.08em] text-(--app-text-subtle)"
+        class="text-xs font-semibold uppercase tracking-[0.08em] text-toned"
       >
         Récapitulatif
       </h2>
       <UCard>
         <dl class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
           <div>
-            <dt class="text-(--app-text-subtle)">Date</dt>
-            <dd class="font-medium text-horizon-900">
+            <dt class="text-toned">Date</dt>
+            <dd class="font-medium text-primary-900">
               {{ formatDate(currentTournament.date) }}
             </dd>
           </div>
           <div v-if="currentTournament.location">
-            <dt class="text-(--app-text-subtle)">Lieu</dt>
-            <dd class="truncate font-medium text-horizon-900">
+            <dt class="text-toned">Lieu</dt>
+            <dd class="truncate font-medium text-primary-900">
               {{ currentTournament.location }}
             </dd>
           </div>
           <div>
-            <dt class="text-(--app-text-subtle)">Équipes</dt>
-            <dd class="font-medium tabular-nums text-horizon-900">
+            <dt class="text-toned">Équipes</dt>
+            <dd class="font-medium tabular-nums text-primary-900">
               {{ teams.length }}
             </dd>
           </div>
           <div>
-            <dt class="text-(--app-text-subtle)">Matchs joués</dt>
-            <dd class="font-medium tabular-nums text-horizon-900">
+            <dt class="text-toned">Matchs joués</dt>
+            <dd class="font-medium tabular-nums text-primary-900">
               {{ completedMatchCount }}
             </dd>
           </div>
@@ -209,7 +209,7 @@ useHead(() => ({
 
     <section aria-label="Classement final" class="space-y-3">
       <h2
-        class="text-xs font-semibold uppercase tracking-[0.08em] text-(--app-text-subtle)"
+        class="text-xs font-semibold uppercase tracking-[0.08em] text-toned"
       >
         Classement final
       </h2>
@@ -217,7 +217,7 @@ useHead(() => ({
     </section>
 
     <p
-      class="border-t border-(--app-border) pt-6 text-center text-xs text-(--app-text-muted)"
+      class="border-t border-default pt-6 text-center text-xs text-muted"
     >
       Bientôt&nbsp;: partagez les résultats avec vos amis.
     </p>

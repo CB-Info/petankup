@@ -110,7 +110,7 @@ function close() {
           <div class="space-y-2">
             <label
               for="score-a-input"
-              class="block truncate text-sm font-medium text-horizon-900"
+              class="block truncate text-sm font-medium text-primary-900"
             >
               {{ teamA?.name ?? 'Équipe A' }}
             </label>
@@ -128,7 +128,7 @@ function close() {
           <div class="space-y-2">
             <label
               for="score-b-input"
-              class="block truncate text-sm font-medium text-horizon-900"
+              class="block truncate text-sm font-medium text-primary-900"
             >
               {{ teamB?.name ?? 'Équipe B' }}
             </label>
@@ -147,7 +147,7 @@ function close() {
 
         <p
           v-if="errorMessage"
-          class="rounded-lg bg-(--app-danger-bg) px-3 py-2 text-sm text-(--app-danger-text)"
+          class="rounded-lg bg-(--petankup-danger-bg) px-3 py-2 text-sm text-(--petankup-danger-text)"
           role="alert"
         >
           {{ errorMessage }}

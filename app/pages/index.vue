@@ -57,10 +57,10 @@ useHead({ title: "Pétankup — Gestion de tournois" });
 <template>
   <div>
     <div v-if="tournaments.length === 0" class="py-16 text-center">
-      <h2 class="text-lg font-semibold text-horizon-900">
+      <h2 class="text-lg font-semibold text-primary-900">
         Aucun tournoi pour l'instant
       </h2>
-      <p class="mt-2 text-(--app-text-subtle)">Créez votre premier tournoi de pétanque</p>
+      <p class="mt-2 text-toned">Créez votre premier tournoi de pétanque</p>
       <UButton
         to="/tournaments/new"
         color="primary"
@@ -83,15 +83,15 @@ useHead({ title: "Pétankup — Gestion de tournois" });
             <UCard>
               <div class="flex items-start justify-between gap-3">
                 <div class="min-w-0 space-y-1">
-                  <h3 class="truncate font-semibold text-horizon-900">
+                  <h3 class="truncate font-semibold text-primary-900">
                     {{ tournament.name }}
                   </h3>
-                  <p class="text-sm text-(--app-text-subtle)">
+                  <p class="text-sm text-toned">
                     {{ formatDate(tournament.date) }}
                   </p>
                   <p
                     v-if="tournament.location"
-                    class="truncate text-sm text-(--app-text-subtle)"
+                    class="truncate text-sm text-toned"
                   >
                     {{ tournament.location }}
                   </p>

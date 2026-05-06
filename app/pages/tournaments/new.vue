@@ -47,7 +47,7 @@ useHead({ title: "Nouveau tournoi — Pétankup" });
 
     <UCard>
       <template #header>
-        <h1 class="text-xl font-semibold text-horizon-900">Créer un tournoi</h1>
+        <h1 class="text-xl font-semibold text-primary-900">Créer un tournoi</h1>
       </template>
 
       <UForm
@@ -87,7 +87,7 @@ useHead({ title: "Nouveau tournoi — Pétankup" });
         </UFormField>
 
         <UFormField label="Format">
-          <p class="text-(--app-text-subtle)">Championnat (toutes rondes)</p>
+          <p class="text-toned">Championnat (toutes rondes)</p>
         </UFormField>
 
         <UButton

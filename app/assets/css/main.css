@@ -33,34 +33,42 @@
   --color-sand-950: #2D2912;
 }
 
-/* Tokens sémantiques de l'app (neutres + danger).
-   En light mode : valeurs de la charte « Couleurs — Light mode ».
-   En dark mode  : valeurs de la charte « Couleurs — Dark mode ».
-   Utilisés dans les templates via `bg-(--app-bg)`, `text-(--app-text)`, etc. */
+/* Override des variables sémantiques Nuxt UI v4 pour coller aux tons
+   chauds de la charte (cf. CLAUDE.md > Charte graphique > Neutres).
+   Utilisés dans les templates via les utilitaires Nuxt UI (`bg-default`,
+   `bg-elevated`, `text-default`, `text-toned`, `text-muted`,
+   `border-default`, etc.).
+   Le danger n'a pas d'équivalent natif → token custom --petankup-danger-*. */
 :root {
-  --app-bg: #FAFAF6;
-  --app-surface: #F2F0EB;
-  --app-border: #E5E2DB;
-  --app-text: #2C2A25;
-  --app-text-subtle: #5C5A54;
-  --app-text-muted: #8A8880;
-  --app-danger-bg: #FCE8E8;
-  --app-danger-text: #A03030;
+  --ui-bg: #FAFAF6;
+  --ui-bg-elevated: #F2F0EB;
+  --ui-border: #E5E2DB;
+  --ui-text: #2C2A25;
+  --ui-text-highlighted: #2C2A25;
+  --ui-text-toned: #5C5A54;
+  --ui-text-muted: #8A8880;
+  --ui-text-dimmed: #8A8880;
+
+  --petankup-danger-bg: #FCE8E8;
+  --petankup-danger-text: #A03030;
 }
 
 /* En dark mode, on inverse les sémantiques ET on bascule les rampes
    horizon (bleu → brun fumé) et sand (sable doré → parchemin). Les
-   composants qui utilisent `text-horizon-900` deviennent ainsi clairs
+   composants qui utilisent `text-primary-900` deviennent ainsi clairs
    sur fond sombre, sans avoir à les modifier au cas par cas. */
 .dark {
-  --app-bg: #1E1916;
-  --app-surface: #2A2420;
-  --app-border: #3D3530;
-  --app-text: #F0E3C3;
-  --app-text-subtle: #B0A498;
-  --app-text-muted: #7A7068;
-  --app-danger-bg: #3A1E1E;
-  --app-danger-text: #E06060;
+  --ui-bg: #1E1916;
+  --ui-bg-elevated: #2A2420;
+  --ui-border: #3D3530;
+  --ui-text: #F0E3C3;
+  --ui-text-highlighted: #F0E3C3;
+  --ui-text-toned: #B0A498;
+  --ui-text-muted: #7A7068;
+  --ui-text-dimmed: #7A7068;
+
+  --petankup-danger-bg: #3A1E1E;
+  --petankup-danger-text: #E06060;
 
   --color-horizon-50: #2D2320;
   --color-horizon-100: #3D322C;
