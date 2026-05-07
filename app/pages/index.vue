@@ -5,7 +5,7 @@ const tournamentStore = useTournamentStore();
 const { tournaments } = storeToRefs(tournamentStore);
 
 onMounted(() => {
-  tournamentStore.loadTournaments();
+  void tournamentStore.loadTournaments();
 });
 
 // Ordre d'affichage : en cours d'abord (ce qui se passe maintenant),

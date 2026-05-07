@@ -8,9 +8,10 @@ const { currentTournament, teams, matches, ranking } =
 
 const tournamentId = computed(() => route.params.tournamentId as string);
 
-// Chargement synchrone dès le setup : évite un flash « Tournoi introuvable »
-// au premier rendu si on arrive depuis une URL directe ou un autre tournoi.
-tournamentStore.loadTournament(tournamentId.value);
+// Chargement fire-and-forget dès le setup : avec LocalStorage la promesse
+// résout en microtask, donc pas de flash « Tournoi introuvable » au premier
+// rendu, même quand on arrive depuis une URL directe ou un autre tournoi.
+void tournamentStore.loadTournament(tournamentId.value);
 
 // Verrouillage : un tournoi qui a démarré (ou terminé) ne doit plus
 // permettre de modifier les équipes — sinon le classement et les
@@ -72,9 +73,9 @@ function askDeleteConfirmation(team: Team) {
   deleteModalOpen.value = true;
 }
 
-function confirmDelete() {
+async function confirmDelete() {
   if (teamPendingDeletion.value) {
-    tournamentStore.deleteTeam(teamPendingDeletion.value.id);
+    await tournamentStore.deleteTeam(teamPendingDeletion.value.id);
   }
   teamPendingDeletion.value = null;
 }
@@ -117,7 +118,7 @@ async function startTournament() {
   if (isGeneratingMatches.value) return;
   isGeneratingMatches.value = true;
   try {
-    tournamentStore.generateMatches();
+    await tournamentStore.generateMatches();
     activeTab.value = String(
       tabItems.findIndex((tab) => tab.slot === "matches"),
     );
@@ -176,11 +177,11 @@ function askCompleteConfirmation() {
   completeModalOpen.value = true;
 }
 
-function confirmCompleteTournament() {
+async function confirmCompleteTournament() {
   if (isCompletingTournament.value) return;
   isCompletingTournament.value = true;
   try {
-    tournamentStore.completeTournament();
+    await tournamentStore.completeTournament();
   } finally {
     isCompletingTournament.value = false;
     completeModalOpen.value = false;
@@ -206,7 +207,7 @@ async function confirmTournamentDelete() {
   if (isDeletingTournament.value) return;
   isDeletingTournament.value = true;
   try {
-    tournamentStore.deleteTournament(tournamentId.value);
+    await tournamentStore.deleteTournament(tournamentId.value);
     tournamentDeleteModalOpen.value = false;
     await navigateTo("/");
   } finally {

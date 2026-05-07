@@ -8,14 +8,15 @@ const { currentTournament, teams, matches, ranking } =
 
 const tournamentId = computed(() => route.params.tournamentId as string);
 
-// Chargement synchrone dès le setup : évite un flash au premier rendu
-// si on arrive via URL directe. On évite un load inutile si on arrive
-// d'un NuxtLink où le tournoi courant est déjà le bon.
+// Chargement fire-and-forget dès le setup : la promesse résout en microtask
+// avec LocalStorage, donc pas de flash au premier rendu sur URL directe. On
+// évite un load inutile si on arrive d'un NuxtLink où le tournoi courant est
+// déjà le bon.
 const tournamentNeedsLoading =
   currentTournament.value === null ||
   currentTournament.value.id !== tournamentId.value;
 if (tournamentNeedsLoading) {
-  tournamentStore.loadTournament(tournamentId.value);
+  void tournamentStore.loadTournament(tournamentId.value);
 }
 
 const tournamentIsCompleted = computed(

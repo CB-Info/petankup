@@ -88,10 +88,10 @@ async function onSubmit() {
     let savedTeam: Team
     if (props.team) {
       savedTeam = { ...props.team, ...payload }
-      tournamentStore.updateTeam(savedTeam)
+      await tournamentStore.updateTeam(savedTeam)
     }
     else {
-      savedTeam = tournamentStore.addTeam(payload)
+      savedTeam = await tournamentStore.addTeam(payload)
     }
     emit('saved', savedTeam)
     openModel.value = false

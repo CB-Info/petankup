@@ -1,20 +1,20 @@
 import type { Match, Team, Tournament } from '../types'
 
 // Contrat de persistance pour le domaine pétanque.
-// Toutes les méthodes sont synchrones en V1 (stockage local navigateur).
-// Une éventuelle implémentation V2 (Supabase) introduira une variante
-// asynchrone — pas d'anticipation prématurée ici.
+// Toutes les méthodes sont asynchrones pour accommoder n'importe quel
+// backend : LocalStorageRepository enrobe un stockage navigateur sync,
+// une future implémentation Supabase fera de vraies requêtes réseau.
 export interface TournamentRepository {
-  getAllTournaments(): Tournament[]
-  getTournamentById(id: string): Tournament | undefined
-  saveTournament(tournament: Tournament): void
-  deleteTournament(id: string): void
+  getAllTournaments(): Promise<Tournament[]>
+  getTournamentById(id: string): Promise<Tournament | undefined>
+  saveTournament(tournament: Tournament): Promise<void>
+  deleteTournament(id: string): Promise<void>
 
-  getTeamsByTournament(tournamentId: string): Team[]
-  saveTeam(team: Team): void
-  deleteTeam(id: string): void
+  getTeamsByTournament(tournamentId: string): Promise<Team[]>
+  saveTeam(team: Team): Promise<void>
+  deleteTeam(id: string): Promise<void>
 
-  getMatchesByTournament(tournamentId: string): Match[]
-  saveMatch(match: Match): void
-  saveMatches(matches: Match[]): void
+  getMatchesByTournament(tournamentId: string): Promise<Match[]>
+  saveMatch(match: Match): Promise<void>
+  saveMatches(matches: Match[]): Promise<void>
 }

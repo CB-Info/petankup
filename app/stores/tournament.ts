@@ -65,17 +65,17 @@ export const useTournamentStore = defineStore('tournament', () => {
     }
   }
 
-  function persistTournamentChange(updatedTournament: Tournament): void {
-    repository.saveTournament(updatedTournament)
+  async function persistTournamentChange(updatedTournament: Tournament): Promise<void> {
+    await repository.saveTournament(updatedTournament)
     replaceTournamentInList(updatedTournament)
     syncCurrentTournamentIfMatches(updatedTournament)
   }
 
-  function loadTournaments(): void {
-    tournaments.value = repository.getAllTournaments()
+  async function loadTournaments(): Promise<void> {
+    tournaments.value = await repository.getAllTournaments()
   }
 
-  function createTournament(data: CreateTournamentInput): Tournament {
+  async function createTournament(data: CreateTournamentInput): Promise<Tournament> {
     const timestamp = nowIso()
     const newTournament: Tournament = {
       ...data,
@@ -85,13 +85,13 @@ export const useTournamentStore = defineStore('tournament', () => {
       createdAt: timestamp,
       updatedAt: timestamp,
     }
-    repository.saveTournament(newTournament)
+    await repository.saveTournament(newTournament)
     tournaments.value.push(newTournament)
     return newTournament
   }
 
-  function loadTournament(id: string): void {
-    const found = repository.getTournamentById(id)
+  async function loadTournament(id: string): Promise<void> {
+    const found = await repository.getTournamentById(id)
     if (found === undefined) {
       currentTournament.value = null
       teams.value = []
@@ -100,18 +100,18 @@ export const useTournamentStore = defineStore('tournament', () => {
       return
     }
     currentTournament.value = found
-    teams.value = repository.getTeamsByTournament(id)
-    matches.value = repository.getMatchesByTournament(id)
+    teams.value = await repository.getTeamsByTournament(id)
+    matches.value = await repository.getMatchesByTournament(id)
     refreshRanking()
   }
 
-  function updateTournament(tournament: Tournament): void {
+  async function updateTournament(tournament: Tournament): Promise<void> {
     const updated: Tournament = { ...tournament, updatedAt: nowIso() }
-    persistTournamentChange(updated)
+    await persistTournamentChange(updated)
   }
 
-  function deleteTournament(id: string): void {
-    repository.deleteTournament(id)
+  async function deleteTournament(id: string): Promise<void> {
+    await repository.deleteTournament(id)
     tournaments.value = tournaments.value.filter(
       tournament => tournament.id !== id,
     )
@@ -123,7 +123,7 @@ export const useTournamentStore = defineStore('tournament', () => {
     }
   }
 
-  function addTeam(data: AddTeamInput): Team {
+  async function addTeam(data: AddTeamInput): Promise<Team> {
     const tournament = requireCurrentTournament()
     const timestamp = nowIso()
     const newTeam: Team = {
@@ -134,38 +134,38 @@ export const useTournamentStore = defineStore('tournament', () => {
       createdAt: timestamp,
       updatedAt: timestamp,
     }
-    repository.saveTeam(newTeam)
+    await repository.saveTeam(newTeam)
     teams.value.push(newTeam)
     return newTeam
   }
 
-  function updateTeam(team: Team): void {
+  async function updateTeam(team: Team): Promise<void> {
     const updated: Team = { ...team, updatedAt: nowIso() }
-    repository.saveTeam(updated)
+    await repository.saveTeam(updated)
     const teamIndex = teams.value.findIndex(existing => existing.id === updated.id)
     if (teamIndex !== -1) {
       teams.value[teamIndex] = updated
     }
   }
 
-  function deleteTeam(id: string): void {
+  async function deleteTeam(id: string): Promise<void> {
     const tournament = requireCurrentTournament()
-    repository.deleteTeam(id)
+    await repository.deleteTeam(id)
     teams.value = teams.value.filter(team => team.id !== id)
     // La cascade côté repository a pu supprimer des matchs : on resynchronise
     // depuis la source de vérité plutôt que de filtrer en double.
-    matches.value = repository.getMatchesByTournament(tournament.id)
+    matches.value = await repository.getMatchesByTournament(tournament.id)
     refreshRanking()
   }
 
-  function generateMatches(): void {
+  async function generateMatches(): Promise<void> {
     const tournament = requireCurrentTournament()
     const generatedMatches = generateRoundRobinMatches(
       teams.value,
       tournament.id,
       nowIso(),
     )
-    repository.saveMatches(generatedMatches)
+    await repository.saveMatches(generatedMatches)
     matches.value = generatedMatches
 
     const tournamentInProgress: Tournament = {
@@ -173,16 +173,16 @@ export const useTournamentStore = defineStore('tournament', () => {
       status: 'in_progress',
       updatedAt: nowIso(),
     }
-    persistTournamentChange(tournamentInProgress)
+    await persistTournamentChange(tournamentInProgress)
 
     refreshRanking()
   }
 
-  function submitScore(
+  async function submitScore(
     matchId: string,
     scoreA: number,
     scoreB: number,
-  ): ScoreValidationResult {
+  ): Promise<ScoreValidationResult> {
     const validation = validateScore(scoreA, scoreB)
     if (!validation.valid) return validation
 
@@ -201,7 +201,7 @@ export const useTournamentStore = defineStore('tournament', () => {
       updatedAt: nowIso(),
     }
 
-    repository.saveMatch(updatedMatch)
+    await repository.saveMatch(updatedMatch)
     matches.value[matchIndex] = updatedMatch
     refreshRanking()
 
@@ -212,7 +212,7 @@ export const useTournamentStore = defineStore('tournament', () => {
     ranking.value = computeRanking(teams.value, matches.value)
   }
 
-  function completeTournament(): boolean {
+  async function completeTournament(): Promise<boolean> {
     const tournament = requireCurrentTournament()
     const hasPendingMatch = matches.value.some(
       match => match.status === 'pending',
@@ -224,11 +224,11 @@ export const useTournamentStore = defineStore('tournament', () => {
       status: 'completed',
       updatedAt: nowIso(),
     }
-    persistTournamentChange(completedTournament)
+    await persistTournamentChange(completedTournament)
     return true
   }
 
-  loadTournaments()
+  void loadTournaments()
 
   return {
     tournaments,
