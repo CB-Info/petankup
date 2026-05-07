@@ -1,0 +1,109 @@
+import type { Database } from '../types/database.types'
+import type { Match, Team, Tournament } from '../types'
+
+// Traductions pures entre les rows Supabase (snake_case, nullables stricts)
+// et les types domaine (camelCase, optionnels via `?`). Aucune logique
+// métier ici : si une transformation devient conditionnelle, elle a sa
+// place dans le repository ou le store, pas ici.
+
+type TournamentRow = Database['public']['Tables']['tournaments']['Row']
+type TournamentInsert = Database['public']['Tables']['tournaments']['Insert']
+type TeamRow = Database['public']['Tables']['teams']['Row']
+type TeamInsert = Database['public']['Tables']['teams']['Insert']
+type MatchRow = Database['public']['Tables']['matches']['Row']
+type MatchInsert = Database['public']['Tables']['matches']['Insert']
+
+// --- Tournament ---
+
+export function mapTournamentRowToDomain(row: TournamentRow): Tournament {
+  return {
+    id: row.id,
+    name: row.name,
+    date: row.date,
+    location: row.location ?? undefined,
+    description: row.description ?? undefined,
+    format: row.format,
+    status: row.status,
+    ownerId: row.owner_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+// La DB exige owner_id NOT NULL. Tant que l'auth n'est pas branchée
+// (Ticket 4), le store passe ownerId: null — d'où ce garde-fou : si on
+// branche le repo par erreur en V1, on lève une erreur claire plutôt
+// que de propager une violation de contrainte SQL.
+export function mapTournamentDomainToInsert(
+  tournament: Tournament,
+): TournamentInsert {
+  if (tournament.ownerId === null) {
+    throw new Error(
+      'Cannot persist a tournament without an owner. Authentication required (Ticket 4).',
+    )
+  }
+  return {
+    id: tournament.id,
+    name: tournament.name,
+    date: tournament.date,
+    location: tournament.location ?? null,
+    description: tournament.description ?? null,
+    format: tournament.format,
+    status: tournament.status,
+    owner_id: tournament.ownerId,
+  }
+}
+
+// --- Team ---
+
+export function mapTeamRowToDomain(row: TeamRow): Team {
+  return {
+    id: row.id,
+    tournamentId: row.tournament_id,
+    name: row.name,
+    players: row.players,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+export function mapTeamDomainToInsert(team: Team): TeamInsert {
+  return {
+    id: team.id,
+    tournament_id: team.tournamentId,
+    name: team.name,
+    players: team.players,
+  }
+}
+
+// --- Match ---
+
+export function mapMatchRowToDomain(row: MatchRow): Match {
+  return {
+    id: row.id,
+    tournamentId: row.tournament_id,
+    teamAId: row.team_a_id,
+    teamBId: row.team_b_id,
+    scoreA: row.score_a,
+    scoreB: row.score_b,
+    winnerId: row.winner_id,
+    status: row.status,
+    roundNumber: row.round_number,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+export function mapMatchDomainToInsert(match: Match): MatchInsert {
+  return {
+    id: match.id,
+    tournament_id: match.tournamentId,
+    team_a_id: match.teamAId,
+    team_b_id: match.teamBId,
+    score_a: match.scoreA,
+    score_b: match.scoreB,
+    winner_id: match.winnerId,
+    status: match.status,
+    round_number: match.roundNumber,
+  }
+}

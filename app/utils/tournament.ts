@@ -60,7 +60,7 @@ function buildPendingMatch(
     scoreB: null,
     winnerId: null,
     status: "pending",
-    round: roundNumber,
+    roundNumber,
     createdAt: now,
     updatedAt: now,
   };

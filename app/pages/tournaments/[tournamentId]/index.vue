@@ -88,20 +88,20 @@ function getTeamById(teamId: string): Team | null {
   return teamsById.value[teamId] ?? null;
 }
 
-type RoundGroup = { round: number; matches: Match[] };
+type RoundGroup = { roundNumber: number; matches: Match[] };
 
-// Les matchs sont stockés à plat avec un champ `round` ; on les regroupe
+// Les matchs sont stockés à plat avec un champ `roundNumber` ; on les regroupe
 // pour l'affichage par manche, en triant par numéro de manche croissant.
 const matchesByRound = computed<RoundGroup[]>(() => {
   const groupedMatches = new Map<number, Match[]>();
   for (const match of matches.value) {
-    const existingMatchesInRound = groupedMatches.get(match.round) ?? [];
+    const existingMatchesInRound = groupedMatches.get(match.roundNumber) ?? [];
     existingMatchesInRound.push(match);
-    groupedMatches.set(match.round, existingMatchesInRound);
+    groupedMatches.set(match.roundNumber, existingMatchesInRound);
   }
   return [...groupedMatches.entries()]
-    .sort(([roundA], [roundB]) => roundA - roundB)
-    .map(([round, matchesInRound]) => ({ round, matches: matchesInRound }));
+    .sort(([roundNumberA], [roundNumberB]) => roundNumberA - roundNumberB)
+    .map(([roundNumber, matchesInRound]) => ({ roundNumber, matches: matchesInRound }));
 });
 
 const tournamentStatus = computed(() => currentTournament.value?.status);
@@ -385,13 +385,13 @@ useHead(() => ({
           <div v-else class="space-y-6">
             <section
               v-for="roundGroup in matchesByRound"
-              :key="roundGroup.round"
+              :key="roundGroup.roundNumber"
               class="space-y-3"
             >
               <h2
                 class="text-xs font-semibold uppercase tracking-[0.08em] text-toned"
               >
-                Manche {{ roundGroup.round }}
+                Manche {{ roundGroup.roundNumber }}
               </h2>
               <ul class="space-y-2">
                 <li v-for="match in roundGroup.matches" :key="match.id">
