@@ -11,7 +11,7 @@ export interface Tournament {
   description?: string;
   format: TournamentFormat;
   status: TournamentStatus;
-  ownerId: string | null;
+  ownerId: string;
   createdAt: string;
   updatedAt: string;
 }

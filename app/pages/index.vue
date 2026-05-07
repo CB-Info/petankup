@@ -1,11 +1,14 @@
 <script setup lang="ts">
+// Pattern d'erreurs : les actions du store throw ; on attrape ici et on
+// affiche un toast via useErrorToast (voir composables/useErrorToast).
 import type { TournamentStatus } from "../types";
 
 const tournamentStore = useTournamentStore();
 const { tournaments } = storeToRefs(tournamentStore);
+const { showError } = useErrorToast();
 
 onMounted(() => {
-  void tournamentStore.loadTournaments();
+  tournamentStore.loadTournaments().catch(showError);
 });
 
 // Ordre d'affichage : en cours d'abord (ce qui se passe maintenant),

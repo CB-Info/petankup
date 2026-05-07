@@ -3,6 +3,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import type { TournamentRepository } from '../../app/repositories/TournamentRepository'
 import type { Match, Team, Tournament } from '../../app/types'
 
+const STUB_USER_ID = '99999999-9999-4999-8999-999999999999'
+
 // Référence mutable hissée avant l'évaluation du `vi.mock`. Permet de
 // régénérer un mock vierge dans chaque `beforeEach`, tout en laissant
 // `createRepository()` (appelé par le store à l'init) renvoyer
@@ -10,6 +12,20 @@ import type { Match, Team, Tournament } from '../../app/types'
 const mockRepositoryRef = vi.hoisted(() => ({
   current: null as TournamentRepository | null,
 }))
+
+// Stub mutable pour useSupabaseUser. Le store appelle ce composable au
+// setup pour récupérer l'utilisateur courant (utilisé dans createTournament
+// pour peupler ownerId). La forme du stub matche celle exposée à runtime
+// par @nuxtjs/supabase : un JwtPayload (champ `sub`), PAS un User
+// (champ `id`). Le store lit `user.value.sub`. Si le stub utilisait `id`,
+// le test passerait à tort en cohérence avec un store buggé.
+// On stub aussi useSupabaseClient mais sa valeur n'est jamais consommée
+// puisque createRepository est mocké.
+const stubUserRef = vi.hoisted(() => ({
+  value: { sub: '99999999-9999-4999-8999-999999999999' } as { sub: string } | null,
+}))
+vi.stubGlobal('useSupabaseClient', () => ({}))
+vi.stubGlobal('useSupabaseUser', () => stubUserRef)
 
 vi.mock('../../app/repositories', () => ({
   createRepository: () => mockRepositoryRef.current!,
@@ -30,7 +46,7 @@ function makeTournament(overrides: Partial<Tournament> = {}): Tournament {
     date: NOW,
     format: 'round_robin',
     status: 'draft',
-    ownerId: null,
+    ownerId: STUB_USER_ID,
     createdAt: NOW,
     updatedAt: NOW,
     ...overrides,
@@ -40,7 +56,7 @@ function makeTournament(overrides: Partial<Tournament> = {}): Tournament {
 // Mock en mémoire qui respecte le contrat TournamentRepository, y compris
 // les cascades de suppression (tournament → teams + matches ;
 // team → matches où elle apparaît). Reproduit le comportement de
-// LocalStorageRepository sans toucher au stockage navigateur.
+// SupabaseRepository (cascades DB) sans toucher au réseau.
 function createMockRepository(): TournamentRepository {
   let tournaments: Tournament[] = []
   let teams: Team[] = []
@@ -89,6 +105,7 @@ function createMockRepository(): TournamentRepository {
 
 beforeEach(() => {
   mockRepositoryRef.current = createMockRepository()
+  stubUserRef.value = { sub: STUB_USER_ID }
   setActivePinia(createPinia())
 })
 
@@ -106,9 +123,26 @@ describe('useTournamentStore — tournaments', () => {
     expect(created.id).toMatch(UUID_V4_REGEX)
     expect(created.createdAt).not.toBe('')
     expect(created.updatedAt).not.toBe('')
-    expect(created.ownerId).toBeNull()
+    expect(created.ownerId).toBe(STUB_USER_ID)
     expect(store.tournaments).toHaveLength(1)
     expect(store.tournaments[0]).toEqual(created)
+  })
+
+  it('createTournament: reads ownerId from useSupabaseUser().value.sub (JwtPayload), not .id', async () => {
+    // Le runtime peuple useSupabaseUser avec un JwtPayload (champ `sub`),
+    // pas un User (champ `id`). Si on régresse vers `.id`, ownerId
+    // deviendrait undefined et le payload INSERT n'aurait pas owner_id,
+    // ce qui casse RLS côté DB.
+    const store = useTournamentStore()
+
+    const created = await store.createTournament({
+      name: 'Test',
+      date: NOW,
+      format: 'round_robin',
+    })
+
+    expect(created.ownerId).toBe(STUB_USER_ID)
+    expect(created.ownerId).not.toBeUndefined()
   })
 
   it('loadTournaments: loads all tournaments persisted in the repository', async () => {

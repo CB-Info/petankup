@@ -1,5 +1,8 @@
 <script setup lang="ts">
+// Pattern d'erreurs : les actions du store throw ; on attrape ici et on
+// affiche un toast via useErrorToast (voir composables/useErrorToast).
 const tournamentStore = useTournamentStore();
+const { showError } = useErrorToast();
 
 // `toLocaleDateString('en-CA')` renvoie le format ISO (YYYY-MM-DD) dans
 // la timezone locale — évite le piège de `toISOString()`, qui passe en
@@ -31,6 +34,8 @@ async function onSubmit() {
       description: trimmedDescription === "" ? undefined : trimmedDescription,
     });
     await navigateTo(`/tournaments/${createdTournament.id}`);
+  } catch (error) {
+    showError(error);
   } finally {
     isSubmitting.value = false;
   }

@@ -1,17 +1,20 @@
 <script setup lang="ts">
+// Pattern d'erreurs : les actions du store throw ; on attrape ici et on
+// affiche un toast via useErrorToast (voir composables/useErrorToast).
 import type { Match, Team, TournamentStatus } from "../../../types";
 
 const route = useRoute();
 const tournamentStore = useTournamentStore();
 const { currentTournament, teams, matches, ranking } =
   storeToRefs(tournamentStore);
+const { showError } = useErrorToast();
 
 const tournamentId = computed(() => route.params.tournamentId as string);
 
-// Chargement fire-and-forget dès le setup : avec LocalStorage la promesse
-// résout en microtask, donc pas de flash « Tournoi introuvable » au premier
-// rendu, même quand on arrive depuis une URL directe ou un autre tournoi.
-void tournamentStore.loadTournament(tournamentId.value);
+// Chargement fire-and-forget dès le setup. Le template affiche un état
+// vide tant que currentTournament est null ; la réactivité Pinia met à
+// jour l'UI quand la promesse Supabase résout.
+tournamentStore.loadTournament(tournamentId.value).catch(showError);
 
 // Verrouillage : un tournoi qui a démarré (ou terminé) ne doit plus
 // permettre de modifier les équipes — sinon le classement et les
@@ -75,7 +78,11 @@ function askDeleteConfirmation(team: Team) {
 
 async function confirmDelete() {
   if (teamPendingDeletion.value) {
-    await tournamentStore.deleteTeam(teamPendingDeletion.value.id);
+    try {
+      await tournamentStore.deleteTeam(teamPendingDeletion.value.id);
+    } catch (error) {
+      showError(error);
+    }
   }
   teamPendingDeletion.value = null;
 }
@@ -122,6 +129,8 @@ async function startTournament() {
     activeTab.value = String(
       tabItems.findIndex((tab) => tab.slot === "matches"),
     );
+  } catch (error) {
+    showError(error);
   } finally {
     isGeneratingMatches.value = false;
   }
@@ -182,6 +191,8 @@ async function confirmCompleteTournament() {
   isCompletingTournament.value = true;
   try {
     await tournamentStore.completeTournament();
+  } catch (error) {
+    showError(error);
   } finally {
     isCompletingTournament.value = false;
     completeModalOpen.value = false;
@@ -210,6 +221,8 @@ async function confirmTournamentDelete() {
     await tournamentStore.deleteTournament(tournamentId.value);
     tournamentDeleteModalOpen.value = false;
     await navigateTo("/");
+  } catch (error) {
+    showError(error);
   } finally {
     isDeletingTournament.value = false;
   }
