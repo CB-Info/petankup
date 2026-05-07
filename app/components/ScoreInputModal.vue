@@ -74,7 +74,7 @@ async function onSubmit() {
     // Le store appelle déjà validateScore en interne et nous renvoie
     // { valid, error } : on s'appuie sur ce retour plutôt que de
     // dupliquer la validation côté composant.
-    const result: ScoreValidationResult = tournamentStore.submitScore(
+    const result: ScoreValidationResult = await tournamentStore.submitScore(
       props.match.id,
       scoreA,
       scoreB,

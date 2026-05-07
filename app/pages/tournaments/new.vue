@@ -23,7 +23,7 @@ async function onSubmit() {
   try {
     const trimmedLocation = state.location.trim();
     const trimmedDescription = state.description.trim();
-    const createdTournament = tournamentStore.createTournament({
+    const createdTournament = await tournamentStore.createTournament({
       name: state.name.trim(),
       date: state.date,
       format: "round_robin",
