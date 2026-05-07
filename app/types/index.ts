@@ -34,7 +34,7 @@ export interface Match {
   scoreB: number | null;
   winnerId: string | null;
   status: MatchStatus;
-  round: number;
+  roundNumber: number;
   createdAt: string;
   updatedAt: string;
 }

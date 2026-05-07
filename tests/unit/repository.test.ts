@@ -41,7 +41,7 @@ function makeMatch(overrides: Partial<Match> = {}): Match {
     scoreB: null,
     winnerId: null,
     status: 'pending',
-    round: 1,
+    roundNumber: 1,
     createdAt: NOW,
     updatedAt: NOW,
     ...overrides,
@@ -229,16 +229,16 @@ describe('LocalStorageRepository — matches', () => {
 
   it('saveMatches batch upserts existing matches and appends new ones', async () => {
     const repository = new LocalStorageRepository()
-    const existingMatch = makeMatch({ tournamentId: 't1', round: 1 })
+    const existingMatch = makeMatch({ tournamentId: 't1', roundNumber: 1 })
     await repository.saveMatch(existingMatch)
 
-    const updatedExistingMatch: Match = { ...existingMatch, round: 2 }
-    const newMatch = makeMatch({ tournamentId: 't1', round: 1 })
+    const updatedExistingMatch: Match = { ...existingMatch, roundNumber: 2 }
+    const newMatch = makeMatch({ tournamentId: 't1', roundNumber: 1 })
     await repository.saveMatches([updatedExistingMatch, newMatch])
 
     const matches = await repository.getMatchesByTournament('t1')
     expect(matches).toHaveLength(2)
-    expect(matches.find(match => match.id === existingMatch.id)!.round).toBe(2)
+    expect(matches.find(match => match.id === existingMatch.id)!.roundNumber).toBe(2)
     expect(matches.find(match => match.id === newMatch.id)).toBeDefined()
   })
 })
