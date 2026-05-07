@@ -8,25 +8,28 @@ const MATCHES_KEY = 'matches'
 export class LocalStorageRepository implements TournamentRepository {
   // --- Tournaments ---
 
-  getAllTournaments(): Tournament[] {
+  async getAllTournaments(): Promise<Tournament[]> {
     return readArrayFromStorage<Tournament>(TOURNAMENTS_KEY)
   }
 
-  getTournamentById(id: string): Tournament | undefined {
-    return this.getAllTournaments().find(tournament => tournament.id === id)
+  async getTournamentById(id: string): Promise<Tournament | undefined> {
+    const allTournaments = await this.getAllTournaments()
+    return allTournaments.find(tournament => tournament.id === id)
   }
 
-  saveTournament(tournament: Tournament): void {
-    const allTournaments = this.getAllTournaments()
+  async saveTournament(tournament: Tournament): Promise<void> {
+    const allTournaments = await this.getAllTournaments()
     const updatedTournaments = upsertById(allTournaments, tournament)
     writeArrayToStorage(TOURNAMENTS_KEY, updatedTournaments)
   }
 
   // Suppression en cascade : on retire le tournoi puis toutes ses équipes
   // et tous ses matchs. Évite de laisser des orphelins en localStorage.
-  deleteTournament(id: string): void {
-    const remainingTournaments = this.getAllTournaments()
-      .filter(tournament => tournament.id !== id)
+  async deleteTournament(id: string): Promise<void> {
+    const allTournaments = await this.getAllTournaments()
+    const remainingTournaments = allTournaments.filter(
+      tournament => tournament.id !== id,
+    )
     writeArrayToStorage(TOURNAMENTS_KEY, remainingTournaments)
 
     const remainingTeams = readArrayFromStorage<Team>(TEAMS_KEY)
@@ -40,12 +43,12 @@ export class LocalStorageRepository implements TournamentRepository {
 
   // --- Teams ---
 
-  getTeamsByTournament(tournamentId: string): Team[] {
+  async getTeamsByTournament(tournamentId: string): Promise<Team[]> {
     return readArrayFromStorage<Team>(TEAMS_KEY)
       .filter(team => team.tournamentId === tournamentId)
   }
 
-  saveTeam(team: Team): void {
+  async saveTeam(team: Team): Promise<void> {
     const allTeams = readArrayFromStorage<Team>(TEAMS_KEY)
     const updatedTeams = upsertById(allTeams, team)
     writeArrayToStorage(TEAMS_KEY, updatedTeams)
@@ -53,7 +56,7 @@ export class LocalStorageRepository implements TournamentRepository {
 
   // Suppression en cascade : on retire l'équipe puis tous les matchs
   // dont elle est l'un des deux participants (côté A ou côté B).
-  deleteTeam(id: string): void {
+  async deleteTeam(id: string): Promise<void> {
     const remainingTeams = readArrayFromStorage<Team>(TEAMS_KEY)
       .filter(team => team.id !== id)
     writeArrayToStorage(TEAMS_KEY, remainingTeams)
@@ -65,12 +68,12 @@ export class LocalStorageRepository implements TournamentRepository {
 
   // --- Matches ---
 
-  getMatchesByTournament(tournamentId: string): Match[] {
+  async getMatchesByTournament(tournamentId: string): Promise<Match[]> {
     return readArrayFromStorage<Match>(MATCHES_KEY)
       .filter(match => match.tournamentId === tournamentId)
   }
 
-  saveMatch(match: Match): void {
+  async saveMatch(match: Match): Promise<void> {
     const allMatches = readArrayFromStorage<Match>(MATCHES_KEY)
     const updatedMatches = upsertById(allMatches, match)
     writeArrayToStorage(MATCHES_KEY, updatedMatches)
@@ -79,7 +82,7 @@ export class LocalStorageRepository implements TournamentRepository {
   // Upsert en lot : un seul read et un seul write, peu importe le nombre
   // de matchs. Évite les N accès localStorage de la version naïve
   // (utile quand `generateRoundRobinMatches` génère 6+ matchs d'un coup).
-  saveMatches(matches: Match[]): void {
+  async saveMatches(matches: Match[]): Promise<void> {
     let updatedMatches = readArrayFromStorage<Match>(MATCHES_KEY)
     for (const matchToUpsert of matches) {
       updatedMatches = upsertById(updatedMatches, matchToUpsert)
