@@ -1,4 +1,8 @@
 <script setup lang="ts">
+// Pattern d'erreurs : les actions du store throw ; on attrape ici et on
+// affiche un toast via useErrorToast (voir composables/useErrorToast).
+// La validation métier (entiers, ≥13, pas d'égalité) reste affichée
+// inline via errorMessage : c'est une erreur utilisateur, pas système.
 import type { Match, ScoreValidationResult, Team } from '../types'
 
 const props = defineProps<{
@@ -14,6 +18,7 @@ const emit = defineEmits<{
 }>()
 
 const tournamentStore = useTournamentStore()
+const { showError } = useErrorToast()
 
 const openModel = computed({
   get: () => props.open,
@@ -85,6 +90,9 @@ async function onSubmit() {
     }
     emit('saved')
     openModel.value = false
+  }
+  catch (error) {
+    showError(error)
   }
   finally {
     isSubmitting.value = false

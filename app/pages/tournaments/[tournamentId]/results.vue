@@ -1,22 +1,25 @@
 <script setup lang="ts">
+// Pattern d'erreurs : les actions du store throw ; on attrape ici et on
+// affiche un toast via useErrorToast (voir composables/useErrorToast).
 import type { Ranking, Team } from "../../../types";
 
 const route = useRoute();
 const tournamentStore = useTournamentStore();
 const { currentTournament, teams, matches, ranking } =
   storeToRefs(tournamentStore);
+const { showError } = useErrorToast();
 
 const tournamentId = computed(() => route.params.tournamentId as string);
 
-// Chargement fire-and-forget dès le setup : la promesse résout en microtask
-// avec LocalStorage, donc pas de flash au premier rendu sur URL directe. On
-// évite un load inutile si on arrive d'un NuxtLink où le tournoi courant est
-// déjà le bon.
+// Chargement fire-and-forget dès le setup. On évite un load inutile si on
+// arrive d'un NuxtLink où le tournoi courant est déjà le bon. Le template
+// gère l'état vide (currentTournament null) pendant que la promesse
+// se résout côté Supabase.
 const tournamentNeedsLoading =
   currentTournament.value === null ||
   currentTournament.value.id !== tournamentId.value;
 if (tournamentNeedsLoading) {
-  void tournamentStore.loadTournament(tournamentId.value);
+  tournamentStore.loadTournament(tournamentId.value).catch(showError);
 }
 
 const tournamentIsCompleted = computed(

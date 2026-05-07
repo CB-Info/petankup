@@ -117,23 +117,6 @@ describe('mapTournamentDomainToInsert', () => {
     expect(insert.location).toBeNull()
     expect(insert.description).toBeNull()
   })
-
-  it('throws when ownerId is null (auth required, Ticket 4)', () => {
-    const tournament: Tournament = {
-      id: TOURNAMENT_ID,
-      name: 'Tournoi orphelin',
-      date: '2026-05-10',
-      format: 'round_robin',
-      status: 'draft',
-      ownerId: null,
-      createdAt: NOW,
-      updatedAt: NOW,
-    }
-
-    expect(() => mapTournamentDomainToInsert(tournament)).toThrow(
-      /owner.*Authentication required.*Ticket 4/i,
-    )
-  })
 })
 
 describe('mapTeamRowToDomain', () => {

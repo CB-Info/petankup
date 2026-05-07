@@ -30,18 +30,9 @@ export function mapTournamentRowToDomain(row: TournamentRow): Tournament {
   }
 }
 
-// La DB exige owner_id NOT NULL. Tant que l'auth n'est pas branchée
-// (Ticket 4), le store passe ownerId: null — d'où ce garde-fou : si on
-// branche le repo par erreur en V1, on lève une erreur claire plutôt
-// que de propager une violation de contrainte SQL.
 export function mapTournamentDomainToInsert(
   tournament: Tournament,
 ): TournamentInsert {
-  if (tournament.ownerId === null) {
-    throw new Error(
-      'Cannot persist a tournament without an owner. Authentication required (Ticket 4).',
-    )
-  }
   return {
     id: tournament.id,
     name: tournament.name,

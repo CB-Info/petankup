@@ -14,12 +14,9 @@ import {
 // Implémentation Supabase du contrat TournamentRepository.
 // Les cascades de suppression sont gérées par la DB via ON DELETE CASCADE
 // (voir migration initiale) — le repo se contente de DELETE l'entité ciblée.
-// Sur erreur Supabase, on throw une Error nue : la gestion fine (toast,
-// retry, isLoading) sera ajoutée côté store/UI plus tard.
-//
-// Ce repo n'est PAS branché par createRepository() à ce ticket : son
-// usage en runtime arrive au Ticket 4 quand l'auth fournira un owner_id
-// valide.
+// Sur erreur Supabase, on throw une Error nue ; le store gère le toggle
+// isLoading et propage l'erreur au site d'appel UI qui affiche un toast
+// (voir composables/useErrorToast.ts).
 export class SupabaseRepository implements TournamentRepository {
   constructor(private readonly client: SupabaseClient<Database>) {}
 
