@@ -1,6 +1,8 @@
 <script setup lang="ts">
 // Pattern d'erreurs : les actions du store throw ; on attrape ici et on
 // affiche un toast via useErrorToast (voir composables/useErrorToast).
+import type { TournamentVisibility } from "../../types";
+
 const tournamentStore = useTournamentStore();
 const { showError } = useErrorToast();
 
@@ -16,7 +18,21 @@ const state = reactive({
   date: todayLocalIso(),
   location: "",
   description: "",
+  visibility: "private" as TournamentVisibility,
 });
+
+const visibilityOptions = [
+  {
+    value: "private",
+    label: "Privé",
+    description: "Visible par vous uniquement",
+  },
+  {
+    value: "public",
+    label: "Public",
+    description: "Visible par tous les utilisateurs connectés",
+  },
+];
 
 const isSubmitting = ref(false);
 
@@ -32,6 +48,7 @@ async function onSubmit() {
       format: "round_robin",
       location: trimmedLocation === "" ? undefined : trimmedLocation,
       description: trimmedDescription === "" ? undefined : trimmedDescription,
+      visibility: state.visibility,
     });
     await navigateTo(`/tournaments/${createdTournament.id}`);
   } catch (error) {
@@ -88,6 +105,13 @@ useHead({ title: "Nouveau tournoi — Pétankup" });
             :maxlength="500"
             :rows="4"
             class="w-full"
+          />
+        </UFormField>
+
+        <UFormField label="Visibilité" name="visibility" required>
+          <URadioGroup
+            v-model="state.visibility"
+            :items="visibilityOptions"
           />
         </UFormField>
 

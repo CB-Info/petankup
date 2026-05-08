@@ -466,3 +466,47 @@ describe('useTournamentStore — setTournamentVisibility', () => {
     ).rejects.toThrow('Tournoi introuvable')
   })
 })
+
+describe('useTournamentStore — isOwnerOfCurrentTournament', () => {
+  const OTHER_USER_ID = '00000000-0000-4000-8000-000000000000'
+
+  it('returns true when the current tournament is owned by the current user', async () => {
+    const store = useTournamentStore()
+    const created = await store.createTournament({
+      name: 'Mine',
+      date: NOW,
+      format: 'round_robin',
+    })
+    await store.loadTournament(created.id)
+
+    expect(store.isOwnerOfCurrentTournament).toBe(true)
+  })
+
+  it('returns false when the current tournament is owned by someone else', async () => {
+    const otherTournament = makeTournament({ ownerId: OTHER_USER_ID })
+    await mockRepositoryRef.current!.saveTournament(otherTournament)
+    const store = useTournamentStore()
+    await store.loadTournament(otherTournament.id)
+
+    expect(store.isOwnerOfCurrentTournament).toBe(false)
+  })
+
+  it('returns false when there is no current tournament loaded', () => {
+    const store = useTournamentStore()
+
+    expect(store.isOwnerOfCurrentTournament).toBe(false)
+  })
+
+  it('returns false when there is no authenticated user', async () => {
+    const store = useTournamentStore()
+    const created = await store.createTournament({
+      name: 'Mine',
+      date: NOW,
+      format: 'round_robin',
+    })
+    await store.loadTournament(created.id)
+    stubUserRef.value = null
+
+    expect(store.isOwnerOfCurrentTournament).toBe(false)
+  })
+})
