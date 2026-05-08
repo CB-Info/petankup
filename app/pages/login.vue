@@ -60,6 +60,9 @@ async function onGoogleLogin() {
       provider: "google",
       options: {
         redirectTo: `${window.location.origin}/confirm`,
+        queryParams: {
+          prompt: "select_account",
+        },
       },
     });
     if (error) throw new Error(error.message);
