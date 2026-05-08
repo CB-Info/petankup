@@ -4,7 +4,7 @@
 import type { TournamentStatus } from "../types";
 
 const tournamentStore = useTournamentStore();
-const { tournaments } = storeToRefs(tournamentStore);
+const { myTournaments, publicTournaments } = storeToRefs(tournamentStore);
 const { showError } = useErrorToast();
 
 onMounted(() => {
@@ -19,8 +19,8 @@ const STATUS_DISPLAY_ORDER: Record<TournamentStatus, number> = {
   completed: 2,
 };
 
-const sortedTournaments = computed(() => {
-  return [...tournaments.value].sort((firstTournament, secondTournament) => {
+const sortedMyTournaments = computed(() => {
+  return [...myTournaments.value].sort((firstTournament, secondTournament) => {
     const statusDiff =
       STATUS_DISPLAY_ORDER[firstTournament.status] -
       STATUS_DISPLAY_ORDER[secondTournament.status];
@@ -29,6 +29,19 @@ const sortedTournaments = computed(() => {
     return secondTournament.date.localeCompare(firstTournament.date);
   });
 });
+
+// Tournois publics d'autres owners : pas de tri par status (lecture
+// pure, pas de notion de progression d'admin), juste date desc.
+const sortedPublicTournaments = computed(() => {
+  return [...publicTournaments.value].sort(
+    (firstTournament, secondTournament) =>
+      secondTournament.date.localeCompare(firstTournament.date),
+  );
+});
+
+const mineEmpty = computed(() => sortedMyTournaments.value.length === 0);
+const publicEmpty = computed(() => sortedPublicTournaments.value.length === 0);
+const bothEmpty = computed(() => mineEmpty.value && publicEmpty.value);
 
 function statusLabel(status: TournamentStatus): string {
   switch (status) {
@@ -59,7 +72,7 @@ useHead({ title: "Pétankup — Gestion de tournois" });
 
 <template>
   <div>
-    <div v-if="tournaments.length === 0" class="py-16 text-center">
+    <div v-if="bothEmpty" class="py-16 text-center">
       <h2 class="text-lg font-semibold text-primary-900">
         Aucun tournoi pour l'instant
       </h2>
@@ -75,41 +88,95 @@ useHead({ title: "Pétankup — Gestion de tournois" });
       </UButton>
     </div>
 
-    <div v-else class="space-y-4">
+    <div v-else class="space-y-6">
       <UButton to="/tournaments/new" color="primary" size="lg" block>
         Créer un tournoi
       </UButton>
 
-      <ul class="space-y-3">
-        <li v-for="tournament in sortedTournaments" :key="tournament.id">
-          <NuxtLink :to="`/tournaments/${tournament.id}`" class="block">
-            <UCard>
-              <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0 space-y-1">
-                  <h3 class="truncate font-semibold text-primary-900">
-                    {{ tournament.name }}
-                  </h3>
-                  <p class="text-sm text-toned">
-                    {{ formatDate(tournament.date) }}
-                  </p>
-                  <p
-                    v-if="tournament.location"
-                    class="truncate text-sm text-toned"
-                  >
-                    {{ tournament.location }}
-                  </p>
+      <section v-if="!mineEmpty" class="space-y-3">
+        <h2
+          class="text-xs font-semibold uppercase tracking-[0.08em] text-toned"
+        >
+          Mes tournois
+        </h2>
+        <ul class="space-y-3">
+          <li v-for="tournament in sortedMyTournaments" :key="tournament.id">
+            <NuxtLink :to="`/tournaments/${tournament.id}`" class="block">
+              <UCard>
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0 space-y-1">
+                    <h3 class="truncate font-semibold text-primary-900">
+                      {{ tournament.name }}
+                    </h3>
+                    <p class="text-sm text-toned">
+                      {{ formatDate(tournament.date) }}
+                    </p>
+                    <p
+                      v-if="tournament.location"
+                      class="truncate text-sm text-toned"
+                    >
+                      {{ tournament.location }}
+                    </p>
+                  </div>
+                  <div class="flex shrink-0 flex-col items-end gap-1">
+                    <UBadge
+                      :color="statusBadgeColor(tournament.status)"
+                      variant="soft"
+                    >
+                      {{ statusLabel(tournament.status) }}
+                    </UBadge>
+                    <VisibilityBadge :visibility="tournament.visibility" />
+                  </div>
                 </div>
-                <UBadge
-                  :color="statusBadgeColor(tournament.status)"
-                  variant="soft"
-                >
-                  {{ statusLabel(tournament.status) }}
-                </UBadge>
-              </div>
-            </UCard>
-          </NuxtLink>
-        </li>
-      </ul>
+              </UCard>
+            </NuxtLink>
+          </li>
+        </ul>
+      </section>
+
+      <section v-if="!publicEmpty" class="space-y-3">
+        <h2
+          class="text-xs font-semibold uppercase tracking-[0.08em] text-toned"
+        >
+          Tournois publics
+        </h2>
+        <ul class="space-y-3">
+          <li
+            v-for="tournament in sortedPublicTournaments"
+            :key="tournament.id"
+          >
+            <NuxtLink :to="`/tournaments/${tournament.id}`" class="block">
+              <UCard>
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0 space-y-1">
+                    <h3 class="truncate font-semibold text-primary-900">
+                      {{ tournament.name }}
+                    </h3>
+                    <p class="text-sm text-toned">
+                      {{ formatDate(tournament.date) }}
+                    </p>
+                    <p
+                      v-if="tournament.location"
+                      class="truncate text-sm text-toned"
+                    >
+                      {{ tournament.location }}
+                    </p>
+                  </div>
+                  <div class="flex shrink-0 flex-col items-end gap-1">
+                    <UBadge
+                      :color="statusBadgeColor(tournament.status)"
+                      variant="soft"
+                    >
+                      {{ statusLabel(tournament.status) }}
+                    </UBadge>
+                    <VisibilityBadge :visibility="tournament.visibility" />
+                  </div>
+                </div>
+              </UCard>
+            </NuxtLink>
+          </li>
+        </ul>
+      </section>
     </div>
   </div>
 </template>

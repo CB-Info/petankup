@@ -5,9 +5,18 @@ import type { Match, Team, TournamentStatus } from "../../../types";
 
 const route = useRoute();
 const tournamentStore = useTournamentStore();
-const { currentTournament, teams, matches, ranking } =
-  storeToRefs(tournamentStore);
+const {
+  currentTournament,
+  teams,
+  matches,
+  ranking,
+  isOwnerOfCurrentTournament,
+} = storeToRefs(tournamentStore);
 const { showError } = useErrorToast();
+
+// Alias local lisible : tout l'ownership conditionne des actions admin
+// dans le template, on ne le manipule jamais ailleurs.
+const isOwner = isOwnerOfCurrentTournament;
 
 const tournamentId = computed(() => route.params.tournamentId as string);
 
@@ -228,6 +237,33 @@ async function confirmTournamentDelete() {
   }
 }
 
+const visibilityToggleModalOpen = ref(false);
+const isTogglingVisibility = ref(false);
+
+function askVisibilityToggle() {
+  if (!isOwner.value) return;
+  visibilityToggleModalOpen.value = true;
+}
+
+async function confirmVisibilityToggle() {
+  if (currentTournament.value === null) return;
+  if (isTogglingVisibility.value) return;
+  isTogglingVisibility.value = true;
+  try {
+    const targetVisibility =
+      currentTournament.value.visibility === "public" ? "private" : "public";
+    await tournamentStore.setTournamentVisibility(
+      currentTournament.value.id,
+      targetVisibility,
+    );
+    visibilityToggleModalOpen.value = false;
+  } catch (error) {
+    showError(error);
+  } finally {
+    isTogglingVisibility.value = false;
+  }
+}
+
 useHead(() => ({
   title: currentTournament.value
     ? `${currentTournament.value.name} — Pétankup`
@@ -255,15 +291,34 @@ useHead(() => ({
         >
           Retour
         </UButton>
-        <UButton
-          v-if="tournamentCanBeDeleted"
-          variant="ghost"
-          color="neutral"
-          icon="i-lucide-trash-2"
-          size="sm"
-          aria-label="Supprimer le tournoi"
-          @click="askTournamentDeleteConfirmation"
-        />
+        <div class="flex items-center gap-1">
+          <UButton
+            v-if="isOwner"
+            variant="ghost"
+            color="neutral"
+            :icon="
+              currentTournament.visibility === 'public'
+                ? 'i-lucide-lock'
+                : 'i-lucide-globe'
+            "
+            size="sm"
+            :aria-label="
+              currentTournament.visibility === 'public'
+                ? 'Rendre privé'
+                : 'Rendre public'
+            "
+            @click="askVisibilityToggle"
+          />
+          <UButton
+            v-if="tournamentCanBeDeleted && isOwner"
+            variant="ghost"
+            color="neutral"
+            icon="i-lucide-trash-2"
+            size="sm"
+            aria-label="Supprimer le tournoi"
+            @click="askTournamentDeleteConfirmation"
+          />
+        </div>
       </div>
       <div class="flex items-start justify-between gap-3">
         <div class="min-w-0 space-y-1">
@@ -277,9 +332,12 @@ useHead(() => ({
             </template>
           </p>
         </div>
-        <UBadge :color="statusBadgeColor" variant="soft">
-          {{ statusLabel }}
-        </UBadge>
+        <div class="flex shrink-0 flex-col items-end gap-1">
+          <UBadge :color="statusBadgeColor" variant="soft">
+            {{ statusLabel }}
+          </UBadge>
+          <VisibilityBadge :visibility="currentTournament.visibility" />
+        </div>
       </div>
     </div>
 
@@ -301,6 +359,7 @@ useHead(() => ({
               Ajoutez les équipes participantes au tournoi
             </p>
             <UButton
+              v-if="isOwner"
               icon="i-lucide-plus"
               color="primary"
               size="lg"
@@ -314,6 +373,7 @@ useHead(() => ({
 
           <div v-else class="space-y-3">
             <UButton
+              v-if="isOwner"
               icon="i-lucide-plus"
               color="primary"
               size="lg"
@@ -336,7 +396,7 @@ useHead(() => ({
                         {{ team.players.join(" · ") }}
                       </p>
                     </div>
-                    <div class="flex shrink-0 gap-1">
+                    <div v-if="isOwner" class="flex shrink-0 gap-1">
                       <UButton
                         variant="ghost"
                         color="neutral"
@@ -364,35 +424,46 @@ useHead(() => ({
 
       <template #matches>
         <div class="space-y-4">
-          <div
-            v-if="tournamentStatus === 'draft' && !hasEnoughTeamsToStart"
-            class="rounded-xl border border-dashed border-default bg-elevated p-6 text-center"
-          >
-            <p class="text-sm text-toned">
-              Ajoutez au moins 2 équipes pour lancer le tournoi.
-            </p>
-          </div>
+          <template v-if="tournamentStatus === 'draft' && isOwner">
+            <div
+              v-if="!hasEnoughTeamsToStart"
+              class="rounded-xl border border-dashed border-default bg-elevated p-6 text-center"
+            >
+              <p class="text-sm text-toned">
+                Ajoutez au moins 2 équipes pour lancer le tournoi.
+              </p>
+            </div>
+
+            <div
+              v-else
+              class="space-y-3 rounded-xl border border-dashed border-default bg-elevated p-6 text-center"
+            >
+              <h2 class="text-base font-semibold text-primary-900">
+                Les équipes sont prêtes
+              </h2>
+              <p class="text-sm text-toned">
+                Lancez le tournoi pour générer le calendrier des matchs.
+              </p>
+              <UButton
+                icon="i-lucide-play"
+                color="primary"
+                size="lg"
+                :loading="isGeneratingMatches"
+                block
+                @click="startTournament"
+              >
+                Lancer le tournoi
+              </UButton>
+            </div>
+          </template>
 
           <div
             v-else-if="tournamentStatus === 'draft'"
-            class="space-y-3 rounded-xl border border-dashed border-default bg-elevated p-6 text-center"
+            class="rounded-xl border border-dashed border-default bg-elevated p-6 text-center"
           >
-            <h2 class="text-base font-semibold text-primary-900">
-              Les équipes sont prêtes
-            </h2>
             <p class="text-sm text-toned">
-              Lancez le tournoi pour générer le calendrier des matchs.
+              Le tournoi n'a pas encore démarré.
             </p>
-            <UButton
-              icon="i-lucide-play"
-              color="primary"
-              size="lg"
-              :loading="isGeneratingMatches"
-              block
-              @click="startTournament"
-            >
-              Lancer le tournoi
-            </UButton>
           </div>
 
           <div v-else class="space-y-6">
@@ -418,25 +489,36 @@ useHead(() => ({
                       </p>
 
                       <div class="shrink-0">
-                        <button
-                          v-if="match.status === 'completed'"
-                          type="button"
-                          class="rounded-md px-2 py-1 text-base font-semibold tabular-nums text-primary-900 hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-60"
-                          :disabled="tournamentIsCompleted"
-                          @click="openScoreModal(match)"
-                        >
-                          {{ match.scoreA }} - {{ match.scoreB }}
-                        </button>
-                        <UButton
-                          v-else
-                          variant="soft"
-                          color="primary"
-                          size="sm"
-                          :disabled="tournamentIsCompleted"
-                          @click="openScoreModal(match)"
-                        >
-                          Saisir le score
-                        </UButton>
+                        <template v-if="match.status === 'completed'">
+                          <button
+                            v-if="isOwner"
+                            type="button"
+                            class="rounded-md px-2 py-1 text-base font-semibold tabular-nums text-primary-900 hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            :disabled="tournamentIsCompleted"
+                            @click="openScoreModal(match)"
+                          >
+                            {{ match.scoreA }} - {{ match.scoreB }}
+                          </button>
+                          <span
+                            v-else
+                            class="px-2 py-1 text-base font-semibold tabular-nums text-primary-900"
+                          >
+                            {{ match.scoreA }} - {{ match.scoreB }}
+                          </span>
+                        </template>
+                        <template v-else>
+                          <UButton
+                            v-if="isOwner"
+                            variant="soft"
+                            color="primary"
+                            size="sm"
+                            :disabled="tournamentIsCompleted"
+                            @click="openScoreModal(match)"
+                          >
+                            Saisir le score
+                          </UButton>
+                          <p v-else class="text-sm text-toned">À jouer</p>
+                        </template>
                       </div>
 
                       <p
@@ -470,7 +552,7 @@ useHead(() => ({
 
             <div v-if="tournamentStatus === 'in_progress'" class="space-y-2">
               <UButton
-                v-if="canCompleteTournament"
+                v-if="canCompleteTournament && isOwner"
                 icon="i-lucide-trophy"
                 color="primary"
                 size="lg"
@@ -479,7 +561,10 @@ useHead(() => ({
               >
                 Terminer le tournoi
               </UButton>
-              <p v-else class="text-center text-sm text-toned">
+              <p
+                v-else-if="pendingMatchCount > 0"
+                class="text-center text-sm text-toned"
+              >
                 {{ pendingMatchCount }}
                 {{
                   pendingMatchCount > 1
@@ -538,6 +623,14 @@ useHead(() => ({
       :tournament-name="currentTournament.name"
       :is-submitting="isDeletingTournament"
       @confirmed="confirmTournamentDelete"
+    />
+
+    <TournamentVisibilityToggleModal
+      v-model:open="visibilityToggleModalOpen"
+      :current-visibility="currentTournament.visibility"
+      :tournament-name="currentTournament.name"
+      :is-submitting="isTogglingVisibility"
+      @confirmed="confirmVisibilityToggle"
     />
   </div>
 </template>

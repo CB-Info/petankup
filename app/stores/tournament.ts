@@ -81,6 +81,18 @@ export const useTournamentStore = defineStore('tournament', () => {
     )
   })
 
+  // Sélecteur dérivé pour les pages qui conditionnent des actions admin
+  // sur la propriété du tournoi courant. Encapsule la comparaison ici
+  // plutôt que de laisser fuiter currentUserId : l'identité utilisateur
+  // reste interne, seul le booléen sort. Faux si pas de tournoi courant
+  // ou pas d'utilisateur authentifié.
+  const isOwnerOfCurrentTournament = computed<boolean>(() => {
+    const userId = currentUserId.value
+    if (userId === null) return false
+    if (currentTournament.value === null) return false
+    return currentTournament.value.ownerId === userId
+  })
+
   function nowIso(): string {
     return new Date().toISOString()
   }
@@ -362,6 +374,7 @@ export const useTournamentStore = defineStore('tournament', () => {
     isLoading,
     myTournaments,
     publicTournaments,
+    isOwnerOfCurrentTournament,
     loadTournaments,
     createTournament,
     loadTournament,

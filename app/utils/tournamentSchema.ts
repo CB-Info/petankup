@@ -20,6 +20,7 @@ export const tournamentSchema = z.object({
     .max(500, 'La description ne peut pas dépasser 500 caractères')
     .optional()
     .or(z.literal('')),
+  visibility: z.enum(['private', 'public']).default('private'),
 })
 
 export type TournamentFormState = z.infer<typeof tournamentSchema>
