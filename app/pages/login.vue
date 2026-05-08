@@ -52,6 +52,27 @@ async function onSubmit() {
   }
 }
 
+async function onGoogleLogin() {
+  if (isSubmitting.value) return;
+  isSubmitting.value = true;
+  try {
+    const { error } = await client.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/confirm`,
+      },
+    });
+    if (error) throw new Error(error.message);
+    // Pas de finally ici : signInWithOAuth redirige immédiatement la
+    // fenêtre vers Google en cas de succès, on ne revient pas dans ce
+    // callback. On ne reset isSubmitting que dans la branche d'erreur
+    // synchrone (réseau coupé, config Supabase invalide, etc.).
+  } catch (error) {
+    showError(error);
+    isSubmitting.value = false;
+  }
+}
+
 useHead({ title: "Connexion — Pétankup" });
 </script>
 
@@ -66,6 +87,25 @@ useHead({ title: "Connexion — Pétankup" });
           Connecte-toi pour gérer tes tournois entre amis.
         </p>
       </template>
+
+      <div v-if="!linkSent">
+        <UButton
+          variant="outline"
+          color="neutral"
+          size="lg"
+          :loading="isSubmitting"
+          block
+          @click="onGoogleLogin"
+        >
+          Continuer avec Google
+        </UButton>
+
+        <div class="my-4 flex items-center gap-3">
+          <div class="h-px flex-1 bg-default" />
+          <span class="text-xs uppercase tracking-wider text-toned">ou</span>
+          <div class="h-px flex-1 bg-default" />
+        </div>
+      </div>
 
       <div v-if="linkSent" class="space-y-3 text-center">
         <UIcon
