@@ -31,6 +31,7 @@ describe('mapTournamentRowToDomain', () => {
       description: 'Tournoi entre amis',
       format: 'round_robin',
       status: 'in_progress',
+      visibility: 'private',
       owner_id: OWNER_ID,
       created_at: NOW,
       updated_at: NOW,
@@ -44,6 +45,7 @@ describe('mapTournamentRowToDomain', () => {
       description: 'Tournoi entre amis',
       format: 'round_robin',
       status: 'in_progress',
+      visibility: 'private',
       ownerId: OWNER_ID,
       createdAt: NOW,
       updatedAt: NOW,
@@ -59,6 +61,7 @@ describe('mapTournamentRowToDomain', () => {
       description: null,
       format: 'round_robin',
       status: 'draft',
+      visibility: 'private',
       owner_id: OWNER_ID,
       created_at: NOW,
       updated_at: NOW,
@@ -67,6 +70,24 @@ describe('mapTournamentRowToDomain', () => {
     const tournament = mapTournamentRowToDomain(row)
     expect(tournament.location).toBeUndefined()
     expect(tournament.description).toBeUndefined()
+  })
+
+  it('preserves the visibility field (public)', () => {
+    const row: TournamentRow = {
+      id: TOURNAMENT_ID,
+      name: 'Tournoi public',
+      date: '2026-05-10',
+      location: null,
+      description: null,
+      format: 'round_robin',
+      status: 'draft',
+      visibility: 'public',
+      owner_id: OWNER_ID,
+      created_at: NOW,
+      updated_at: NOW,
+    }
+
+    expect(mapTournamentRowToDomain(row).visibility).toBe('public')
   })
 })
 
@@ -80,6 +101,7 @@ describe('mapTournamentDomainToInsert', () => {
       description: 'Tournoi entre amis',
       format: 'round_robin',
       status: 'in_progress',
+      visibility: 'private',
       ownerId: OWNER_ID,
       createdAt: NOW,
       updatedAt: NOW,
@@ -94,6 +116,7 @@ describe('mapTournamentDomainToInsert', () => {
       description: 'Tournoi entre amis',
       format: 'round_robin',
       status: 'in_progress',
+      visibility: 'private',
       owner_id: OWNER_ID,
     })
     // Les timestamps sont gérées par la DB (defaults + trigger).
@@ -108,6 +131,7 @@ describe('mapTournamentDomainToInsert', () => {
       date: '2026-05-10',
       format: 'round_robin',
       status: 'draft',
+      visibility: 'private',
       ownerId: OWNER_ID,
       createdAt: NOW,
       updatedAt: NOW,
@@ -116,6 +140,22 @@ describe('mapTournamentDomainToInsert', () => {
     const insert = mapTournamentDomainToInsert(tournament)
     expect(insert.location).toBeNull()
     expect(insert.description).toBeNull()
+  })
+
+  it('passes through the visibility field (public)', () => {
+    const tournament: Tournament = {
+      id: TOURNAMENT_ID,
+      name: 'Tournoi public',
+      date: '2026-05-10',
+      format: 'round_robin',
+      status: 'draft',
+      visibility: 'public',
+      ownerId: OWNER_ID,
+      createdAt: NOW,
+      updatedAt: NOW,
+    }
+
+    expect(mapTournamentDomainToInsert(tournament).visibility).toBe('public')
   })
 })
 

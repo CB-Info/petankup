@@ -132,6 +132,7 @@ export type Database = {
           owner_id: string
           status: Database["public"]["Enums"]["tournament_status"]
           updated_at: string
+          visibility: Database["public"]["Enums"]["tournament_visibility"]
         }
         Insert: {
           created_at?: string
@@ -144,6 +145,7 @@ export type Database = {
           owner_id: string
           status?: Database["public"]["Enums"]["tournament_status"]
           updated_at?: string
+          visibility?: Database["public"]["Enums"]["tournament_visibility"]
         }
         Update: {
           created_at?: string
@@ -156,6 +158,7 @@ export type Database = {
           owner_id?: string
           status?: Database["public"]["Enums"]["tournament_status"]
           updated_at?: string
+          visibility?: Database["public"]["Enums"]["tournament_visibility"]
         }
         Relationships: []
       }
@@ -173,6 +176,7 @@ export type Database = {
       match_status: "pending" | "completed"
       tournament_format: "round_robin"
       tournament_status: "draft" | "in_progress" | "completed"
+      tournament_visibility: "private" | "public"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -303,6 +307,7 @@ export const Constants = {
       match_status: ["pending", "completed"],
       tournament_format: ["round_robin"],
       tournament_status: ["draft", "in_progress", "completed"],
+      tournament_visibility: ["private", "public"],
     },
   },
 } as const

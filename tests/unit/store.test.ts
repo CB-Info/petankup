@@ -46,6 +46,7 @@ function makeTournament(overrides: Partial<Tournament> = {}): Tournament {
     date: NOW,
     format: 'round_robin',
     status: 'draft',
+    visibility: 'private',
     ownerId: STUB_USER_ID,
     createdAt: NOW,
     updatedAt: NOW,
@@ -143,6 +144,31 @@ describe('useTournamentStore — tournaments', () => {
 
     expect(created.ownerId).toBe(STUB_USER_ID)
     expect(created.ownerId).not.toBeUndefined()
+  })
+
+  it('createTournament: applies default visibility "private" when omitted', async () => {
+    const store = useTournamentStore()
+
+    const created = await store.createTournament({
+      name: 'Default visibility',
+      date: NOW,
+      format: 'round_robin',
+    })
+
+    expect(created.visibility).toBe('private')
+  })
+
+  it('createTournament: respects an explicit visibility "public"', async () => {
+    const store = useTournamentStore()
+
+    const created = await store.createTournament({
+      name: 'Public tournament',
+      date: NOW,
+      format: 'round_robin',
+      visibility: 'public',
+    })
+
+    expect(created.visibility).toBe('public')
   })
 
   it('loadTournaments: loads all tournaments persisted in the repository', async () => {
@@ -319,5 +345,124 @@ describe('useTournamentStore — completeTournament', () => {
 
     expect(result).toBe(false)
     expect(store.currentTournament?.status).toBe('in_progress')
+  })
+})
+
+describe('useTournamentStore — visibility partition', () => {
+  const OTHER_USER_ID = '00000000-0000-4000-8000-000000000000'
+
+  it('myTournaments returns only tournaments owned by the current user', async () => {
+    const store = useTournamentStore()
+    const ownTournament = await store.createTournament({
+      name: 'Mine',
+      date: NOW,
+      format: 'round_robin',
+    })
+
+    // Tournoi appartenant à un autre user, inséré directement via le
+    // repository mocké pour bypasser createTournament qui force ownerId
+    // au user courant.
+    await mockRepositoryRef.current!.saveTournament(
+      makeTournament({
+        name: 'Theirs',
+        ownerId: OTHER_USER_ID,
+        visibility: 'public',
+      }),
+    )
+    await store.loadTournaments()
+
+    expect(store.myTournaments).toHaveLength(1)
+    expect(store.myTournaments[0]!.id).toBe(ownTournament.id)
+  })
+
+  it('publicTournaments returns only public tournaments NOT owned by the current user', async () => {
+    const store = useTournamentStore()
+
+    await store.createTournament({
+      name: 'Mine private',
+      date: NOW,
+      format: 'round_robin',
+    })
+    await store.createTournament({
+      name: 'Mine public',
+      date: NOW,
+      format: 'round_robin',
+      visibility: 'public',
+    })
+
+    await mockRepositoryRef.current!.saveTournament(
+      makeTournament({
+        name: 'Their public',
+        ownerId: OTHER_USER_ID,
+        visibility: 'public',
+      }),
+    )
+    // Tournoi private d'un autre user : RLS l'aurait masqué côté DB.
+    // Filtre JS doublé en sécurité.
+    await mockRepositoryRef.current!.saveTournament(
+      makeTournament({
+        name: 'Their private',
+        ownerId: OTHER_USER_ID,
+        visibility: 'private',
+      }),
+    )
+    await store.loadTournaments()
+
+    expect(store.publicTournaments).toHaveLength(1)
+    expect(store.publicTournaments[0]!.name).toBe('Their public')
+  })
+
+  it('myTournaments and publicTournaments are empty when user is null', async () => {
+    stubUserRef.value = null
+    const store = useTournamentStore()
+    await mockRepositoryRef.current!.saveTournament(
+      makeTournament({ visibility: 'public', ownerId: OTHER_USER_ID }),
+    )
+    await store.loadTournaments()
+
+    expect(store.myTournaments).toHaveLength(0)
+    expect(store.publicTournaments).toHaveLength(0)
+  })
+})
+
+describe('useTournamentStore — setTournamentVisibility', () => {
+  it('switches a tournament from private to public and persists it', async () => {
+    const store = useTournamentStore()
+    const created = await store.createTournament({
+      name: 'À publier',
+      date: NOW,
+      format: 'round_robin',
+    })
+    expect(created.visibility).toBe('private')
+
+    await store.setTournamentVisibility(created.id, 'public')
+
+    const updated = store.tournaments.find(tournament => tournament.id === created.id)!
+    expect(updated.visibility).toBe('public')
+
+    const persisted = await mockRepositoryRef.current!.getTournamentById(created.id)
+    expect(persisted?.visibility).toBe('public')
+  })
+
+  it('switches back from public to private', async () => {
+    const store = useTournamentStore()
+    const created = await store.createTournament({
+      name: 'À reprivatiser',
+      date: NOW,
+      format: 'round_robin',
+      visibility: 'public',
+    })
+
+    await store.setTournamentVisibility(created.id, 'private')
+
+    const updated = store.tournaments.find(tournament => tournament.id === created.id)!
+    expect(updated.visibility).toBe('private')
+  })
+
+  it('throws when the tournament is unknown', async () => {
+    const store = useTournamentStore()
+    await expect(
+      store.setTournamentVisibility('does-not-exist', 'public'),
+    ).rejects.toThrow('Tournoi introuvable')
   })
 })

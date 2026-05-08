@@ -24,6 +24,7 @@ export function mapTournamentRowToDomain(row: TournamentRow): Tournament {
     description: row.description ?? undefined,
     format: row.format,
     status: row.status,
+    visibility: row.visibility,
     ownerId: row.owner_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -41,6 +42,7 @@ export function mapTournamentDomainToInsert(
     description: tournament.description ?? null,
     format: tournament.format,
     status: tournament.status,
+    visibility: tournament.visibility,
     owner_id: tournament.ownerId,
   }
 }

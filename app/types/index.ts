@@ -1,5 +1,6 @@
 export type TournamentFormat = "round_robin";
 export type TournamentStatus = "draft" | "in_progress" | "completed";
+export type TournamentVisibility = "private" | "public";
 export type MatchStatus = "pending" | "completed";
 export type ScoreValidationResult = { valid: boolean; error?: string };
 
@@ -11,6 +12,7 @@ export interface Tournament {
   description?: string;
   format: TournamentFormat;
   status: TournamentStatus;
+  visibility: TournamentVisibility;
   ownerId: string;
   createdAt: string;
   updatedAt: string;
