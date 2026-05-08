@@ -60,6 +60,7 @@ function makeTournamentRow() {
     description: null,
     format: 'round_robin' as const,
     status: 'draft' as const,
+    visibility: 'private' as const,
     owner_id: OWNER_ID,
     created_at: NOW,
     updated_at: NOW,
@@ -73,6 +74,7 @@ function makeTournamentDomain(): Tournament {
     date: '2026-05-10',
     format: 'round_robin',
     status: 'draft',
+    visibility: 'private',
     ownerId: OWNER_ID,
     createdAt: NOW,
     updatedAt: NOW,
@@ -205,6 +207,7 @@ describe('SupabaseRepository — saveTournament', () => {
         name: 'Tournoi',
         format: 'round_robin',
         status: 'draft',
+        visibility: 'private',
       }),
     )
   })

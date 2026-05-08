@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { createRepository } from '../repositories'
 import type { TournamentRepository } from '../repositories'
 import type { Database } from '../types/database.types'
@@ -9,6 +9,7 @@ import type {
   ScoreValidationResult,
   Team,
   Tournament,
+  TournamentVisibility,
 } from '../types'
 import {
   computeRanking,
@@ -18,8 +19,10 @@ import {
 
 type CreateTournamentInput = Omit<
   Tournament,
-  'id' | 'status' | 'ownerId' | 'createdAt' | 'updatedAt'
->
+  'id' | 'status' | 'visibility' | 'ownerId' | 'createdAt' | 'updatedAt'
+> & {
+  visibility?: TournamentVisibility
+}
 
 type AddTeamInput = {
   name: string
@@ -46,6 +49,37 @@ export const useTournamentStore = defineStore('tournament', () => {
   // termine remet à false même si une autre est en cours — acceptable
   // pour le MVP, le spinner peut clignoter brièvement.
   const isLoading = ref(false)
+
+  // Source unique de l'identité utilisateur côté store, alignée sur la
+  // convention de requireAuthenticatedUserId() : useSupabaseUser() est
+  // typé Ref<JwtPayload | null> par @nuxtjs/supabase v2, l'ID est dans
+  // `sub` (RFC 7519), jamais dans `.id`. Variante NULLABLE utilisable
+  // dans les contextes tolérants (computed évalué pendant un logout en
+  // cours, où on veut une liste vide plutôt qu'une exception). Helper
+  // INTERNE : non exposé dans le `return`.
+  const currentUserId = computed<string | null>(
+    () => user.value?.sub ?? null,
+  )
+
+  // Partition des tournois pour la home :
+  // - myTournaments : owned par l'utilisateur courant (private + public
+  //   confondus, anti-doublon avec publicTournaments).
+  // - publicTournaments : public d'autres owners uniquement.
+  // Si currentUserId est null (logout en cours d'évaluation), les deux
+  // listes sont vides.
+  const myTournaments = computed(() => {
+    const userId = currentUserId.value
+    if (userId === null) return []
+    return tournaments.value.filter(t => t.ownerId === userId)
+  })
+
+  const publicTournaments = computed(() => {
+    const userId = currentUserId.value
+    if (userId === null) return []
+    return tournaments.value.filter(
+      t => t.visibility === 'public' && t.ownerId !== userId,
+    )
+  })
 
   function nowIso(): string {
     return new Date().toISOString()
@@ -126,6 +160,7 @@ export const useTournamentStore = defineStore('tournament', () => {
         ...data,
         id: crypto.randomUUID(),
         status: 'draft',
+        visibility: data.visibility ?? 'private',
         ownerId,
         createdAt: timestamp,
         updatedAt: timestamp,
@@ -296,6 +331,26 @@ export const useTournamentStore = defineStore('tournament', () => {
     })
   }
 
+  async function setTournamentVisibility(
+    tournamentId: string,
+    visibility: TournamentVisibility,
+  ): Promise<void> {
+    return withLoading(async () => {
+      const tournament = tournaments.value.find(
+        existing => existing.id === tournamentId,
+      )
+      if (tournament === undefined) {
+        throw new Error('Tournoi introuvable')
+      }
+      const updated: Tournament = {
+        ...tournament,
+        visibility,
+        updatedAt: nowIso(),
+      }
+      await persistTournamentChange(updated)
+    })
+  }
+
   void loadTournaments()
 
   return {
@@ -305,11 +360,14 @@ export const useTournamentStore = defineStore('tournament', () => {
     matches,
     ranking,
     isLoading,
+    myTournaments,
+    publicTournaments,
     loadTournaments,
     createTournament,
     loadTournament,
     updateTournament,
     deleteTournament,
+    setTournamentVisibility,
     addTeam,
     updateTeam,
     deleteTeam,
