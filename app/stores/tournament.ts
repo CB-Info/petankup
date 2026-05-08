@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { createRepository } from '../repositories'
 import type { TournamentRepository } from '../repositories'
 import type { Database } from '../types/database.types'
@@ -93,6 +93,28 @@ export const useTournamentStore = defineStore('tournament', () => {
     return currentTournament.value.ownerId === userId
   })
 
+  // Identité du user pour qui la liste actuelle de `tournaments` a été
+  // chargée. null tant qu'aucun load n'a réussi dans un contexte user
+  // ready. Évite qu'un load anonyme ou trop précoce empoisonne l'état
+  // "chargé". Helper INTERNE.
+  const loadedTournamentsForUserId = ref<string | null>(null)
+
+  // Erreur du dernier loadTournaments. La home la surface dans une
+  // branche dédiée (avec bouton "Réessayer") plutôt que de rester en
+  // "Chargement…" indéfini ou de basculer faussement sur l'empty state.
+  // Cleared sur succès.
+  const lastLoadTournamentsError = ref<unknown>(null)
+
+  // True UNIQUEMENT si la liste actuelle a été fetchée pour le user
+  // courant. Faux sans user, faux après un échec, faux après un
+  // changement de compte. Exposé pour permettre à la home de gater
+  // ses 4 états (erreur / chargement / empty / sections).
+  const hasLoadedTournaments = computed<boolean>(() => {
+    const userId = currentUserId.value
+    if (userId === null) return false
+    return loadedTournamentsForUserId.value === userId
+  })
+
   function nowIso(): string {
     return new Date().toISOString()
   }
@@ -160,7 +182,31 @@ export const useTournamentStore = defineStore('tournament', () => {
 
   async function loadTournaments(): Promise<void> {
     return withLoading(async () => {
-      tournaments.value = await repository.getAllTournaments()
+      // On lit user.value directement (pas via le computed currentUserId)
+      // pour éviter d'évaluer ce dernier ici. Vue cacherait le résultat
+      // et invaliderait sa cache uniquement sur changement de dépendance
+      // tracée — ce qui n'est pas garanti dans les tests où le mock de
+      // useSupabaseUser n'est pas un Vue ref. La sémantique reste la
+      // même : sub est l'identifiant utilisateur (cf. CLAUDE.md).
+      const currentUser = user.value
+      if (currentUser === null) {
+        // Pas d'user : on n'empoisonne pas l'état chargé. Le watcher
+        // sur user rappellera ce loader dès que user.value sera
+        // hydraté (cas magic link, cf. CLAUDE.md).
+        return
+      }
+      const userId = currentUser.sub
+      try {
+        tournaments.value = await repository.getAllTournaments()
+        loadedTournamentsForUserId.value = userId
+        lastLoadTournamentsError.value = null
+      }
+      catch (error) {
+        // On NE marque PAS loaded en cas d'erreur — sinon on
+        // confondrait "aucun tournoi" avec "échec de chargement".
+        lastLoadTournamentsError.value = error
+        throw error
+      }
     })
   }
 
@@ -183,19 +229,36 @@ export const useTournamentStore = defineStore('tournament', () => {
     })
   }
 
+  // Compteur monotone interne pour invalider les réponses Supabase
+  // tardives : si une nouvelle requête loadTournament(B) démarre alors
+  // qu'une précédente loadTournament(A) attend encore, on ne veut pas
+  // que A écrive ses données par-dessus celles de B.
+  let lastLoadTournamentRequestId = 0
+
   async function loadTournament(id: string): Promise<void> {
+    const requestId = ++lastLoadTournamentRequestId
     return withLoading(async () => {
+      // Clear-at-start : pas de flash de l'ancien tournoi pendant le
+      // RTT Supabase lors d'une navigation cross-tournament. Cohérent
+      // avec le clear de deleteTournament.
+      currentTournament.value = null
+      teams.value = []
+      matches.value = []
+      ranking.value = []
+
       const found = await repository.getTournamentById(id)
-      if (found === undefined) {
-        currentTournament.value = null
-        teams.value = []
-        matches.value = []
-        ranking.value = []
-        return
-      }
+      if (requestId !== lastLoadTournamentRequestId) return
+      if (found === undefined) return
+
+      const loadedTeams = await repository.getTeamsByTournament(id)
+      if (requestId !== lastLoadTournamentRequestId) return
+
+      const loadedMatches = await repository.getMatchesByTournament(id)
+      if (requestId !== lastLoadTournamentRequestId) return
+
       currentTournament.value = found
-      teams.value = await repository.getTeamsByTournament(id)
-      matches.value = await repository.getMatchesByTournament(id)
+      teams.value = loadedTeams
+      matches.value = loadedMatches
       refreshRanking()
     })
   }
@@ -363,7 +426,34 @@ export const useTournamentStore = defineStore('tournament', () => {
     })
   }
 
-  void loadTournaments()
+  // Auto-load dès que user.value devient non-null. Couvre :
+  //  - le boot avec user déjà hydraté (immediate fire) ;
+  //  - le flow magic-link où user.value est null au mount initial et
+  //    s'hydrate quelques ms après (CLAUDE.md : page:start ne fire pas
+  //    pour /confirm → /) ;
+  //  - le changement de compte (logout A → null → login B → fetch B).
+  // Remplace le `void loadTournaments()` du setup, qui pouvait fire
+  // avec user null sans jamais retenter.
+  //
+  // On utilise une getter-source `() => user.value` plutôt que de
+  // watcher le computed currentUserId : cela évite d'évaluer
+  // currentUserId au setup, donc pas de cache stale à invalider en
+  // production (et pas non plus dans les tests où le stub n'est pas
+  // un Vue ref). currentUserId reste la convention exposée pour les
+  // lectures synchrones, juste pas via ce watcher.
+  watch(
+    () => user.value,
+    (currentUser) => {
+      if (currentUser === null) return
+      if (loadedTournamentsForUserId.value === currentUser.sub) return
+      void loadTournaments().catch(() => {
+        // Erreur stockée dans lastLoadTournamentsError ; la home la
+        // surface avec un bouton "Réessayer". On swallow ici pour
+        // éviter un warning Vue sur promesse rejetée non handled.
+      })
+    },
+    { immediate: true },
+  )
 
   return {
     tournaments,
@@ -375,6 +465,8 @@ export const useTournamentStore = defineStore('tournament', () => {
     myTournaments,
     publicTournaments,
     isOwnerOfCurrentTournament,
+    hasLoadedTournaments,
+    lastLoadTournamentsError,
     loadTournaments,
     createTournament,
     loadTournament,

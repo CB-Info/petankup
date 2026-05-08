@@ -11,16 +11,39 @@ const { showError } = useErrorToast();
 
 const tournamentId = computed(() => route.params.tournamentId as string);
 
-// Chargement fire-and-forget dès le setup. On évite un load inutile si on
-// arrive d'un NuxtLink où le tournoi courant est déjà le bon. Le template
-// gère l'état vide (currentTournament null) pendant que la promesse
-// se résout côté Supabase.
-const tournamentNeedsLoading =
-  currentTournament.value === null ||
-  currentTournament.value.id !== tournamentId.value;
-if (tournamentNeedsLoading) {
-  tournamentStore.loadTournament(tournamentId.value).catch(showError);
-}
+const isLoadingDetail = ref(true);
+
+// Token local pour invalider un flip tardif de isLoadingDetail si une
+// nouvelle requête a démarré entre-temps. Cf. la page détail pour le
+// pattern complet.
+let loadDetailRequestId = 0;
+
+watch(
+  tournamentId,
+  async (id) => {
+    // Court-circuit : si on arrive depuis la page détail du même
+    // tournoi, le store a déjà currentTournament + teams + matches
+    // pour cet id. Pas de reload, pas de flash "Chargement…".
+    // Si l'id change vraiment, le test est faux et on enchaîne sur
+    // le chemin normal (clear-at-start côté store + token).
+    if (currentTournament.value?.id === id) {
+      isLoadingDetail.value = false;
+      return;
+    }
+    const requestId = ++loadDetailRequestId;
+    isLoadingDetail.value = true;
+    try {
+      await tournamentStore.loadTournament(id);
+    } catch (error) {
+      if (requestId === loadDetailRequestId) showError(error);
+    } finally {
+      if (requestId === loadDetailRequestId) {
+        isLoadingDetail.value = false;
+      }
+    }
+  },
+  { immediate: true },
+);
 
 const tournamentIsCompleted = computed(
   () => currentTournament.value?.status === "completed",
@@ -92,7 +115,18 @@ useHead(() => ({
 </script>
 
 <template>
-  <div v-if="!currentTournament" class="space-y-4 py-12 text-center">
+  <div v-if="isLoadingDetail" class="py-12 text-center">
+    <p class="text-toned">Chargement du tournoi…</p>
+  </div>
+
+  <!-- Garde finale : on n'affiche le contenu que si le tournoi en
+       mémoire correspond à l'id de route. La forme inline (vs un
+       computed booléen) permet à volar de narrower currentTournament
+       à non-null dans les v-else suivants. -->
+  <div
+    v-else-if="!currentTournament || currentTournament.id !== tournamentId"
+    class="space-y-4 py-12 text-center"
+  >
     <h1 class="text-xl font-semibold text-primary-900">Tournoi introuvable</h1>
     <UButton to="/" variant="ghost" color="neutral" icon="i-lucide-arrow-left">
       Retour à l'accueil

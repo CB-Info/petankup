@@ -20,10 +20,34 @@ const isOwner = isOwnerOfCurrentTournament;
 
 const tournamentId = computed(() => route.params.tournamentId as string);
 
-// Chargement fire-and-forget dès le setup. Le template affiche un état
-// vide tant que currentTournament est null ; la réactivité Pinia met à
-// jour l'UI quand la promesse Supabase résout.
-tournamentStore.loadTournament(tournamentId.value).catch(showError);
+const isLoadingDetail = ref(true);
+
+// Token local pour invalider le flip de isLoadingDetail si une nouvelle
+// requête a démarré entre-temps. Combiné avec le token store
+// (loadTournament), on a une défense en profondeur : le store ignore
+// l'écriture des données de A, la page ignore le flip de A.
+let loadDetailRequestId = 0;
+
+// watch(tournamentId, immediate: true) : couvre le mount initial ET
+// la réutilisation de composant Nuxt sur changement de paramètre de
+// route (sans cela, onMounted ne refire pas et l'état reste bloqué).
+watch(
+  tournamentId,
+  async (id) => {
+    const requestId = ++loadDetailRequestId;
+    isLoadingDetail.value = true;
+    try {
+      await tournamentStore.loadTournament(id);
+    } catch (error) {
+      if (requestId === loadDetailRequestId) showError(error);
+    } finally {
+      if (requestId === loadDetailRequestId) {
+        isLoadingDetail.value = false;
+      }
+    }
+  },
+  { immediate: true },
+);
 
 // Verrouillage : un tournoi qui a démarré (ou terminé) ne doit plus
 // permettre de modifier les équipes — sinon le classement et les
@@ -272,7 +296,18 @@ useHead(() => ({
 </script>
 
 <template>
-  <div v-if="!currentTournament" class="space-y-4 py-12 text-center">
+  <div v-if="isLoadingDetail" class="py-12 text-center">
+    <p class="text-toned">Chargement du tournoi…</p>
+  </div>
+
+  <!-- Garde finale : on n'affiche le contenu que si le tournoi en
+       mémoire correspond à l'id de route. La forme inline (vs un
+       computed booléen) permet à volar de narrower currentTournament
+       à non-null dans le v-else. -->
+  <div
+    v-else-if="!currentTournament || currentTournament.id !== tournamentId"
+    class="space-y-4 py-12 text-center"
+  >
     <h1 class="text-xl font-semibold text-primary-900">Tournoi introuvable</h1>
     <UButton to="/" variant="ghost" color="neutral" icon="i-lucide-arrow-left">
       Retour à l'accueil
