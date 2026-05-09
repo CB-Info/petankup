@@ -13,7 +13,7 @@ const tournamentStore = useTournamentStore();
 const {
   myTournaments,
   publicTournaments,
-  hasLoadedTournaments,
+  hasFetchedTournaments,
   lastLoadTournamentsError,
 } = storeToRefs(tournamentStore);
 const { showError } = useErrorToast();
@@ -24,7 +24,10 @@ async function retryLoadTournaments() {
   if (isRetrying.value) return;
   isRetrying.value = true;
   try {
-    await tournamentStore.loadTournaments();
+    // On rejoue l'orchestration identité+fetch : si l'erreur initiale
+    // venait de getClaims() (fallback magic-link), un retry direct sur
+    // loadTournaments partirait sans identité résolue.
+    await tournamentStore.loadTournamentsForCurrentSession();
   } catch (error) {
     showError(error);
   } finally {
@@ -111,7 +114,7 @@ useHead({ title: "Pétankup — Gestion de tournois" });
     </div>
 
     <div
-      v-else-if="!hasLoadedTournaments"
+      v-else-if="!hasFetchedTournaments"
       class="py-16 text-center"
     >
       <p class="text-toned">Chargement…</p>
