@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+import { flushPromises } from '@vue/test-utils'
 import type { TournamentRepository } from '../../app/repositories/TournamentRepository'
 import type { Match, Team, Tournament } from '../../app/types'
 
@@ -14,18 +15,62 @@ const mockRepositoryRef = vi.hoisted(() => ({
 }))
 
 // Stub mutable pour useSupabaseUser. Le store appelle ce composable au
-// setup pour récupérer l'utilisateur courant (utilisé dans createTournament
-// pour peupler ownerId). La forme du stub matche celle exposée à runtime
-// par @nuxtjs/supabase : un JwtPayload (champ `sub`), PAS un User
-// (champ `id`). Le store lit `user.value.sub`. Si le stub utilisait `id`,
-// le test passerait à tort en cohérence avec un store buggé.
-// On stub aussi useSupabaseClient mais sa valeur n'est jamais consommée
-// puisque createRepository est mocké.
+// setup pour récupérer l'utilisateur courant (peuplement de ownerId à
+// la création). Forme alignée sur le runtime de @nuxtjs/supabase :
+// un JwtPayload (champ `sub`), PAS un User (champ `id`). Si le stub
+// utilisait `.id`, un store buggé qui lit `.id` passerait à tort.
 const stubUserRef = vi.hoisted(() => ({
   value: { sub: '99999999-9999-4999-8999-999999999999' } as { sub: string } | null,
 }))
-vi.stubGlobal('useSupabaseClient', () => ({}))
+
+// Stub mutable pour useSupabaseSession. Sert de déclencheur principal
+// au watcher du store (cf. CLAUDE.md : la session est hydratée
+// déterministiquement, contrairement à useSupabaseUser).
+const stubSessionRef = vi.hoisted(() => ({
+  value: { access_token: 'stub-token' } as { access_token: string } | null,
+}))
+
+// Sub renvoyé par le mock par défaut de getClaims(). DOIT être
+// indépendant de stubUserRef pour pouvoir tester "user.value null +
+// claims valides" (scénario magic-link). Valeur en dur (et non
+// référence à STUB_USER_ID) parce que vi.hoisted est hissé au-dessus
+// des `const` du fichier.
+const stubClaimsSub = vi.hoisted(() => ({
+  value: '99999999-9999-4999-8999-999999999999' as string | null,
+}))
+
+// Implémentation custom optionnelle de getClaims pour les tests qui
+// ont besoin d'une promesse contrôlée manuellement (anti-race) ou
+// d'une erreur. Si null, le mock par défaut utilise stubClaimsSub.
+type GetClaimsResult
+  = | { data: { claims: { sub: string }, header: object, signature: Uint8Array }, error: null }
+  | { data: null, error: { message: string } }
+  | { data: null, error: null }
+const stubGetClaimsImpl = vi.hoisted(() => ({
+  fn: null as null | (() => Promise<GetClaimsResult>),
+}))
+
+const supabaseClientStub = vi.hoisted(() => ({
+  auth: {
+    getClaims: vi.fn(async (): Promise<GetClaimsResult> => {
+      if (stubGetClaimsImpl.fn !== null) return stubGetClaimsImpl.fn()
+      const sub = stubClaimsSub.value
+      if (sub === null) return { data: null, error: null }
+      return {
+        data: {
+          claims: { sub },
+          header: {},
+          signature: new Uint8Array(),
+        },
+        error: null,
+      }
+    }),
+  },
+}))
+
+vi.stubGlobal('useSupabaseClient', () => supabaseClientStub)
 vi.stubGlobal('useSupabaseUser', () => stubUserRef)
+vi.stubGlobal('useSupabaseSession', () => stubSessionRef)
 
 vi.mock('../../app/repositories', () => ({
   createRepository: () => mockRepositoryRef.current!,
@@ -107,6 +152,10 @@ function createMockRepository(): TournamentRepository {
 beforeEach(() => {
   mockRepositoryRef.current = createMockRepository()
   stubUserRef.value = { sub: STUB_USER_ID }
+  stubSessionRef.value = { access_token: 'stub-token' }
+  stubClaimsSub.value = STUB_USER_ID
+  stubGetClaimsImpl.fn = null
+  supabaseClientStub.auth.getClaims.mockClear()
   setActivePinia(createPinia())
 })
 
@@ -412,8 +461,10 @@ describe('useTournamentStore — visibility partition', () => {
     expect(store.publicTournaments[0]!.name).toBe('Their public')
   })
 
-  it('myTournaments and publicTournaments are empty when user is null', async () => {
+  it('myTournaments and publicTournaments are empty when session is null (logout)', async () => {
+    stubSessionRef.value = null
     stubUserRef.value = null
+    stubClaimsSub.value = null
     const store = useTournamentStore()
     await mockRepositoryRef.current!.saveTournament(
       makeTournament({ visibility: 'public', ownerId: OTHER_USER_ID }),
@@ -498,15 +549,189 @@ describe('useTournamentStore — isOwnerOfCurrentTournament', () => {
   })
 
   it('returns false when there is no authenticated user', async () => {
-    const store = useTournamentStore()
-    const created = await store.createTournament({
-      name: 'Mine',
-      date: NOW,
-      format: 'round_robin',
-    })
-    await store.loadTournament(created.id)
+    // Mount sans user, sans session, sans claims : currentUserId reste
+    // null donc isOwnerOfCurrentTournament aussi, même si un tournoi
+    // a été chargé via loadTournament (qui n'a pas de dépendance
+    // d'identité côté store).
     stubUserRef.value = null
+    stubSessionRef.value = null
+    stubClaimsSub.value = null
+    const someTournament = makeTournament({ ownerId: STUB_USER_ID })
+    await mockRepositoryRef.current!.saveTournament(someTournament)
+    const store = useTournamentStore()
+    await store.loadTournament(someTournament.id)
 
     expect(store.isOwnerOfCurrentTournament).toBe(false)
+  })
+})
+
+describe('useTournamentStore — auth context (session/sub watcher)', () => {
+  it('loads tournaments via session watcher even when user.value is null at mount (magic-link scenario)', async () => {
+    // Simule l'arrivée sur / juste après un magic-link : la session est
+    // hydratée, useSupabaseUser ne l'est pas encore (cf. CLAUDE.md).
+    // Le store doit retomber sur getClaims() pour résoudre le sub et
+    // déclencher le fetch — sans intervention de la home.
+    stubUserRef.value = null
+    stubSessionRef.value = { access_token: 'magic-link-token' }
+    stubClaimsSub.value = STUB_USER_ID
+
+    await mockRepositoryRef.current!.saveTournament(
+      makeTournament({ name: 'Mine private', ownerId: STUB_USER_ID }),
+    )
+
+    const store = useTournamentStore()
+    await flushPromises()
+
+    expect(supabaseClientStub.auth.getClaims).toHaveBeenCalledTimes(1)
+    expect(store.tournaments).toHaveLength(1)
+    expect(store.hasFetchedTournaments).toBe(true)
+    expect(store.lastLoadTournamentsError).toBeNull()
+    expect(store.myTournaments).toHaveLength(1)
+    expect(store.myTournaments[0]!.name).toBe('Mine private')
+  })
+
+  it('prefers user.value.sub over getClaims when both are available (hot path)', async () => {
+    // Cas nominal après navigation : useSupabaseUser est hydraté. On
+    // ne doit pas appeler getClaims(), c'est un coût inutile sur le
+    // chemin chaud.
+    stubUserRef.value = { sub: STUB_USER_ID }
+    stubSessionRef.value = { access_token: 'stub-token' }
+    stubClaimsSub.value = STUB_USER_ID
+
+    const store = useTournamentStore()
+    await flushPromises()
+
+    expect(supabaseClientStub.auth.getClaims).not.toHaveBeenCalled()
+    expect(store.hasFetchedTournaments).toBe(true)
+  })
+
+  it('refetches tournaments after the sub changes (account switch via retry)', async () => {
+    // Phase 1 : user A connecté, fetch initial via le watcher immediate.
+    const USER_A = STUB_USER_ID
+    const USER_B = '11111111-1111-4111-8111-111111111111'
+    stubUserRef.value = { sub: USER_A }
+    await mockRepositoryRef.current!.saveTournament(
+      makeTournament({ name: 'Tournoi de A', ownerId: USER_A }),
+    )
+    const repoSpy = vi.spyOn(mockRepositoryRef.current!, 'getAllTournaments')
+
+    const store = useTournamentStore()
+    await flushPromises()
+    expect(repoSpy).toHaveBeenCalledTimes(1)
+
+    // Phase 2 : on bascule sur user B et on re-déclenche l'orchestration
+    // identité+fetch. Comme les stubs ne sont pas des Vue refs, le
+    // watcher composé ne refire pas tout seul ; on appelle l'action
+    // publique manuellement (chemin emprunté par le bouton "Réessayer"
+    // de la home, conceptuellement équivalent au refire watcher en prod).
+    stubUserRef.value = { sub: USER_B }
+    stubClaimsSub.value = USER_B
+    await mockRepositoryRef.current!.saveTournament(
+      makeTournament({ name: 'Tournoi de B', ownerId: USER_B }),
+    )
+
+    await store.loadTournamentsForCurrentSession()
+
+    // Le re-fetch a bien eu lieu : la garde d'idempotence
+    // (resolvedUserId === sub && hasFetched) n'a pas court-circuité,
+    // car le sub a changé. Le store reflète le nouveau dataset repo
+    // (en prod c'est RLS DB qui filtre par owner ; ici le mock sert
+    // tout, la partition est testée par le bloc "visibility partition").
+    expect(repoSpy).toHaveBeenCalledTimes(2)
+    expect(store.tournaments.map(tournament => tournament.name).sort()).toEqual([
+      'Tournoi de A',
+      'Tournoi de B',
+    ])
+  })
+
+  it('surfaces an error when getClaims fails', async () => {
+    stubUserRef.value = null
+    stubGetClaimsImpl.fn = async () => ({
+      data: null,
+      error: { message: 'Network error during getClaims' },
+    })
+
+    const store = useTournamentStore()
+    await flushPromises()
+
+    expect(store.lastLoadTournamentsError).not.toBeNull()
+    expect((store.lastLoadTournamentsError as Error).message).toBe(
+      'Network error during getClaims',
+    )
+    expect(store.hasFetchedTournaments).toBe(false)
+    expect(store.tournaments).toHaveLength(0)
+  })
+
+  it('surfaces an error when claims sub is missing', async () => {
+    // Cas où getClaims retourne data: null + error: null (le 3e cas
+    // de l'union, "pas de session connue côté client"). Le watcher
+    // doit tomber sur le branch "Identité utilisateur introuvable".
+    stubUserRef.value = null
+    stubClaimsSub.value = null
+
+    const store = useTournamentStore()
+    await flushPromises()
+
+    expect(store.lastLoadTournamentsError).not.toBeNull()
+    expect((store.lastLoadTournamentsError as Error).message).toBe(
+      'Identité utilisateur introuvable dans la session.',
+    )
+    expect(store.hasFetchedTournaments).toBe(false)
+    expect(store.tournaments).toHaveLength(0)
+  })
+
+  it('ignores a late getClaims response when a newer auth resolution started in the meantime (anti-race)', async () => {
+    // Scénario : le watcher fire post-mount avec user.value null,
+    // déclenche un getClaims() qui reste pendu ; un 2e appel survient
+    // (ex : retry, ou re-fire suite à un changement de session). Le
+    // 1er, en revenant, doit voir que le token a été bumpé et exit
+    // sans rien écrire. Sinon : risque d'écrire resolvedUserId d'une
+    // session obsolète et de fuiter des tournois entre comptes.
+    stubUserRef.value = null
+    const claimsResolvers: Array<(value: GetClaimsResult) => void> = []
+    stubGetClaimsImpl.fn = () =>
+      new Promise<GetClaimsResult>((resolve) => {
+        claimsResolvers.push(resolve)
+      })
+
+    await mockRepositoryRef.current!.saveTournament(
+      makeTournament({ name: 'Tournoi cible', ownerId: STUB_USER_ID }),
+    )
+    const repoSpy = vi.spyOn(mockRepositoryRef.current!, 'getAllTournaments')
+
+    const store = useTournamentStore()
+    // Laisse le watcher immediate démarrer le 1er appel.
+    await Promise.resolve()
+    expect(claimsResolvers).toHaveLength(1)
+
+    // 2e appel concurrent. Bumpe le token interne du store.
+    const secondCall = store.loadTournamentsForCurrentSession()
+    await Promise.resolve()
+    expect(claimsResolvers).toHaveLength(2)
+
+    // Réponse "tardive" du 1er getClaims. Doit être ignorée.
+    claimsResolvers[0]!({
+      data: {
+        claims: { sub: STUB_USER_ID },
+        header: {},
+        signature: new Uint8Array(),
+      },
+      error: null,
+    })
+    await flushPromises()
+    expect(repoSpy).not.toHaveBeenCalled()
+
+    // Réponse du 2e getClaims. C'est lui qui doit déclencher le fetch.
+    claimsResolvers[1]!({
+      data: {
+        claims: { sub: STUB_USER_ID },
+        header: {},
+        signature: new Uint8Array(),
+      },
+      error: null,
+    })
+    await secondCall
+    expect(repoSpy).toHaveBeenCalledTimes(1)
+    expect(store.tournaments).toHaveLength(1)
   })
 })

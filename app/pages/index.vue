@@ -1,15 +1,39 @@
 <script setup lang="ts">
 // Pattern d'erreurs : les actions du store throw ; on attrape ici et on
 // affiche un toast via useErrorToast (voir composables/useErrorToast).
+//
+// Le déclenchement de loadTournaments() est piloté par le store via un
+// watch interne sur currentUserId — couvre boot, magic link et
+// changement de compte sans qu'on ait à le faire ici. La page n'a
+// qu'à observer hasLoadedTournaments / lastLoadTournamentsError et
+// fournir un retry manuel sur erreur.
 import type { TournamentStatus } from "../types";
 
 const tournamentStore = useTournamentStore();
-const { myTournaments, publicTournaments } = storeToRefs(tournamentStore);
+const {
+  myTournaments,
+  publicTournaments,
+  hasFetchedTournaments,
+  lastLoadTournamentsError,
+} = storeToRefs(tournamentStore);
 const { showError } = useErrorToast();
 
-onMounted(() => {
-  tournamentStore.loadTournaments().catch(showError);
-});
+const isRetrying = ref(false);
+
+async function retryLoadTournaments() {
+  if (isRetrying.value) return;
+  isRetrying.value = true;
+  try {
+    // On rejoue l'orchestration identité+fetch : si l'erreur initiale
+    // venait de getClaims() (fallback magic-link), un retry direct sur
+    // loadTournaments partirait sans identité résolue.
+    await tournamentStore.loadTournamentsForCurrentSession();
+  } catch (error) {
+    showError(error);
+  } finally {
+    isRetrying.value = false;
+  }
+}
 
 // Ordre d'affichage : en cours d'abord (ce qui se passe maintenant),
 // puis brouillons (à finir de préparer), puis terminés (archivés).
@@ -72,7 +96,31 @@ useHead({ title: "Pétankup — Gestion de tournois" });
 
 <template>
   <div>
-    <div v-if="bothEmpty" class="py-16 text-center">
+    <div v-if="lastLoadTournamentsError" class="space-y-3 py-16 text-center">
+      <h2 class="text-lg font-semibold text-primary-900">
+        Impossible de charger les tournois
+      </h2>
+      <p class="text-toned">Vérifiez votre connexion et réessayez.</p>
+      <UButton
+        color="primary"
+        size="lg"
+        :loading="isRetrying"
+        class="mt-2"
+        block
+        @click="retryLoadTournaments"
+      >
+        Réessayer
+      </UButton>
+    </div>
+
+    <div
+      v-else-if="!hasFetchedTournaments"
+      class="py-16 text-center"
+    >
+      <p class="text-toned">Chargement…</p>
+    </div>
+
+    <div v-else-if="bothEmpty" class="py-16 text-center">
       <h2 class="text-lg font-semibold text-primary-900">
         Aucun tournoi pour l'instant
       </h2>
