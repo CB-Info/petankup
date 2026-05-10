@@ -51,3 +51,28 @@ export interface Ranking {
   pointDifference: number;
   rank: number;
 }
+
+export interface TournamentMember {
+  id: string;
+  tournamentId: string;
+  userId: string;
+  memberEmail: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type InviteMemberErrorCode =
+  | "invalid_email"
+  | "not_authenticated"
+  | "not_owner"
+  | "user_not_found"
+  | "self_invite"
+  | "already_member"
+  | "unknown";
+
+export class InviteMemberError extends Error {
+  constructor(public readonly code: InviteMemberErrorCode) {
+    super(code);
+    this.name = "InviteMemberError";
+  }
+}
