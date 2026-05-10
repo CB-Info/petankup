@@ -30,7 +30,7 @@ function close() {
     title="Terminer le tournoi"
   >
     <template #body>
-      <p class="text-sm text-(--app-text)">
+      <p class="text-sm text-default">
         Terminer le tournoi «&nbsp;<strong>{{ tournamentName }}</strong>&nbsp;» ?
         Le classement sera figé et les scores ne pourront plus être modifiés.
       </p>

@@ -1,4 +1,8 @@
 <script setup lang="ts">
+// Pattern d'erreurs : les actions du store throw ; on attrape ici et on
+// affiche un toast via useErrorToast (voir composables/useErrorToast).
+// La validation métier (entiers, ≥13, pas d'égalité) reste affichée
+// inline via errorMessage : c'est une erreur utilisateur, pas système.
 import type { Match, ScoreValidationResult, Team } from '../types'
 
 const props = defineProps<{
@@ -14,6 +18,7 @@ const emit = defineEmits<{
 }>()
 
 const tournamentStore = useTournamentStore()
+const { showError } = useErrorToast()
 
 const openModel = computed({
   get: () => props.open,
@@ -74,7 +79,7 @@ async function onSubmit() {
     // Le store appelle déjà validateScore en interne et nous renvoie
     // { valid, error } : on s'appuie sur ce retour plutôt que de
     // dupliquer la validation côté composant.
-    const result: ScoreValidationResult = tournamentStore.submitScore(
+    const result: ScoreValidationResult = await tournamentStore.submitScore(
       props.match.id,
       scoreA,
       scoreB,
@@ -85,6 +90,9 @@ async function onSubmit() {
     }
     emit('saved')
     openModel.value = false
+  }
+  catch (error) {
+    showError(error)
   }
   finally {
     isSubmitting.value = false
@@ -110,7 +118,7 @@ function close() {
           <div class="space-y-2">
             <label
               for="score-a-input"
-              class="block truncate text-sm font-medium text-horizon-900"
+              class="block truncate text-sm font-medium text-primary-900"
             >
               {{ teamA?.name ?? 'Équipe A' }}
             </label>
@@ -128,7 +136,7 @@ function close() {
           <div class="space-y-2">
             <label
               for="score-b-input"
-              class="block truncate text-sm font-medium text-horizon-900"
+              class="block truncate text-sm font-medium text-primary-900"
             >
               {{ teamB?.name ?? 'Équipe B' }}
             </label>
@@ -147,7 +155,7 @@ function close() {
 
         <p
           v-if="errorMessage"
-          class="rounded-lg bg-(--app-danger-bg) px-3 py-2 text-sm text-(--app-danger-text)"
+          class="rounded-lg bg-(--petankup-danger-bg) px-3 py-2 text-sm text-(--petankup-danger-text)"
           role="alert"
         >
           {{ errorMessage }}

@@ -25,7 +25,7 @@ function makeCompletedMatch(
   teamBId: string,
   scoreA: number,
   scoreB: number,
-  round = 1,
+  roundNumber = 1,
   tournamentId = 't1',
 ): Match {
   return {
@@ -37,7 +37,7 @@ function makeCompletedMatch(
     scoreB,
     winnerId: scoreA > scoreB ? teamAId : teamBId,
     status: 'completed',
-    round,
+    roundNumber,
     createdAt: NOW,
     updatedAt: NOW,
   }
@@ -122,7 +122,7 @@ describe('generateRoundRobinMatches', () => {
       expect(m.tournamentId).toBe('t42')
       expect(m.createdAt).toBe(NOW)
       expect(m.updatedAt).toBe(NOW)
-      expect(m.round).toBeGreaterThanOrEqual(1)
+      expect(m.roundNumber).toBeGreaterThanOrEqual(1)
     }
   })
 
@@ -209,7 +209,7 @@ describe('computeRanking', () => {
       scoreB: null,
       winnerId: null,
       status: 'pending',
-      round: 1,
+      roundNumber: 1,
       createdAt: NOW,
       updatedAt: NOW,
     }
@@ -286,7 +286,7 @@ describe('tieBreak', () => {
       scoreB: null,
       winnerId: null,
       status: 'pending',
-      round: 1,
+      roundNumber: 1,
       createdAt: NOW,
       updatedAt: NOW,
     }

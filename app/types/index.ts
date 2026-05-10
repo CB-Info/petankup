@@ -1,5 +1,6 @@
 export type TournamentFormat = "round_robin";
 export type TournamentStatus = "draft" | "in_progress" | "completed";
+export type TournamentVisibility = "private" | "public";
 export type MatchStatus = "pending" | "completed";
 export type ScoreValidationResult = { valid: boolean; error?: string };
 
@@ -11,7 +12,8 @@ export interface Tournament {
   description?: string;
   format: TournamentFormat;
   status: TournamentStatus;
-  ownerId: string | null;
+  visibility: TournamentVisibility;
+  ownerId: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -34,7 +36,7 @@ export interface Match {
   scoreB: number | null;
   winnerId: string | null;
   status: MatchStatus;
-  round: number;
+  roundNumber: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -48,4 +50,29 @@ export interface Ranking {
   pointsAgainst: number;
   pointDifference: number;
   rank: number;
+}
+
+export interface TournamentMember {
+  id: string;
+  tournamentId: string;
+  userId: string;
+  memberEmail: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type InviteMemberErrorCode =
+  | "invalid_email"
+  | "not_authenticated"
+  | "not_owner"
+  | "user_not_found"
+  | "self_invite"
+  | "already_member"
+  | "unknown";
+
+export class InviteMemberError extends Error {
+  constructor(public readonly code: InviteMemberErrorCode) {
+    super(code);
+    this.name = "InviteMemberError";
+  }
 }

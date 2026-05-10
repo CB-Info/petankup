@@ -40,21 +40,21 @@ function formatPointDifference(pointDifference: number): string {
 }
 
 function rowBgClass(rank: number): string {
-  if (rank === 1) return 'bg-sand-50'
+  if (rank === 1) return 'bg-secondary-50'
   return ''
 }
 
 function rankNumberClass(rank: number): string {
-  if (rank <= 3) return 'font-semibold text-horizon-900'
-  return 'text-(--app-text-muted)'
+  if (rank <= 3) return 'font-semibold text-primary-900'
+  return 'text-muted'
 }
 </script>
 
 <template>
   <div class="space-y-2">
-    <div class="overflow-hidden rounded-xl border border-(--app-border) bg-(--app-surface)">
+    <div class="overflow-hidden rounded-xl border border-default bg-elevated">
       <table class="w-full text-sm">
-        <thead class="bg-(--app-surface) text-(--app-text-subtle)">
+        <thead class="bg-elevated text-toned">
           <tr>
             <th
               scope="col"
@@ -109,7 +109,7 @@ function rankNumberClass(rank: number): string {
           <tr
             v-for="row in rows"
             :key="row.teamId"
-            class="border-t border-(--app-border)"
+            class="border-t border-default"
             :class="rowBgClass(row.rank)"
           >
             <td
@@ -119,7 +119,7 @@ function rankNumberClass(rank: number): string {
               {{ row.rank }}
             </td>
             <td class="px-2 py-3">
-              <span class="block truncate font-medium text-horizon-900">
+              <span class="block truncate font-medium text-primary-900">
                 {{ row.teamName }}
               </span>
             </td>
@@ -143,7 +143,7 @@ function rankNumberClass(rank: number): string {
       </table>
     </div>
 
-    <p class="text-xs text-(--app-text-muted)">
+    <p class="text-xs text-muted">
       V&nbsp;: victoires · D&nbsp;: défaites · PM&nbsp;: points marqués ·
       PE&nbsp;: points encaissés · Diff&nbsp;: différence
     </p>

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+// Pattern d'erreurs : les actions du store throw ; on attrape ici et on
+// affiche un toast via useErrorToast (voir composables/useErrorToast).
 import type { Team } from '../types'
 import { teamSchema } from '../utils/teamSchema'
 
@@ -13,6 +15,7 @@ const emit = defineEmits<{
 }>()
 
 const tournamentStore = useTournamentStore()
+const { showError } = useErrorToast()
 
 const MAX_PLAYERS_PER_TEAM = 3
 
@@ -88,13 +91,16 @@ async function onSubmit() {
     let savedTeam: Team
     if (props.team) {
       savedTeam = { ...props.team, ...payload }
-      tournamentStore.updateTeam(savedTeam)
+      await tournamentStore.updateTeam(savedTeam)
     }
     else {
-      savedTeam = tournamentStore.addTeam(payload)
+      savedTeam = await tournamentStore.addTeam(payload)
     }
     emit('saved', savedTeam)
     openModel.value = false
+  }
+  catch (error) {
+    showError(error)
   }
   finally {
     isSubmitting.value = false

@@ -9,11 +9,13 @@
     "postinstall": "nuxt prepare",
     "generate": "nuxt generate",
     "test": "vitest",
-    "typecheck": "nuxt typecheck"
+    "typecheck": "nuxt typecheck",
+    "gen:types": "npx supabase gen types typescript --project-id huypyznoomigdwopigem --schema public > app/types/database.types.ts"
   },
   "dependencies": {
     "@nuxt/eslint": "^1.15.2",
     "@nuxt/ui": "^4.7.1",
+    "@nuxtjs/supabase": "^2.0.6",
     "@pinia/nuxt": "^0.11.3",
     "eslint": "^10.3.0",
     "nuxt": "4.4.2",
