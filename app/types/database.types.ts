@@ -120,6 +120,41 @@ export type Database = {
           },
         ]
       }
+      tournament_members: {
+        Row: {
+          created_at: string
+          id: string
+          member_email: string
+          tournament_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          member_email: string
+          tournament_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          member_email?: string
+          tournament_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tournament_members_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tournaments: {
         Row: {
           created_at: string
@@ -167,6 +202,23 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      invite_tournament_member_by_email: {
+        Args: { p_email: string; p_tournament_id: string }
+        Returns: {
+          created_at: string
+          id: string
+          member_email: string
+          tournament_id: string
+          updated_at: string
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tournament_members"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       text_array_has_no_blank_values: {
         Args: { arr: string[] }
         Returns: boolean

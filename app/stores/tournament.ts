@@ -9,6 +9,7 @@ import type {
   ScoreValidationResult,
   Team,
   Tournament,
+  TournamentMember,
   TournamentVisibility,
 } from '../types'
 import {
@@ -50,6 +51,26 @@ export const useTournamentStore = defineStore('tournament', () => {
   const matches = ref<Match[]>([])
   const ranking = ref<Ranking[]>([])
 
+  // Memberships où l'utilisateur courant est invité (user_id ===
+  // currentUserId). Source de vérité du sélecteur sharedTournaments
+  // et du filtre d'exclusion sur publicTournaments. Peuplée en
+  // parallèle de tournaments dans loadTournaments. Helper INTERNE :
+  // non exposé dans le `return` (le store sort le sélecteur dérivé,
+  // pas la liste brute).
+  const myMemberships = ref<TournamentMember[]>([])
+
+  // État du modal "Gérer les invités" (B.3) : liste des membres du
+  // tournoi courant, chargée à la demande par loadTournamentMembers.
+  // Exposé dans le `return` car consommé par le composant.
+  const currentTournamentMembers = ref<TournamentMember[]>([])
+
+  // Garde de cohérence : id du tournoi pour lequel
+  // currentTournamentMembers a été chargé. Permet à inviteMember de
+  // savoir si append à la liste courante a du sens — le modal pourrait
+  // viser un autre tournoi entre le déclenchement de l'invitation et
+  // sa résolution. Helper INTERNE : non exposé.
+  const currentTournamentMembersTournamentId = ref<string | null>(null)
+
   // Flag global utilisé pour signaler qu'une opération de persistance est
   // en cours. Booléen simple : en cas d'actions concurrentes, la 1ère qui
   // termine remet à false même si une autre est en cours — acceptable
@@ -75,11 +96,15 @@ export const useTournamentStore = defineStore('tournament', () => {
     () => user.value?.sub ?? resolvedUserId.value,
   )
 
-  // Partition des tournois pour la home :
-  // - myTournaments : owned par l'utilisateur courant (private + public
-  //   confondus, anti-doublon avec publicTournaments).
-  // - publicTournaments : public d'autres owners uniquement.
-  // Si currentUserId est null (logout en cours d'évaluation), les deux
+  // Partition mutuellement exclusive des tournois visibles pour la home,
+  // évaluée dans cet ordre :
+  //   1. myTournaments       : ownerId === currentUserId
+  //                            (private + public confondus, anti-doublon)
+  //   2. sharedTournaments   : in myMemberships AND NOT in myTournaments
+  //   3. publicTournaments   : visibility === 'public'
+  //                            AND NOT in myTournaments
+  //                            AND NOT in sharedTournaments
+  // Si currentUserId est null (logout en cours d'évaluation), les trois
   // listes sont vides.
   const myTournaments = computed(() => {
     const userId = currentUserId.value
@@ -87,11 +112,35 @@ export const useTournamentStore = defineStore('tournament', () => {
     return tournaments.value.filter(t => t.ownerId === userId)
   })
 
-  const publicTournaments = computed(() => {
+  // Tournois où je suis invité (membership) ET dont je ne suis pas
+  // owner. La garde ownerId !== userId est défensive : la policy
+  // INSERT et la RPC bloquent déjà les self-invites côté DB, mais on
+  // se protège ici contre tout état impossible (membership orphelin
+  // après un transfert d'ownership futur, par ex.).
+  const sharedTournaments = computed<Tournament[]>(() => {
     const userId = currentUserId.value
     if (userId === null) return []
+    const memberTournamentIds = new Set(
+      myMemberships.value.map(membership => membership.tournamentId),
+    )
     return tournaments.value.filter(
-      t => t.visibility === 'public' && t.ownerId !== userId,
+      tournament =>
+        memberTournamentIds.has(tournament.id)
+        && tournament.ownerId !== userId,
+    )
+  })
+
+  const publicTournaments = computed<Tournament[]>(() => {
+    const userId = currentUserId.value
+    if (userId === null) return []
+    const memberTournamentIds = new Set(
+      myMemberships.value.map(membership => membership.tournamentId),
+    )
+    return tournaments.value.filter(
+      tournament =>
+        tournament.visibility === 'public'
+        && tournament.ownerId !== userId
+        && !memberTournamentIds.has(tournament.id),
     )
   })
 
@@ -189,20 +238,37 @@ export const useTournamentStore = defineStore('tournament', () => {
     syncCurrentTournamentIfMatches(updatedTournament)
   }
 
-  // Primitive de fetch : appelle le repository, écrit `tournaments` et
-  // marque hasFetchedTournaments. NE résout PAS l'identité — c'est
-  // loadTournamentsForCurrentSession qui orchestre identité+fetch et
-  // reste l'unique entrée appelée par le watcher et par le bouton
-  // "Réessayer" de la home. Conservée publique pour les tests qui
-  // veulent vérifier le contrat repo→store sans toucher à l'auth.
+  // Primitive de fetch : charge `tournaments` ET `myMemberships` en
+  // parallèle (le 2e fetch alimente sharedTournaments + l'exclusion sur
+  // publicTournaments) et marque hasFetchedTournaments. NE résout PAS
+  // l'identité — c'est loadTournamentsForCurrentSession qui orchestre
+  // identité+fetch et reste l'unique entrée pour la home (watcher,
+  // bouton "Réessayer"). Conservée publique pour les tests qui
+  // vérifient le contrat repo→store sans toucher à l'auth.
+  //
+  // Garde anti-écriture tardive : on capture currentUserId au début et
+  // on re-vérifie après les awaits. Si l'utilisateur a changé entre
+  // temps (logout A → login B), la réponse de l'utilisateur A est
+  // ignorée — pas d'écriture dans le state, pas de peuplement d'erreur.
+  // Cohérent avec le token utilisé dans loadTournamentsForCurrentSession
+  // pour invalider une résolution d'identité tardive.
   async function loadTournaments(): Promise<void> {
     return withLoading(async () => {
+      const userId = currentUserId.value
+      if (userId === null) return
       try {
-        tournaments.value = await repository.getAllTournaments()
+        const [loadedTournaments, loadedMemberships] = await Promise.all([
+          repository.getAllTournaments(),
+          repository.getMyMemberships(userId),
+        ])
+        if (currentUserId.value !== userId) return
+        tournaments.value = loadedTournaments
+        myMemberships.value = loadedMemberships
         hasFetchedTournaments.value = true
         lastLoadTournamentsError.value = null
       }
       catch (error) {
+        if (currentUserId.value !== userId) return
         // On NE marque PAS fetched en cas d'erreur — sinon on
         // confondrait "aucun tournoi" avec "échec de chargement".
         lastLoadTournamentsError.value = error
@@ -241,11 +307,15 @@ export const useTournamentStore = defineStore('tournament', () => {
     return withLoading(async () => {
       // Clear-at-start : pas de flash de l'ancien tournoi pendant le
       // RTT Supabase lors d'une navigation cross-tournament. Cohérent
-      // avec le clear de deleteTournament.
+      // avec le clear de deleteTournament. La liste de membres est
+      // également invalidée : changer de tournoi rend obsolète tout
+      // état de modal "Gérer les invités" du tournoi précédent.
       currentTournament.value = null
       teams.value = []
       matches.value = []
       ranking.value = []
+      currentTournamentMembers.value = []
+      currentTournamentMembersTournamentId.value = null
 
       const found = await repository.getTournamentById(id)
       if (requestId !== lastLoadTournamentRequestId) return
@@ -487,6 +557,64 @@ export const useTournamentStore = defineStore('tournament', () => {
     }
   }
 
+  // Compteur monotone interne pour invalider les réponses tardives de
+  // loadTournamentMembers : si une nouvelle requête démarre alors qu'une
+  // précédente attend encore, la précédente abandonne silencieusement
+  // pour ne pas écraser le résultat de la plus récente. Même pattern
+  // que lastLoadTournamentRequestId.
+  let lastLoadTournamentMembersRequestId = 0
+
+  async function loadTournamentMembers(tournamentId: string): Promise<void> {
+    const requestId = ++lastLoadTournamentMembersRequestId
+    // Clear-at-start : pas de flash des membres du tournoi précédent
+    // pendant le RTT Supabase lors d'une navigation cross-tournament.
+    currentTournamentMembers.value = []
+    currentTournamentMembersTournamentId.value = tournamentId
+    return withLoading(async () => {
+      const fetched = await repository.getMembersByTournament(tournamentId)
+      if (requestId !== lastLoadTournamentMembersRequestId) return
+      currentTournamentMembers.value = fetched
+    })
+  }
+
+  // Invitation d'un membre au tournoi. La RPC repo retourne la ligne
+  // insérée (snapshot member_email + ids) que l'on append au state du
+  // modal SI le modal vise toujours le même tournoi. Sinon (cas
+  // défensif : navigation entre invitation déclenchée et résolution),
+  // l'écriture serait incohérente avec ce que l'utilisateur regarde
+  // — on laisse passer la promesse sans toucher à currentTournamentMembers.
+  // InviteMemberError se propage naturellement (withLoading ne swallow
+  // pas) ; le composant en B.3 dispatch via `instanceof InviteMemberError`.
+  async function inviteMember(
+    tournamentId: string,
+    email: string,
+  ): Promise<TournamentMember> {
+    return withLoading(async () => {
+      const insertedMember = await repository.inviteMemberByEmail(
+        tournamentId,
+        email,
+      )
+      if (
+        currentTournamentMembersTournamentId.value === insertedMember.tournamentId
+      ) {
+        currentTournamentMembers.value.push(insertedMember)
+      }
+      return insertedMember
+    })
+  }
+
+  // Suppression d'un membre. Le filter sur currentTournamentMembers est
+  // naturellement no-op si le membre n'est pas dans la liste courante
+  // (cohérent avec la garde d'append d'inviteMember).
+  async function removeMember(memberId: string): Promise<void> {
+    return withLoading(async () => {
+      await repository.removeMember(memberId)
+      currentTournamentMembers.value = currentTournamentMembers.value.filter(
+        member => member.id !== memberId,
+      )
+    })
+  }
+
   // Watcher composé sur [session, user.sub]. Couvre :
   //  - le boot avec session hydratée (immediate fire) ;
   //  - le flow magic-link où useSupabaseUser tarde à s'hydrater
@@ -502,6 +630,9 @@ export const useTournamentStore = defineStore('tournament', () => {
       if (currentSession === null) {
         ++lastAuthContextRequestId
         tournaments.value = []
+        myMemberships.value = []
+        currentTournamentMembers.value = []
+        currentTournamentMembersTournamentId.value = null
         hasFetchedTournaments.value = false
         lastLoadTournamentsError.value = null
         resolvedUserId.value = null
@@ -520,10 +651,12 @@ export const useTournamentStore = defineStore('tournament', () => {
     ranking,
     isLoading,
     myTournaments,
+    sharedTournaments,
     publicTournaments,
     isOwnerOfCurrentTournament,
     hasFetchedTournaments,
     lastLoadTournamentsError,
+    currentTournamentMembers,
     loadTournaments,
     loadTournamentsForCurrentSession,
     createTournament,
@@ -538,5 +671,8 @@ export const useTournamentStore = defineStore('tournament', () => {
     submitScore,
     refreshRanking,
     completeTournament,
+    loadTournamentMembers,
+    inviteMember,
+    removeMember,
   }
 })

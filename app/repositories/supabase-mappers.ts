@@ -1,5 +1,5 @@
 import type { Database } from '../types/database.types'
-import type { Match, Team, Tournament } from '../types'
+import type { Match, Team, Tournament, TournamentMember } from '../types'
 
 // Traductions pures entre les rows Supabase (snake_case, nullables stricts)
 // et les types domaine (camelCase, optionnels via `?`). Aucune logique
@@ -12,6 +12,7 @@ type TeamRow = Database['public']['Tables']['teams']['Row']
 type TeamInsert = Database['public']['Tables']['teams']['Insert']
 type MatchRow = Database['public']['Tables']['matches']['Row']
 type MatchInsert = Database['public']['Tables']['matches']['Insert']
+type TournamentMemberRow = Database['public']['Tables']['tournament_members']['Row']
 
 // --- Tournament ---
 
@@ -98,5 +99,22 @@ export function mapMatchDomainToInsert(match: Match): MatchInsert {
     winner_id: match.winnerId,
     status: match.status,
     round_number: match.roundNumber,
+  }
+}
+
+// --- TournamentMember ---
+// Pas de mapper Domain → Insert : les insertions passent exclusivement
+// par la RPC invite_tournament_member_by_email (cf. SupabaseRepository).
+
+export function mapTournamentMemberRowToDomain(
+  row: TournamentMemberRow,
+): TournamentMember {
+  return {
+    id: row.id,
+    tournamentId: row.tournament_id,
+    userId: row.user_id,
+    memberEmail: row.member_email,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   }
 }
