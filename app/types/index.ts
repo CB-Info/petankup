@@ -68,6 +68,7 @@ export type InviteMemberErrorCode =
   | "user_not_found"
   | "self_invite"
   | "already_member"
+  | "tournament_completed"
   | "unknown";
 
 export class InviteMemberError extends Error {
