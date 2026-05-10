@@ -137,6 +137,8 @@ function inviteErrorMessage(code: InviteMemberErrorCode): string {
       return 'Vous ne pouvez pas vous inviter vous-même.'
     case 'already_member':
       return 'Cette personne est déjà invitée.'
+    case 'tournament_completed':
+      return 'Ce tournoi est terminé, plus aucune invitation possible.'
     case 'unknown':
       return 'Une erreur est survenue. Réessayez.'
   }

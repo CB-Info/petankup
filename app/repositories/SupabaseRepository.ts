@@ -31,6 +31,7 @@ const KNOWN_INVITE_ERROR_CODES: readonly InviteMemberErrorCode[] = [
   'user_not_found',
   'self_invite',
   'already_member',
+  'tournament_completed',
 ]
 
 function parseInviteErrorCode(rawMessage: string): InviteMemberErrorCode {

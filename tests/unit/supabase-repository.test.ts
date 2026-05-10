@@ -522,6 +522,7 @@ describe('SupabaseRepository — inviteMemberByEmail', () => {
     'self_invite',
     'not_owner',
     'invalid_email',
+    'tournament_completed',
   ] as const)(
     'throws InviteMemberError(%s) when rpc error message contains the code',
     async (code) => {
