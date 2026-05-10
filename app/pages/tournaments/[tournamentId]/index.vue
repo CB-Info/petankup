@@ -269,6 +269,36 @@ function askVisibilityToggle() {
   visibilityToggleModalOpen.value = true;
 }
 
+const membersModalOpen = ref(false);
+
+// Source de vérité unique du droit de gestion des invités. Trois
+// conditions combinées, consommées par : (1) le v-if du bouton dans
+// la barre d'actions, (2) la garde de openMembersModal, (3) le
+// watcher d'auto-fermeture ci-dessous. Centraliser ici évite tout
+// drift entre sites de consommation.
+const canManageMembers = computed(() => {
+  if (!isOwner.value) return false;
+  if (currentTournament.value?.visibility !== "private") return false;
+  if (tournamentIsCompleted.value) return false;
+  return true;
+});
+
+function openMembersModal() {
+  if (!canManageMembers.value) return;
+  membersModalOpen.value = true;
+}
+
+// Auto-fermeture si la permission disparaît pendant que le modal est
+// ouvert : passage en 'completed', bascule public, perte d'ownership.
+// Sans ce watch, l'utilisateur pourrait continuer à inviter/désinviter
+// sur un tournoi qui ne le permet plus, le temps qu'il ferme à la
+// main. Couvre notamment le cas multi-onglets.
+watch(canManageMembers, (canManage) => {
+  if (!canManage) {
+    membersModalOpen.value = false;
+  }
+});
+
 async function confirmVisibilityToggle() {
   if (currentTournament.value === null) return;
   if (isTogglingVisibility.value) return;
@@ -343,6 +373,15 @@ useHead(() => ({
                 : 'Rendre public'
             "
             @click="askVisibilityToggle"
+          />
+          <UButton
+            v-if="canManageMembers"
+            variant="ghost"
+            color="neutral"
+            icon="i-lucide-users"
+            size="sm"
+            aria-label="Gérer les invités"
+            @click="openMembersModal"
           />
           <UButton
             v-if="tournamentCanBeDeleted && isOwner"
@@ -666,6 +705,12 @@ useHead(() => ({
       :tournament-name="currentTournament.name"
       :is-submitting="isTogglingVisibility"
       @confirmed="confirmVisibilityToggle"
+    />
+
+    <TournamentMembersModal
+      v-model:open="membersModalOpen"
+      :tournament-id="tournamentId"
+      :tournament-name="currentTournament.name"
     />
   </div>
 </template>

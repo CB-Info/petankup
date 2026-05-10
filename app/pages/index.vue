@@ -5,13 +5,14 @@
 // Le déclenchement de loadTournaments() est piloté par le store via un
 // watch interne sur currentUserId — couvre boot, magic link et
 // changement de compte sans qu'on ait à le faire ici. La page n'a
-// qu'à observer hasLoadedTournaments / lastLoadTournamentsError et
+// qu'à observer hasFetchedTournaments / lastLoadTournamentsError et
 // fournir un retry manuel sur erreur.
 import type { TournamentStatus } from "../types";
 
 const tournamentStore = useTournamentStore();
 const {
   myTournaments,
+  sharedTournaments,
   publicTournaments,
   hasFetchedTournaments,
   lastLoadTournamentsError,
@@ -54,6 +55,16 @@ const sortedMyTournaments = computed(() => {
   });
 });
 
+// Tournois partagés (je suis invité, pas owner) : pas de tri par status
+// (le membre est spectateur, pas admin — la notion de progression
+// d'organisateur n'a pas de sens ici), juste date desc.
+const sortedSharedTournaments = computed(() => {
+  return [...sharedTournaments.value].sort(
+    (firstTournament, secondTournament) =>
+      secondTournament.date.localeCompare(firstTournament.date),
+  );
+});
+
 // Tournois publics d'autres owners : pas de tri par status (lecture
 // pure, pas de notion de progression d'admin), juste date desc.
 const sortedPublicTournaments = computed(() => {
@@ -64,8 +75,11 @@ const sortedPublicTournaments = computed(() => {
 });
 
 const mineEmpty = computed(() => sortedMyTournaments.value.length === 0);
+const sharedEmpty = computed(() => sortedSharedTournaments.value.length === 0);
 const publicEmpty = computed(() => sortedPublicTournaments.value.length === 0);
-const bothEmpty = computed(() => mineEmpty.value && publicEmpty.value);
+const allEmpty = computed(
+  () => mineEmpty.value && sharedEmpty.value && publicEmpty.value,
+);
 
 function statusLabel(status: TournamentStatus): string {
   switch (status) {
@@ -120,7 +134,7 @@ useHead({ title: "Pétankup — Gestion de tournois" });
       <p class="text-toned">Chargement…</p>
     </div>
 
-    <div v-else-if="bothEmpty" class="py-16 text-center">
+    <div v-else-if="allEmpty" class="py-16 text-center">
       <h2 class="text-lg font-semibold text-primary-900">
         Aucun tournoi pour l'instant
       </h2>
@@ -149,6 +163,50 @@ useHead({ title: "Pétankup — Gestion de tournois" });
         </h2>
         <ul class="space-y-3">
           <li v-for="tournament in sortedMyTournaments" :key="tournament.id">
+            <NuxtLink :to="`/tournaments/${tournament.id}`" class="block">
+              <UCard>
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0 space-y-1">
+                    <h3 class="truncate font-semibold text-primary-900">
+                      {{ tournament.name }}
+                    </h3>
+                    <p class="text-sm text-toned">
+                      {{ formatDate(tournament.date) }}
+                    </p>
+                    <p
+                      v-if="tournament.location"
+                      class="truncate text-sm text-toned"
+                    >
+                      {{ tournament.location }}
+                    </p>
+                  </div>
+                  <div class="flex shrink-0 flex-col items-end gap-1">
+                    <UBadge
+                      :color="statusBadgeColor(tournament.status)"
+                      variant="soft"
+                    >
+                      {{ statusLabel(tournament.status) }}
+                    </UBadge>
+                    <VisibilityBadge :visibility="tournament.visibility" />
+                  </div>
+                </div>
+              </UCard>
+            </NuxtLink>
+          </li>
+        </ul>
+      </section>
+
+      <section v-if="!sharedEmpty" class="space-y-3">
+        <h2
+          class="text-xs font-semibold uppercase tracking-[0.08em] text-toned"
+        >
+          Partagés avec moi
+        </h2>
+        <ul class="space-y-3">
+          <li
+            v-for="tournament in sortedSharedTournaments"
+            :key="tournament.id"
+          >
             <NuxtLink :to="`/tournaments/${tournament.id}`" class="block">
               <UCard>
                 <div class="flex items-start justify-between gap-3">
