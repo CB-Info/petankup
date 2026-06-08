@@ -631,6 +631,11 @@ export const useTournamentStore = defineStore('tournament', () => {
         tournamentId,
         displayName,
       )
+      // Précharge le pseudo de l'invité AVANT de l'afficher : la ligne ne se
+      // rend jamais sans son pseudo en cache, donc aucun placeholder/identité
+      // ne flashe. loadProfilesByIds est best-effort (ne throw pas) ; en cas
+      // d'échec, l'UI retombe sur le placeholder neutre, jamais l'email.
+      await loadProfilesByIds([insertedMember.userId])
       if (
         currentTournamentMembersTournamentId.value === insertedMember.tournamentId
       ) {
