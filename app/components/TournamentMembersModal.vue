@@ -166,8 +166,6 @@ async function removeMemberAt(member: TournamentMember): Promise<void> {
 // à InviteMemberErrorCode qui ne serait pas mappé ici.
 function inviteErrorMessage(code: InviteMemberErrorCode): string {
   switch (code) {
-    case 'invalid_email':
-      return 'Email invalide.'
     case 'not_authenticated':
       return 'Vous devez être connecté.'
     case 'not_owner':

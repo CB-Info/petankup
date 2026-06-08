@@ -27,7 +27,6 @@ import {
 // code n'est sous-chaîne d'un autre, donc `includes` est suffisant et
 // non ambigu.
 const KNOWN_INVITE_ERROR_CODES: readonly InviteMemberErrorCode[] = [
-  'invalid_email',
   'not_authenticated',
   'not_owner',
   'display_name_not_found',
