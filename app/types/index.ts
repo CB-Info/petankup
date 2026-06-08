@@ -61,6 +61,13 @@ export interface TournamentMember {
   updatedAt: string;
 }
 
+export interface Profile {
+  id: string;
+  displayName: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type InviteMemberErrorCode =
   | "invalid_email"
   | "not_authenticated"

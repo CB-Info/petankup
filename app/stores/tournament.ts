@@ -5,6 +5,7 @@ import type { TournamentRepository } from '../repositories'
 import type { Database } from '../types/database.types'
 import type {
   Match,
+  Profile,
   Ranking,
   ScoreValidationResult,
   Team,
@@ -168,6 +169,30 @@ export const useTournamentStore = defineStore('tournament', () => {
   // home ait à le savoir. Exposé pour permettre à la home de gater ses
   // 4 états (erreur / chargement / empty / sections).
   const hasFetchedTournaments = ref(false)
+
+  // Cache des profils visibles. Record (pas Map) pour que Vue 3 tracke
+  // correctement les mutations directes `profileById.value[id] = ...`.
+  // Hydraté par loadCurrentProfile (self) et loadProfilesByIds (batch).
+  // Reset au logout (cf. watcher d'auth en bas du store).
+  const profileById = ref<Record<string, Profile>>({})
+
+  // Profil du user authentifié. Null tant que loadCurrentProfile n'a
+  // pas résolu (ou si trigger DB / backfill a raté pour ce user, cas
+  // dégénéré qui matérialise lastLoadCurrentProfileError).
+  const currentProfile = ref<Profile | null>(null)
+
+  // True dès qu'un loadCurrentProfile a terminé (succès OU échec)
+  // pour la session courante. Permet à la UI (C.3) de distinguer
+  // "en cours de chargement" de "résolu sans profil". Reset au
+  // logout. N'est JAMAIS un critère de "home prête" — la home
+  // dépend uniquement de hasFetchedTournaments.
+  const hasFetchedCurrentProfile = ref(false)
+
+  // Erreur du dernier loadCurrentProfile, ou null. Disjoint de
+  // lastLoadTournamentsError : un échec profile ne pollue jamais
+  // l'erreur tournaments et vice-versa. Typé `unknown` — la UI (C.3)
+  // décide de l'affichage.
+  const lastLoadCurrentProfileError = ref<unknown>(null)
 
   function nowIso(): string {
     return new Date().toISOString()
@@ -547,6 +572,16 @@ export const useTournamentStore = defineStore('tournament', () => {
     if (resolvedUserId.value === sub && hasFetchedTournaments.value) return
 
     resolvedUserId.value = sub
+
+    // Fire-and-forget : profil chargé en parallèle des tournois.
+    // L'identité est résolue à ce stade (resolvedUserId vient d'être
+    // hydraté), loadCurrentProfile n'est pas un no-op. Le `void` est
+    // explicite : la promesse ne reject jamais (try/catch interne
+    // sur loadCurrentProfile), pas de .catch() nécessaire. Critique :
+    // PAS d'await, sinon une lenteur ou un échec profile bloquerait
+    // le chargement des tournois.
+    void loadCurrentProfile()
+
     try {
       await loadTournaments()
     }
@@ -615,6 +650,105 @@ export const useTournamentStore = defineStore('tournament', () => {
     })
   }
 
+  // --- Profils ---
+
+  // Charge le profil du user authentifié. Fire-and-forget : capture
+  // les erreurs en interne dans lastLoadCurrentProfileError, ne throw
+  // JAMAIS. Ne doit pas bloquer le chargement des tournois — c'est
+  // pourquoi loadTournamentsForCurrentSession l'invoque avec `void`
+  // (pas d'await) après hydratation de resolvedUserId.
+  //
+  // Garde anti-écriture tardive : userId capturé au départ. Si
+  // l'identité change pendant le await (logout, switch de compte),
+  // on abandonne TOUTES les écritures vers le state pour ne pas
+  // polluer celui du nouveau user avec la réponse d'un ancien call.
+  // Pattern aligné sur loadTournaments.
+  async function loadCurrentProfile(): Promise<void> {
+    const userId = currentUserId.value
+    if (userId === null) return
+
+    try {
+      const profile = await repository.getProfileById(userId)
+      if (currentUserId.value !== userId) return
+
+      if (profile === undefined) {
+        // Cas dégénéré : le trigger ou le backfill ont raté pour ce
+        // user. On signale via lastLoadCurrentProfileError mais on
+        // ne bloque pas la session.
+        lastLoadCurrentProfileError.value = new Error('Profil introuvable.')
+        return
+      }
+
+      currentProfile.value = profile
+      profileById.value[profile.id] = profile
+      lastLoadCurrentProfileError.value = null
+    }
+    catch (error) {
+      if (currentUserId.value !== userId) return
+      lastLoadCurrentProfileError.value = error
+    }
+    finally {
+      // hasFetchedCurrentProfile = "on a essayé pour CE user".
+      // Même garde anti-écriture tardive dans le finally.
+      if (currentUserId.value === userId) {
+        hasFetchedCurrentProfile.value = true
+      }
+    }
+  }
+
+  // Hydrate profileById en batch avec les ids manquants du cache.
+  // Dédupe les ids, exclut ceux déjà connus, et déléguie au repo.
+  // Best-effort : capture les erreurs en interne sans state d'erreur
+  // store dédié — l'UI tombera sur le fallback (member_email, etc.)
+  // si profileById[id] est absent. Pas de toast.
+  //
+  // Garde anti-écriture tardive identique à loadCurrentProfile.
+  async function loadProfilesByIds(ids: string[]): Promise<void> {
+    if (ids.length === 0) return
+
+    const initialUserId = currentUserId.value
+    if (initialUserId === null) return
+
+    const uniqueIds = [...new Set(ids)]
+    const missingIds = uniqueIds.filter(id => !(id in profileById.value))
+    if (missingIds.length === 0) return
+
+    try {
+      const profiles = await repository.getProfilesByIds(missingIds)
+      if (currentUserId.value !== initialUserId) return
+
+      for (const profile of profiles) {
+        profileById.value[profile.id] = profile
+      }
+    }
+    catch (error) {
+      console.warn('[store] loadProfilesByIds failed:', error)
+    }
+  }
+
+  // Update du display_name du user courant. Asymétrie volontaire vs
+  // loadCurrentProfile : THROW en cas d'erreur — l'UI (C.3) catch et
+  // affiche un toast. Au succès, met à jour currentProfile et
+  // profileById avec le row serveur (updated_at rafraîchi par le
+  // trigger DB).
+  //
+  // Garde anti-écriture tardive sur les écritures de cache : si
+  // l'identité change pendant le await, le Profile est quand même
+  // retourné (l'update DB a eu lieu) mais on n'écrit pas dans
+  // currentProfile/profileById pour ne pas polluer le state du
+  // nouveau user.
+  async function updateMyProfile(displayName: string): Promise<Profile> {
+    const userId = requireAuthenticatedUserId()
+    const updated = await repository.updateMyProfile(userId, displayName)
+
+    if (currentUserId.value === userId) {
+      currentProfile.value = updated
+      profileById.value[updated.id] = updated
+    }
+
+    return updated
+  }
+
   // Watcher composé sur [session, user.sub]. Couvre :
   //  - le boot avec session hydratée (immediate fire) ;
   //  - le flow magic-link où useSupabaseUser tarde à s'hydrater
@@ -636,6 +770,10 @@ export const useTournamentStore = defineStore('tournament', () => {
         hasFetchedTournaments.value = false
         lastLoadTournamentsError.value = null
         resolvedUserId.value = null
+        profileById.value = {}
+        currentProfile.value = null
+        hasFetchedCurrentProfile.value = false
+        lastLoadCurrentProfileError.value = null
         return
       }
       void loadTournamentsForCurrentSession()
@@ -674,5 +812,13 @@ export const useTournamentStore = defineStore('tournament', () => {
     loadTournamentMembers,
     inviteMember,
     removeMember,
+    // Profile state + actions (Phase C.2)
+    profileById,
+    currentProfile,
+    hasFetchedCurrentProfile,
+    lastLoadCurrentProfileError,
+    loadCurrentProfile,
+    loadProfilesByIds,
+    updateMyProfile,
   }
 })

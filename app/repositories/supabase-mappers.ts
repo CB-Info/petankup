@@ -1,5 +1,5 @@
 import type { Database } from '../types/database.types'
-import type { Match, Team, Tournament, TournamentMember } from '../types'
+import type { Match, Profile, Team, Tournament, TournamentMember } from '../types'
 
 // Traductions pures entre les rows Supabase (snake_case, nullables stricts)
 // et les types domaine (camelCase, optionnels via `?`). Aucune logique
@@ -13,6 +13,7 @@ type TeamInsert = Database['public']['Tables']['teams']['Insert']
 type MatchRow = Database['public']['Tables']['matches']['Row']
 type MatchInsert = Database['public']['Tables']['matches']['Insert']
 type TournamentMemberRow = Database['public']['Tables']['tournament_members']['Row']
+type ProfileRow = Database['public']['Tables']['profiles']['Row']
 
 // --- Tournament ---
 
@@ -114,6 +115,21 @@ export function mapTournamentMemberRowToDomain(
     tournamentId: row.tournament_id,
     userId: row.user_id,
     memberEmail: row.member_email,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+// --- Profile ---
+// Pas de mapper Domain → Insert : les profils sont créés
+// automatiquement par le trigger `handle_new_user_profile` à la
+// création du compte (cf. migration C.1). Les updates côté app
+// n'écrivent que `display_name`, passé en littéral dans le repo.
+
+export function mapProfileRowToDomain(row: ProfileRow): Profile {
+  return {
+    id: row.id,
+    displayName: row.display_name,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

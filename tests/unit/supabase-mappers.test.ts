@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { Database } from '../../app/types/database.types'
-import type { Match, Team, Tournament, TournamentMember } from '../../app/types'
+import type { Match, Profile, Team, Tournament, TournamentMember } from '../../app/types'
 import {
   mapMatchDomainToInsert,
   mapMatchRowToDomain,
+  mapProfileRowToDomain,
   mapTeamDomainToInsert,
   mapTeamRowToDomain,
   mapTournamentDomainToInsert,
@@ -16,6 +17,7 @@ type TeamRow = Database['public']['Tables']['teams']['Row']
 type MatchRow = Database['public']['Tables']['matches']['Row']
 type TournamentMemberRow
   = Database['public']['Tables']['tournament_members']['Row']
+type ProfileRow = Database['public']['Tables']['profiles']['Row']
 
 const NOW = '2026-01-01T00:00:00.000Z'
 const OWNER_ID = '11111111-1111-4111-8111-111111111111'
@@ -354,5 +356,23 @@ describe('mapTournamentMemberRowToDomain', () => {
     expect(mapTournamentMemberRowToDomain(row).memberEmail).toBe(
       'Mixed.Case+tag@Example.COM',
     )
+  })
+})
+
+describe('mapProfileRowToDomain', () => {
+  it('translates a complete row to a Profile with snake_case → camelCase', () => {
+    const row: ProfileRow = {
+      id: OWNER_ID,
+      display_name: 'Alice',
+      created_at: NOW,
+      updated_at: NOW,
+    }
+
+    expect(mapProfileRowToDomain(row)).toEqual<Profile>({
+      id: OWNER_ID,
+      displayName: 'Alice',
+      createdAt: NOW,
+      updatedAt: NOW,
+    })
   })
 })
