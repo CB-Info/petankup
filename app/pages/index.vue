@@ -16,6 +16,7 @@ const {
   publicTournaments,
   hasFetchedTournaments,
   lastLoadTournamentsError,
+  profileById,
 } = storeToRefs(tournamentStore);
 const { showError } = useErrorToast();
 
@@ -73,6 +74,37 @@ const sortedPublicTournaments = computed(() => {
       secondTournament.date.localeCompare(firstTournament.date),
   );
 });
+
+// Owners des tournois où je ne suis pas l'organisateur (partagés +
+// publics). Mes propres tournois sont exclus : j'en suis l'owner, on
+// n'affiche pas "Organisé par moi".
+const ownerIdsToHydrate = computed(() => {
+  const ownerIds = new Set<string>();
+  for (const tournament of sortedSharedTournaments.value) {
+    ownerIds.add(tournament.ownerId);
+  }
+  for (const tournament of sortedPublicTournaments.value) {
+    ownerIds.add(tournament.ownerId);
+  }
+  return [...ownerIds];
+});
+
+// Hydratation best-effort du cache des profils. loadProfilesByIds est
+// idempotent (dédupe + exclut le cache) et ne throw jamais ; le `void`
+// est fire-and-forget pour ne pas bloquer le rendu de la home.
+watch(
+  ownerIdsToHydrate,
+  (ownerIds) => {
+    if (ownerIds.length > 0) void tournamentStore.loadProfilesByIds(ownerIds);
+  },
+  { immediate: true },
+);
+
+// Nom de l'organisateur si son profil est déjà résolu, sinon null (la
+// ligne "Organisé par" est alors omise — pas de placeholder).
+function organizerName(ownerId: string): string | null {
+  return profileById.value[ownerId]?.displayName ?? null;
+}
 
 const mineEmpty = computed(() => sortedMyTournaments.value.length === 0);
 const sharedEmpty = computed(() => sortedSharedTournaments.value.length === 0);
@@ -223,6 +255,12 @@ useHead({ title: "Pétankup — Gestion de tournois" });
                     >
                       {{ tournament.location }}
                     </p>
+                    <p
+                      v-if="organizerName(tournament.ownerId)"
+                      class="truncate text-sm text-toned"
+                    >
+                      Organisé par {{ organizerName(tournament.ownerId) }}
+                    </p>
                   </div>
                   <div class="flex shrink-0 flex-col items-end gap-1">
                     <UBadge
@@ -266,6 +304,12 @@ useHead({ title: "Pétankup — Gestion de tournois" });
                       class="truncate text-sm text-toned"
                     >
                       {{ tournament.location }}
+                    </p>
+                    <p
+                      v-if="organizerName(tournament.ownerId)"
+                      class="truncate text-sm text-toned"
+                    >
+                      Organisé par {{ organizerName(tournament.ownerId) }}
                     </p>
                   </div>
                   <div class="flex shrink-0 flex-col items-end gap-1">

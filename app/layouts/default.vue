@@ -56,6 +56,14 @@ async function onLogout() {
           </ClientOnly>
           <UButton
             v-if="session"
+            to="/account"
+            icon="i-lucide-user"
+            variant="ghost"
+            color="neutral"
+            aria-label="Mon compte"
+          />
+          <UButton
+            v-if="session"
             icon="i-lucide-log-out"
             variant="ghost"
             color="neutral"
