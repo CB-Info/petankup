@@ -291,14 +291,15 @@ function askVisibilityToggle() {
 
 const membersModalOpen = ref(false);
 
-// Source de vérité unique du droit de gestion des invités. Trois
+// Source de vérité unique du droit de gestion des invités. Deux
 // conditions combinées, consommées par : (1) le v-if du bouton dans
 // la barre d'actions, (2) la garde de openMembersModal, (3) le
 // watcher d'auto-fermeture ci-dessous. Centraliser ici évite tout
-// drift entre sites de consommation.
+// drift entre sites de consommation. L'invitation est autorisée sur
+// les tournois privés ET publics (Phase F.1) : l'invité bascule en
+// "Partagés avec moi" via la partition home, sans badge dédié.
 const canManageMembers = computed(() => {
   if (!isOwner.value) return false;
-  if (currentTournament.value?.visibility !== "private") return false;
   if (tournamentIsCompleted.value) return false;
   return true;
 });

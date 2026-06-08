@@ -69,7 +69,6 @@ export interface Profile {
 }
 
 export type InviteMemberErrorCode =
-  | "invalid_email"
   | "not_authenticated"
   | "not_owner"
   | "display_name_not_found"
