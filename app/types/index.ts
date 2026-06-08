@@ -84,3 +84,12 @@ export class InviteMemberError extends Error {
     this.name = "InviteMemberError";
   }
 }
+
+export type ProfileErrorCode = "display_name_taken";
+
+export class ProfileError extends Error {
+  constructor(public readonly code: ProfileErrorCode) {
+    super(code);
+    this.name = "ProfileError";
+  }
+}

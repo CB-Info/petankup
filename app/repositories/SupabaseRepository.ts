@@ -8,7 +8,7 @@ import type {
   Tournament,
   TournamentMember,
 } from '../types'
-import { InviteMemberError } from '../types'
+import { InviteMemberError, ProfileError } from '../types'
 import type { TournamentRepository } from './TournamentRepository'
 import {
   mapMatchDomainToInsert,
@@ -215,7 +215,17 @@ export class SupabaseRepository implements TournamentRepository {
       .eq('id', userId)
       .select('id, display_name, created_at, updated_at')
       .single()
-    if (error !== null) throw new Error(error.message)
+    if (error !== null) {
+      // 23505 = unique_violation Postgres. On vérifie en plus le nom de
+      // l'index pour ne pas confondre avec un futur autre unique sur
+      // profiles (cf. index unique posé en D.1).
+      const isDisplayNameConflict
+        = error.code === '23505'
+          && typeof error.message === 'string'
+          && error.message.includes('profiles_display_name_lower_idx')
+      if (isDisplayNameConflict) throw new ProfileError('display_name_taken')
+      throw new Error(error.message)
+    }
     return mapProfileRowToDomain(data)
   }
 }
