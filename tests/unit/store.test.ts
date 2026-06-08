@@ -105,15 +105,15 @@ function makeTournament(overrides: Partial<Tournament> = {}): Tournament {
 // team → matches où elle apparaît). Reproduit le comportement de
 // SupabaseRepository (cascades DB) sans toucher au réseau.
 //
-// Convention pour inviteMemberByEmail (déterministe par email pour
+// Convention pour inviteMemberByDisplayName (déterministe par pseudo pour
 // produire les codes d'erreur sans avoir à mocker la RPC SQL) :
-//   - email contenant 'notfound@'   → throw 'user_not_found'
-//   - email contenant 'selfinvite@' → throw 'self_invite'
+//   - pseudo contenant 'NotFound'   → throw 'display_name_not_found'
+//   - pseudo contenant 'SelfInvite' → throw 'self_invite'
 //   - doublon (tournament_id, user_id) → throw 'already_member'
 //   - sinon : insert + retour de la ligne TournamentMember.
-// Pas de normalisation d'email (le repo réel est pass-through, le
-// mock reflète ce contrat). Le mock dérive un user_id stable depuis
-// l'email afin que la contrainte unique fonctionne entre appels.
+// Pas de normalisation côté mock (le repo réel est pass-through). Le mock
+// dérive un user_id stable depuis le pseudo afin que la contrainte unique
+// fonctionne entre appels, et un member_email snapshot.
 function createMockRepository(): TournamentRepository {
   let tournaments: Tournament[] = []
   let teams: Team[] = []
@@ -128,12 +128,12 @@ function createMockRepository(): TournamentRepository {
     return updated
   }
 
-  function deriveUserIdFromEmail(email: string): string {
-    // UUID v4 stable dérivé du local-part : permet d'identifier un
+  function deriveUserIdFromDisplayName(displayName: string): string {
+    // UUID v4 stable dérivé du pseudo normalisé : permet d'identifier un
     // "même invité" entre deux appels sans avoir à passer un userId
     // explicite côté test. Format inspiré du STUB_USER_ID.
-    const localPart = email.split('@')[0] ?? 'unknown'
-    const padded = (localPart + '0000000000').slice(0, 12)
+    const normalized = displayName.trim().toLowerCase().replace(/[^a-z0-9]/g, '')
+    const padded = (normalized + '0000000000').slice(0, 12)
     return `00000000-0000-4000-8000-${padded}`.slice(0, 36).padEnd(36, '0')
   }
 
@@ -175,14 +175,14 @@ function createMockRepository(): TournamentRepository {
       tournamentMembers.filter(member => member.tournamentId === tournamentId),
     getMyMemberships: async userId =>
       tournamentMembers.filter(member => member.userId === userId),
-    inviteMemberByEmail: async (tournamentId, email) => {
-      if (email.includes('notfound@')) {
-        throw new InviteMemberError('user_not_found')
+    inviteMemberByDisplayName: async (tournamentId, displayName) => {
+      if (displayName.includes('NotFound')) {
+        throw new InviteMemberError('display_name_not_found')
       }
-      if (email.includes('selfinvite@')) {
+      if (displayName.includes('SelfInvite')) {
         throw new InviteMemberError('self_invite')
       }
-      const userId = deriveUserIdFromEmail(email)
+      const userId = deriveUserIdFromDisplayName(displayName)
       const alreadyMember = tournamentMembers.some(
         member =>
           member.tournamentId === tournamentId && member.userId === userId,
@@ -194,7 +194,7 @@ function createMockRepository(): TournamentRepository {
         id: crypto.randomUUID(),
         tournamentId,
         userId,
-        memberEmail: email,
+        memberEmail: `${displayName.trim().toLowerCase()}@example.com`,
         createdAt: NOW,
         updatedAt: NOW,
       }
@@ -894,7 +894,7 @@ describe('useTournamentStore — invite/remove members', () => {
     expect(store.currentTournamentMembers.map(m => m.id)).toEqual([memberB.id])
   })
 
-  it('inviteMember — appends to currentTournamentMembers when current modal matches the invited tournament', async () => {
+  it('inviteMemberByDisplayName — appends to currentTournamentMembers when current modal matches the invited tournament', async () => {
     const store = useTournamentStore()
     await flushPromises()
     const created = await store.createTournament({
@@ -905,14 +905,14 @@ describe('useTournamentStore — invite/remove members', () => {
     await store.loadTournamentMembers(created.id)
     expect(store.currentTournamentMembers).toHaveLength(0)
 
-    const invited = await store.inviteMember(created.id, 'guest@example.com')
+    const invited = await store.inviteMemberByDisplayName(created.id, 'Bob')
 
     expect(store.currentTournamentMembers).toHaveLength(1)
     expect(store.currentTournamentMembers[0]!.id).toBe(invited.id)
-    expect(store.currentTournamentMembers[0]!.memberEmail).toBe('guest@example.com')
+    expect(store.currentTournamentMembers[0]!.memberEmail).toBe('bob@example.com')
   })
 
-  it('inviteMember — does NOT append when current modal targets a different tournament', async () => {
+  it('inviteMemberByDisplayName — does NOT append when current modal targets a different tournament', async () => {
     const store = useTournamentStore()
     await flushPromises()
     const tournamentA = await store.createTournament({
@@ -928,13 +928,13 @@ describe('useTournamentStore — invite/remove members', () => {
     // Modal ouvert sur A, invitation déclenchée sur B (cas défensif).
     await store.loadTournamentMembers(tournamentA.id)
 
-    await store.inviteMember(tournamentB.id, 'guest@example.com')
+    await store.inviteMemberByDisplayName(tournamentB.id, 'Bob')
 
     // currentTournamentMembers reflète toujours A (vide), pas B.
     expect(store.currentTournamentMembers).toHaveLength(0)
   })
 
-  it('inviteMember — propagates InviteMemberError with code "user_not_found"', async () => {
+  it('inviteMemberByDisplayName — propagates InviteMemberError with code "display_name_not_found"', async () => {
     const store = useTournamentStore()
     await flushPromises()
     const created = await store.createTournament({
@@ -946,18 +946,18 @@ describe('useTournamentStore — invite/remove members', () => {
 
     let caught: unknown = null
     try {
-      await store.inviteMember(created.id, 'notfound@example.com')
+      await store.inviteMemberByDisplayName(created.id, 'NotFoundUser')
     }
     catch (error) {
       caught = error
     }
 
     expect(caught).toBeInstanceOf(InviteMemberError)
-    expect((caught as InviteMemberError).code).toBe('user_not_found')
+    expect((caught as InviteMemberError).code).toBe('display_name_not_found')
     expect(store.currentTournamentMembers).toHaveLength(0)
   })
 
-  it('inviteMember — propagates InviteMemberError with code "already_member"', async () => {
+  it('inviteMemberByDisplayName — propagates InviteMemberError with code "already_member"', async () => {
     const store = useTournamentStore()
     await flushPromises()
     const created = await store.createTournament({
@@ -966,11 +966,11 @@ describe('useTournamentStore — invite/remove members', () => {
       format: 'round_robin',
     })
     await store.loadTournamentMembers(created.id)
-    await store.inviteMember(created.id, 'guest@example.com')
+    await store.inviteMemberByDisplayName(created.id, 'Bob')
 
     let caught: unknown = null
     try {
-      await store.inviteMember(created.id, 'guest@example.com')
+      await store.inviteMemberByDisplayName(created.id, 'Bob')
     }
     catch (error) {
       caught = error
@@ -982,7 +982,7 @@ describe('useTournamentStore — invite/remove members', () => {
     expect(store.currentTournamentMembers).toHaveLength(1)
   })
 
-  it('inviteMember — propagates InviteMemberError with code "self_invite"', async () => {
+  it('inviteMemberByDisplayName — propagates InviteMemberError with code "self_invite"', async () => {
     const store = useTournamentStore()
     await flushPromises()
     const created = await store.createTournament({
@@ -994,7 +994,7 @@ describe('useTournamentStore — invite/remove members', () => {
 
     let caught: unknown = null
     try {
-      await store.inviteMember(created.id, 'selfinvite@example.com')
+      await store.inviteMemberByDisplayName(created.id, 'SelfInviteUser')
     }
     catch (error) {
       caught = error
@@ -1013,7 +1013,7 @@ describe('useTournamentStore — invite/remove members', () => {
       format: 'round_robin',
     })
     await store.loadTournamentMembers(created.id)
-    const invited = await store.inviteMember(created.id, 'guest@example.com')
+    const invited = await store.inviteMemberByDisplayName(created.id, 'Bob')
     expect(store.currentTournamentMembers).toHaveLength(1)
 
     await store.removeMember(invited.id)
@@ -1030,7 +1030,7 @@ describe('useTournamentStore — invite/remove members', () => {
       format: 'round_robin',
     })
     await store.loadTournamentMembers(created.id)
-    await store.inviteMember(created.id, 'guest@example.com')
+    await store.inviteMemberByDisplayName(created.id, 'Bob')
 
     await store.removeMember('00000000-0000-4000-8000-000000000000')
 

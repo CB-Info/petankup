@@ -72,7 +72,7 @@ export type InviteMemberErrorCode =
   | "invalid_email"
   | "not_authenticated"
   | "not_owner"
-  | "user_not_found"
+  | "display_name_not_found"
   | "self_invite"
   | "already_member"
   | "tournament_completed"

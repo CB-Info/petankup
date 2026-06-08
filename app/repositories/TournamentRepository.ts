@@ -5,8 +5,8 @@ import type { Match, Profile, Team, Tournament, TournamentMember } from '../type
 // des requêtes réseau, le contrat reste agnostique du backend pour
 // faciliter d'éventuelles alternatives (mock, cache local, etc.).
 //
-// Membres : les insertions passent par la RPC inviteMemberByEmail (la DB
-// y normalise l'email et applique les règles owner / self / doublon).
+// Membres : les insertions passent par la RPC inviteMemberByDisplayName (la
+// DB y normalise le pseudo et applique les règles owner / self / doublon).
 // Le repository reste pass-through : aucune normalisation côté client.
 // Le repository est agnostique d'identité — getMyMemberships reçoit le
 // userId résolu par le store (cf. currentUserId), il ne le découvre pas
@@ -27,7 +27,7 @@ export interface TournamentRepository {
 
   getMembersByTournament(tournamentId: string): Promise<TournamentMember[]>
   getMyMemberships(userId: string): Promise<TournamentMember[]>
-  inviteMemberByEmail(tournamentId: string, email: string): Promise<TournamentMember>
+  inviteMemberByDisplayName(tournamentId: string, displayName: string): Promise<TournamentMember>
   removeMember(memberId: string): Promise<void>
 
   // Profils utilisateurs. La table est peuplée par le trigger DB

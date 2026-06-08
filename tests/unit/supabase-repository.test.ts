@@ -485,22 +485,25 @@ describe('SupabaseRepository — getMyMemberships', () => {
   })
 })
 
-describe('SupabaseRepository — inviteMemberByEmail', () => {
-  it('calls rpc(invite_tournament_member_by_email) with the provided tournament id and email and maps the inserted row', async () => {
+describe('SupabaseRepository — inviteMemberByDisplayName', () => {
+  it('calls rpc(invite_tournament_member_by_display_name) with the provided tournament id and display name and maps the inserted row', async () => {
     const { repo, rpc } = makeRepoWithRpcResult({
       data: makeMemberRow(),
       error: null,
     })
 
-    const inserted = await repo.inviteMemberByEmail(
+    const inserted = await repo.inviteMemberByDisplayName(
       TOURNAMENT_ID,
-      'guest@example.com',
+      'Bob',
     )
 
-    expect(rpc).toHaveBeenCalledWith('invite_tournament_member_by_email', {
-      p_tournament_id: TOURNAMENT_ID,
-      p_email: 'guest@example.com',
-    })
+    expect(rpc).toHaveBeenCalledWith(
+      'invite_tournament_member_by_display_name',
+      {
+        p_tournament_id: TOURNAMENT_ID,
+        p_display_name: 'Bob',
+      },
+    )
     expect(inserted).toEqual<TournamentMember>({
       id: MEMBER_ID,
       tournamentId: TOURNAMENT_ID,
@@ -511,26 +514,29 @@ describe('SupabaseRepository — inviteMemberByEmail', () => {
     })
   })
 
-  it('passes the email through without normalisation (DB does lower(trim))', async () => {
+  it('passes the display name through without normalisation (DB does lower(trim))', async () => {
     const { repo, rpc } = makeRepoWithRpcResult({
       data: makeMemberRow(),
       error: null,
     })
 
-    await repo.inviteMemberByEmail(TOURNAMENT_ID, '  Mixed.Case@Example.COM  ')
+    await repo.inviteMemberByDisplayName(TOURNAMENT_ID, '  Bob  ')
 
-    expect(rpc).toHaveBeenCalledWith('invite_tournament_member_by_email', {
-      p_tournament_id: TOURNAMENT_ID,
-      p_email: '  Mixed.Case@Example.COM  ',
-    })
+    expect(rpc).toHaveBeenCalledWith(
+      'invite_tournament_member_by_display_name',
+      {
+        p_tournament_id: TOURNAMENT_ID,
+        p_display_name: '  Bob  ',
+      },
+    )
   })
 
   it.each([
-    'user_not_found',
+    'display_name_not_found',
     'already_member',
     'self_invite',
     'not_owner',
-    'invalid_email',
+    'not_authenticated',
     'tournament_completed',
   ] as const)(
     'throws InviteMemberError(%s) when rpc error message contains the code',
@@ -542,7 +548,7 @@ describe('SupabaseRepository — inviteMemberByEmail', () => {
 
       let caught: unknown = null
       try {
-        await repo.inviteMemberByEmail(TOURNAMENT_ID, 'guest@example.com')
+        await repo.inviteMemberByDisplayName(TOURNAMENT_ID, 'Bob')
       }
       catch (error) {
         caught = error
@@ -560,7 +566,7 @@ describe('SupabaseRepository — inviteMemberByEmail', () => {
 
     let caught: unknown = null
     try {
-      await repo.inviteMemberByEmail(TOURNAMENT_ID, 'guest@example.com')
+      await repo.inviteMemberByDisplayName(TOURNAMENT_ID, 'Bob')
     }
     catch (error) {
       caught = error
@@ -574,7 +580,7 @@ describe('SupabaseRepository — inviteMemberByEmail', () => {
 
     let caught: unknown = null
     try {
-      await repo.inviteMemberByEmail(TOURNAMENT_ID, 'guest@example.com')
+      await repo.inviteMemberByDisplayName(TOURNAMENT_ID, 'Bob')
     }
     catch (error) {
       caught = error
