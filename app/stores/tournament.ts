@@ -66,7 +66,7 @@ export const useTournamentStore = defineStore('tournament', () => {
   const currentTournamentMembers = ref<TournamentMember[]>([])
 
   // Garde de cohérence : id du tournoi pour lequel
-  // currentTournamentMembers a été chargé. Permet à inviteMember de
+  // currentTournamentMembers a été chargé. Permet à inviteMemberByDisplayName de
   // savoir si append à la liste courante a du sens — le modal pourrait
   // viser un autre tournoi entre le déclenchement de l'invitation et
   // sa résolution. Helper INTERNE : non exposé.
@@ -620,14 +620,14 @@ export const useTournamentStore = defineStore('tournament', () => {
   // — on laisse passer la promesse sans toucher à currentTournamentMembers.
   // InviteMemberError se propage naturellement (withLoading ne swallow
   // pas) ; le composant en B.3 dispatch via `instanceof InviteMemberError`.
-  async function inviteMember(
+  async function inviteMemberByDisplayName(
     tournamentId: string,
-    email: string,
+    displayName: string,
   ): Promise<TournamentMember> {
     return withLoading(async () => {
-      const insertedMember = await repository.inviteMemberByEmail(
+      const insertedMember = await repository.inviteMemberByDisplayName(
         tournamentId,
-        email,
+        displayName,
       )
       if (
         currentTournamentMembersTournamentId.value === insertedMember.tournamentId
@@ -640,7 +640,7 @@ export const useTournamentStore = defineStore('tournament', () => {
 
   // Suppression d'un membre. Le filter sur currentTournamentMembers est
   // naturellement no-op si le membre n'est pas dans la liste courante
-  // (cohérent avec la garde d'append d'inviteMember).
+  // (cohérent avec la garde d'append d'inviteMemberByDisplayName).
   async function removeMember(memberId: string): Promise<void> {
     return withLoading(async () => {
       await repository.removeMember(memberId)
@@ -810,7 +810,7 @@ export const useTournamentStore = defineStore('tournament', () => {
     refreshRanking,
     completeTournament,
     loadTournamentMembers,
-    inviteMember,
+    inviteMemberByDisplayName,
     removeMember,
     // Profile state + actions (Phase C.2)
     profileById,

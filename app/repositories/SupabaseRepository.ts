@@ -21,8 +21,8 @@ import {
   mapTournamentRowToDomain,
 } from './supabase-mappers'
 
-// Codes d'erreur connus levés par la RPC invite_tournament_member_by_email
-// (cf. migration B.1). PostgREST surface le `raise exception 'code'`
+// Codes d'erreur connus levés par la RPC invite_tournament_member_by_display_name
+// (cf. migration Phase E). PostgREST surface le `raise exception 'code'`
 // comme un message texte ; on reconnaît le code par sous-chaîne. Aucun
 // code n'est sous-chaîne d'un autre, donc `includes` est suffisant et
 // non ambigu.
@@ -30,7 +30,7 @@ const KNOWN_INVITE_ERROR_CODES: readonly InviteMemberErrorCode[] = [
   'invalid_email',
   'not_authenticated',
   'not_owner',
-  'user_not_found',
+  'display_name_not_found',
   'self_invite',
   'already_member',
   'tournament_completed',
@@ -149,19 +149,19 @@ export class SupabaseRepository implements TournamentRepository {
     return (data ?? []).map(mapTournamentMemberRowToDomain)
   }
 
-  // Invitation par email. Pass-through total : pas de normalisation
-  // d'email côté client — la RPC fait `lower(trim(p_email))` côté DB.
-  // Les erreurs métier (user_not_found, already_member, self_invite,
-  // not_owner, invalid_email) sont mappées vers InviteMemberError via
-  // parseInviteErrorCode. Tout autre cas (réseau, schéma DB inattendu,
-  // data null sans error) tombe dans le code 'unknown'.
-  async inviteMemberByEmail(
+  // Invitation par pseudo. Pass-through total : pas de normalisation côté
+  // client — la RPC fait `lower(trim(p_display_name))` côté DB. Les erreurs
+  // métier (display_name_not_found, already_member, self_invite, not_owner)
+  // sont mappées vers InviteMemberError via parseInviteErrorCode. Tout autre
+  // cas (réseau, schéma DB inattendu, data null sans error) tombe dans le
+  // code 'unknown'.
+  async inviteMemberByDisplayName(
     tournamentId: string,
-    email: string,
+    displayName: string,
   ): Promise<TournamentMember> {
     const { data, error } = await this.client.rpc(
-      'invite_tournament_member_by_email',
-      { p_tournament_id: tournamentId, p_email: email },
+      'invite_tournament_member_by_display_name',
+      { p_tournament_id: tournamentId, p_display_name: displayName },
     )
     if (error !== null) {
       throw new InviteMemberError(parseInviteErrorCode(error.message))

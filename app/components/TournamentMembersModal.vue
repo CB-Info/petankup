@@ -5,11 +5,23 @@
 // le composant ne mute jamais currentTournamentMembers en direct.
 //
 // Pattern d'erreurs :
-// - inviteMember : InviteMemberError mappé en français inline sous l'input.
+// - invitation : InviteMemberError mappé en français inline sous l'input.
 //   Les erreurs hors invitation (réseau, repo) tombent dans 'unknown'.
 // - removeMember + load initial : toast via useErrorToast (la liste reste
 //   affichée, l'utilisateur retentera).
+import { z } from 'zod'
 import { InviteMemberError, type InviteMemberErrorCode, type TournamentMember } from '../types'
+
+// Validation du pseudo saisi avant envoi à la RPC. trim + 1–50 chars,
+// aligné sur la CHECK display_name côté DB. La RPC fait elle-même le
+// lower(trim(...)) pour le lookup.
+const inviteByDisplayNameSchema = z.object({
+  displayName: z
+    .string()
+    .trim()
+    .min(1, 'Pseudo requis')
+    .max(50, '50 caractères maximum'),
+})
 
 const props = defineProps<{
   open: boolean
@@ -27,14 +39,40 @@ const openModel = computed({
 })
 
 const tournamentStore = useTournamentStore()
-const { currentTournamentMembers } = storeToRefs(tournamentStore)
+const { currentTournamentMembers, profileById } = storeToRefs(tournamentStore)
 const { showError } = useErrorToast()
 
-const inviteEmail = ref('')
+const inviteState = reactive({ displayName: '' })
 const inviteError = ref<InviteMemberErrorCode | null>(null)
 const isInviting = ref(false)
 const removingMemberId = ref<string | null>(null)
 const isLoadingMembers = ref(false)
+
+// UForm valide sur la valeur trimmée tout en bindant l'input sur l'état
+// brut (même pattern qu'account.vue / TeamFormModal).
+const trimmedInviteState = computed(() => ({
+  displayName: inviteState.displayName.trim(),
+}))
+
+// Affichage live du pseudo de l'invité via le cache profileById, avec
+// fallback sur member_email (snapshot d'invitation) tant que le profil
+// n'est pas hydraté ou s'il n'est pas visible.
+function memberDisplayName(member: TournamentMember): string {
+  return profileById.value[member.userId]?.displayName ?? member.memberEmail
+}
+
+// Hydrate les profils des membres affichés à chaque évolution de la liste.
+// void : fire-and-forget, best-effort (loadProfilesByIds ne throw pas).
+watch(
+  currentTournamentMembers,
+  (members) => {
+    const memberUserIds = members.map(member => member.userId)
+    if (memberUserIds.length > 0) {
+      void tournamentStore.loadProfilesByIds(memberUserIds)
+    }
+  },
+  { immediate: true },
+)
 
 // Token UI pour invalider les side-effects locaux (isLoadingMembers,
 // showError) sur réponse tardive d'un load précédent. Local au setup
@@ -50,7 +88,7 @@ let lastLoadMembersUiRequestId = 0
 
 async function loadAndReset(tournamentId: string): Promise<void> {
   const requestId = ++lastLoadMembersUiRequestId
-  inviteEmail.value = ''
+  inviteState.displayName = ''
   inviteError.value = null
   removingMemberId.value = null
   isLoadingMembers.value = true
@@ -85,14 +123,17 @@ async function submitInvite(): Promise<void> {
   // qui ferait disparaître le membre fraîchement ajouté quand la
   // réponse tardive du load arrive APRÈS l'append de l'invite.
   if (isLoadingMembers.value) return
-  if (inviteEmail.value.trim() === '') return
+  if (inviteState.displayName.trim() === '') return
   if (isInviting.value) return
 
   isInviting.value = true
   inviteError.value = null
   try {
-    await tournamentStore.inviteMember(props.tournamentId, inviteEmail.value.trim())
-    inviteEmail.value = ''
+    await tournamentStore.inviteMemberByDisplayName(
+      props.tournamentId,
+      inviteState.displayName.trim(),
+    )
+    inviteState.displayName = ''
   }
   catch (error) {
     if (error instanceof InviteMemberError) {
@@ -131,8 +172,8 @@ function inviteErrorMessage(code: InviteMemberErrorCode): string {
       return 'Vous devez être connecté.'
     case 'not_owner':
       return "Action réservée à l'organisateur du tournoi."
-    case 'user_not_found':
-      return 'Aucun compte Pétankup ne correspond à cet email.'
+    case 'display_name_not_found':
+      return 'Pseudo introuvable.'
     case 'self_invite':
       return 'Vous ne pouvez pas vous inviter vous-même.'
     case 'already_member':
@@ -168,7 +209,7 @@ function inviteErrorMessage(code: InviteMemberErrorCode): string {
             class="flex items-center justify-between gap-2 rounded-lg border border-default bg-elevated p-3"
           >
             <p class="min-w-0 truncate text-sm text-default">
-              {{ member.memberEmail }}
+              {{ memberDisplayName(member) }}
             </p>
             <UButton
               variant="ghost"
@@ -189,31 +230,40 @@ function inviteErrorMessage(code: InviteMemberErrorCode): string {
 
     <template #footer>
       <div class="flex w-full flex-col gap-2">
-        <UFormField
-          label="Inviter par email"
-          :error="
-            inviteError !== null ? inviteErrorMessage(inviteError) : undefined
-          "
+        <UForm
+          :schema="inviteByDisplayNameSchema"
+          :state="trimmedInviteState"
+          class="flex flex-col gap-2"
+          @submit="submitInvite"
         >
-          <UInput
-            v-model="inviteEmail"
-            type="email"
-            placeholder="ami@exemple.com"
-            :disabled="isLoadingMembers || isInviting"
-            class="w-full"
-            @keydown.enter.prevent="submitInvite"
-          />
-        </UFormField>
-        <UButton
-          color="primary"
-          size="lg"
-          :loading="isInviting"
-          :disabled="isLoadingMembers || isInviting || inviteEmail.trim() === ''"
-          block
-          @click="submitInvite"
-        >
-          Inviter
-        </UButton>
+          <UFormField
+            label="Inviter par pseudo"
+            name="displayName"
+            :error="
+              inviteError !== null ? inviteErrorMessage(inviteError) : undefined
+            "
+          >
+            <UInput
+              v-model="inviteState.displayName"
+              placeholder="Pseudo de l'invité"
+              :disabled="isLoadingMembers || isInviting"
+              class="w-full"
+            />
+          </UFormField>
+          <UButton
+            type="submit"
+            color="primary"
+            size="lg"
+            :loading="isInviting"
+            :disabled="
+              isLoadingMembers || isInviting
+                || inviteState.displayName.trim() === ''
+            "
+            block
+          >
+            Inviter
+          </UButton>
+        </UForm>
         <UButton
           variant="ghost"
           color="neutral"

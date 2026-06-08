@@ -105,7 +105,7 @@ export function mapMatchDomainToInsert(match: Match): MatchInsert {
 
 // --- TournamentMember ---
 // Pas de mapper Domain → Insert : les insertions passent exclusivement
-// par la RPC invite_tournament_member_by_email (cf. SupabaseRepository).
+// par la RPC invite_tournament_member_by_display_name (cf. SupabaseRepository).
 
 export function mapTournamentMemberRowToDomain(
   row: TournamentMemberRow,

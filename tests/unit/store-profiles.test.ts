@@ -141,7 +141,7 @@ function createMockRepository(overrides: Partial<{
     saveMatches: async () => {},
     getMembersByTournament: async () => [],
     getMyMemberships: overrides.getMyMemberships ?? (async () => []),
-    inviteMemberByEmail: async () => {
+    inviteMemberByDisplayName: async () => {
       throw new InviteMemberError('unknown')
     },
     removeMember: async () => {},

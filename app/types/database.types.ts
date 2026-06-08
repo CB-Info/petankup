@@ -223,8 +223,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      invite_tournament_member_by_email: {
-        Args: { p_email: string; p_tournament_id: string }
+      invite_tournament_member_by_display_name: {
+        Args: { p_display_name: string; p_tournament_id: string }
         Returns: {
           created_at: string
           id: string
