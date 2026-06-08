@@ -19,9 +19,12 @@ type ChainResult = { data: unknown, error: { message: string } | null }
 type MockChain = {
   select: ReturnType<typeof vi.fn>
   eq: ReturnType<typeof vi.fn>
+  in: ReturnType<typeof vi.fn>
   upsert: ReturnType<typeof vi.fn>
   delete: ReturnType<typeof vi.fn>
+  update: ReturnType<typeof vi.fn>
   maybeSingle: ReturnType<typeof vi.fn>
+  single: ReturnType<typeof vi.fn>
   then: (onFulfilled: (value: ChainResult) => unknown) => unknown
 }
 
@@ -29,9 +32,12 @@ function makeChainWithResult(result: ChainResult): MockChain {
   const chain: Partial<MockChain> = {}
   chain.select = vi.fn(() => chain)
   chain.eq = vi.fn(() => chain)
+  chain.in = vi.fn(() => chain)
   chain.upsert = vi.fn(() => chain)
   chain.delete = vi.fn(() => chain)
+  chain.update = vi.fn(() => chain)
   chain.maybeSingle = vi.fn(() => chain)
+  chain.single = vi.fn(() => chain)
   chain.then = onFulfilled => onFulfilled(result)
   return chain as MockChain
 }
@@ -595,5 +601,151 @@ describe('SupabaseRepository — removeMember', () => {
     const { repo } = makeRepoWithChain(chain)
 
     await expect(repo.removeMember('any')).rejects.toThrow('member delete failed')
+  })
+})
+
+// --- Profiles ---
+
+function makeProfileRow(overrides: Partial<{ id: string, display_name: string }> = {}) {
+  return {
+    id: overrides.id ?? OWNER_ID,
+    display_name: overrides.display_name ?? 'Alice',
+    created_at: NOW,
+    updated_at: NOW,
+  }
+}
+
+describe('SupabaseRepository — getProfileById', () => {
+  it('returns the mapped profile when the row exists', async () => {
+    const chain = makeChainWithResult({ data: makeProfileRow(), error: null })
+    const { repo, from } = makeRepoWithChain(chain)
+
+    const profile = await repo.getProfileById(OWNER_ID)
+
+    expect(from).toHaveBeenCalledWith('profiles')
+    expect(chain.eq).toHaveBeenCalledWith('id', OWNER_ID)
+    expect(chain.maybeSingle).toHaveBeenCalled()
+    expect(profile).toEqual({
+      id: OWNER_ID,
+      displayName: 'Alice',
+      createdAt: NOW,
+      updatedAt: NOW,
+    })
+  })
+
+  it('returns undefined when the row is not visible (RLS) or absent', async () => {
+    const chain = makeChainWithResult({ data: null, error: null })
+    const { repo } = makeRepoWithChain(chain)
+
+    expect(await repo.getProfileById('missing')).toBeUndefined()
+  })
+
+  it('throws when Supabase returns an error', async () => {
+    const chain = makeChainWithResult({
+      data: null,
+      error: { message: 'profile fetch failed' },
+    })
+    const { repo } = makeRepoWithChain(chain)
+
+    await expect(repo.getProfileById(OWNER_ID)).rejects.toThrow('profile fetch failed')
+  })
+})
+
+describe('SupabaseRepository — getProfilesByIds', () => {
+  it('returns [] without touching the client when ids is empty', async () => {
+    const chain = makeChainWithResult({ data: [], error: null })
+    const { repo, from } = makeRepoWithChain(chain)
+
+    expect(await repo.getProfilesByIds([])).toEqual([])
+    expect(from).not.toHaveBeenCalled()
+  })
+
+  it('deduplicates ids before calling .in', async () => {
+    const chain = makeChainWithResult({
+      data: [makeProfileRow({ id: OWNER_ID }), makeProfileRow({ id: INVITEE_USER_ID, display_name: 'Bob' })],
+      error: null,
+    })
+    const { repo, from } = makeRepoWithChain(chain)
+
+    await repo.getProfilesByIds([OWNER_ID, OWNER_ID, INVITEE_USER_ID])
+
+    expect(from).toHaveBeenCalledWith('profiles')
+    expect(chain.in).toHaveBeenCalledTimes(1)
+    const [column, values] = chain.in.mock.calls[0]!
+    expect(column).toBe('id')
+    expect(values).toHaveLength(2)
+    expect(values).toEqual(expect.arrayContaining([OWNER_ID, INVITEE_USER_ID]))
+  })
+
+  it('maps the returned rows to Profile[]', async () => {
+    const chain = makeChainWithResult({
+      data: [
+        makeProfileRow({ id: OWNER_ID, display_name: 'Alice' }),
+        makeProfileRow({ id: INVITEE_USER_ID, display_name: 'Bob' }),
+      ],
+      error: null,
+    })
+    const { repo } = makeRepoWithChain(chain)
+
+    const profiles = await repo.getProfilesByIds([OWNER_ID, INVITEE_USER_ID])
+    expect(profiles).toEqual([
+      { id: OWNER_ID, displayName: 'Alice', createdAt: NOW, updatedAt: NOW },
+      { id: INVITEE_USER_ID, displayName: 'Bob', createdAt: NOW, updatedAt: NOW },
+    ])
+  })
+
+  it('returns [] when data is null (no row matches RLS)', async () => {
+    const chain = makeChainWithResult({ data: null, error: null })
+    const { repo } = makeRepoWithChain(chain)
+
+    expect(await repo.getProfilesByIds([OWNER_ID])).toEqual([])
+  })
+
+  it('throws when Supabase returns an error', async () => {
+    const chain = makeChainWithResult({
+      data: null,
+      error: { message: 'profiles batch failed' },
+    })
+    const { repo } = makeRepoWithChain(chain)
+
+    await expect(repo.getProfilesByIds([OWNER_ID])).rejects.toThrow(
+      'profiles batch failed',
+    )
+  })
+})
+
+describe('SupabaseRepository — updateMyProfile', () => {
+  it('updates display_name for the given user and returns the mapped row', async () => {
+    const chain = makeChainWithResult({
+      data: makeProfileRow({ display_name: 'Alice (updated)' }),
+      error: null,
+    })
+    const { repo, from } = makeRepoWithChain(chain)
+
+    const profile = await repo.updateMyProfile(OWNER_ID, 'Alice (updated)')
+
+    expect(from).toHaveBeenCalledWith('profiles')
+    expect(chain.update).toHaveBeenCalledWith({ display_name: 'Alice (updated)' })
+    expect(chain.eq).toHaveBeenCalledWith('id', OWNER_ID)
+    expect(chain.select).toHaveBeenCalled()
+    expect(chain.single).toHaveBeenCalled()
+    expect(profile).toEqual({
+      id: OWNER_ID,
+      displayName: 'Alice (updated)',
+      createdAt: NOW,
+      updatedAt: NOW,
+    })
+  })
+
+  it('throws when Supabase returns an error (RLS denial or CHECK violation)', async () => {
+    const chain = makeChainWithResult({
+      data: null,
+      error: { message: 'new row violates row-level security policy' },
+    })
+    const { repo } = makeRepoWithChain(chain)
+
+    await expect(repo.updateMyProfile(OWNER_ID, 'X')).rejects.toThrow(
+      'new row violates row-level security policy',
+    )
   })
 })

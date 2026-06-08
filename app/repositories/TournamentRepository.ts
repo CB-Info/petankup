@@ -1,4 +1,4 @@
-import type { Match, Team, Tournament, TournamentMember } from '../types'
+import type { Match, Profile, Team, Tournament, TournamentMember } from '../types'
 
 // Contrat de persistance pour le domaine pétanque. Toutes les méthodes
 // sont asynchrones — l'implémentation actuelle (SupabaseRepository) fait
@@ -29,4 +29,14 @@ export interface TournamentRepository {
   getMyMemberships(userId: string): Promise<TournamentMember[]>
   inviteMemberByEmail(tournamentId: string, email: string): Promise<TournamentMember>
   removeMember(memberId: string): Promise<void>
+
+  // Profils utilisateurs. La table est peuplée par le trigger DB
+  // au signup (cf. C.1), le repo ne fait ni création ni
+  // suppression. getProfileById retourne undefined si non visible
+  // via RLS (distingué d'une erreur réseau via .maybeSingle).
+  // getProfilesByIds est best-effort : les ids non visibles via
+  // RLS sont silencieusement absents du retour.
+  getProfileById(id: string): Promise<Profile | undefined>
+  getProfilesByIds(ids: string[]): Promise<Profile[]>
+  updateMyProfile(userId: string, displayName: string): Promise<Profile>
 }

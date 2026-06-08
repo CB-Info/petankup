@@ -3,6 +3,7 @@ import type { Database } from '../types/database.types'
 import type {
   InviteMemberErrorCode,
   Match,
+  Profile,
   Team,
   Tournament,
   TournamentMember,
@@ -12,6 +13,7 @@ import type { TournamentRepository } from './TournamentRepository'
 import {
   mapMatchDomainToInsert,
   mapMatchRowToDomain,
+  mapProfileRowToDomain,
   mapTeamDomainToInsert,
   mapTeamRowToDomain,
   mapTournamentDomainToInsert,
@@ -176,5 +178,44 @@ export class SupabaseRepository implements TournamentRepository {
       .delete()
       .eq('id', memberId)
     if (error !== null) throw new Error(error.message)
+  }
+
+  // --- Profiles ---
+  // La table profiles est peuplée par le trigger DB au signup (cf.
+  // migration C.1). Le repo ne fait ni insert ni delete : seulement
+  // SELECT (un et batch) et UPDATE de display_name pour soi.
+  // RLS C.1 garantit que la visibilité est scopée par co-tournoi
+  // avec granularité fine, et que l'UPDATE n'autorise que self.
+
+  async getProfileById(id: string): Promise<Profile | undefined> {
+    const { data, error } = await this.client
+      .from('profiles')
+      .select('id, display_name, created_at, updated_at')
+      .eq('id', id)
+      .maybeSingle()
+    if (error !== null) throw new Error(error.message)
+    return data === null ? undefined : mapProfileRowToDomain(data)
+  }
+
+  async getProfilesByIds(ids: string[]): Promise<Profile[]> {
+    if (ids.length === 0) return []
+    const uniqueIds = [...new Set(ids)]
+    const { data, error } = await this.client
+      .from('profiles')
+      .select('id, display_name, created_at, updated_at')
+      .in('id', uniqueIds)
+    if (error !== null) throw new Error(error.message)
+    return (data ?? []).map(mapProfileRowToDomain)
+  }
+
+  async updateMyProfile(userId: string, displayName: string): Promise<Profile> {
+    const { data, error } = await this.client
+      .from('profiles')
+      .update({ display_name: displayName })
+      .eq('id', userId)
+      .select('id, display_name, created_at, updated_at')
+      .single()
+    if (error !== null) throw new Error(error.message)
+    return mapProfileRowToDomain(data)
   }
 }

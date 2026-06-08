@@ -206,6 +206,17 @@ function createMockRepository(): TournamentRepository {
         member => member.id !== memberId,
       )
     },
+
+    // Profile methods : stubs minimaux pour satisfaire l'interface
+    // TournamentRepository (cf. C.2). Les tests de ce fichier ne
+    // touchent jamais aux actions profile — la couverture profile
+    // vit dans tests/unit/store-profiles.test.ts. Si un nouveau
+    // test ici dépend du profil, étendre ces stubs.
+    getProfileById: async () => undefined,
+    getProfilesByIds: async () => [],
+    updateMyProfile: async () => {
+      throw new Error('Not implemented in this test mock')
+    },
   }
 }
 
