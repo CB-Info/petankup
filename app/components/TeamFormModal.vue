@@ -3,6 +3,7 @@
 // affiche un toast via useErrorToast (voir composables/useErrorToast).
 import type { Team } from '../types'
 import { teamSchema } from '../utils/teamSchema'
+import { computeNextTeamNameDefault } from '../utils/team-defaults'
 
 const props = defineProps<{
   open: boolean
@@ -15,6 +16,7 @@ const emit = defineEmits<{
 }>()
 
 const tournamentStore = useTournamentStore()
+const { teams } = storeToRefs(tournamentStore)
 const { showError } = useErrorToast()
 
 const MAX_PLAYERS_PER_TEAM = 3
@@ -39,14 +41,15 @@ const state = reactive<{ name: string, players: string[] }>({
 
 // Le state du formulaire doit refléter la team passée à l'ouverture, et
 // repartir à zéro pour une création — sinon on garderait l'état laissé
-// par l'ouverture précédente.
+// par l'ouverture précédente. En création, le nom est prérempli avec le
+// défaut "Équipe N" (recalculé à chaque ouverture via le watch ci-dessous).
 function resetStateFromProps() {
   if (props.team) {
     state.name = props.team.name
     state.players = [...props.team.players]
   }
   else {
-    state.name = ''
+    state.name = computeNextTeamNameDefault(teams.value.map(team => team.name))
     state.players = ['']
   }
 }
