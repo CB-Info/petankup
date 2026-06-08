@@ -55,11 +55,13 @@ const trimmedInviteState = computed(() => ({
   displayName: inviteState.displayName.trim(),
 }))
 
-// Affichage live du pseudo de l'invité via le cache profileById, avec
-// fallback sur member_email (snapshot d'invitation) tant que le profil
-// n'est pas hydraté ou s'il n'est pas visible.
+// Affichage live du pseudo de l'invité via le cache profileById. Tant que le
+// profil n'est pas hydraté, on affiche un placeholder neutre — JAMAIS l'email
+// (l'invitant invite par pseudo et ne doit pas voir l'email du membre). Le
+// pseudo étant NOT NULL + unique depuis la Phase D, aucun fallback email n'a
+// de raison d'exister.
 function memberDisplayName(member: TournamentMember): string {
-  return profileById.value[member.userId]?.displayName ?? member.memberEmail
+  return profileById.value[member.userId]?.displayName ?? '…'
 }
 
 // Hydrate les profils des membres affichés à chaque évolution de la liste.
