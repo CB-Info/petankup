@@ -18,11 +18,26 @@ export interface Tournament {
   updatedAt: string;
 }
 
+export interface TeamPlayer {
+  id: string;
+  teamId: string;
+  tournamentId: string;
+  // null = joueur libre (saisi à la main, pas de compte) ; non-null = joueur
+  // lié à un compte. Mis à NULL si le compte est supprimé (cascade DB).
+  userId: string | null;
+  // Snapshot DB du pseudo au moment de l'écriture. Pour un joueur lié, l'UI
+  // préfère le pseudo live (cf. getPlayerDisplayName) ; ce snapshot reste le
+  // fallback (profil non hydraté, ou compte supprimé).
+  displayNameSnapshot: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Team {
   id: string;
   tournamentId: string;
   name: string;
-  players: string[];
+  players: TeamPlayer[];
   createdAt: string;
   updatedAt: string;
 }
@@ -75,6 +90,7 @@ export type InviteMemberErrorCode =
   | "self_invite"
   | "already_member"
   | "tournament_completed"
+  | "member_in_team"
   | "unknown";
 
 export class InviteMemberError extends Error {

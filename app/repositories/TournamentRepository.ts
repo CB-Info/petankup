@@ -11,6 +11,13 @@ import type { Match, Profile, Team, Tournament, TournamentMember } from '../type
 // Le repository est agnostique d'identité — getMyMemberships reçoit le
 // userId résolu par le store (cf. currentUserId), il ne le découvre pas
 // lui-même.
+//
+// Équipes : les écritures (createTeam / updateTeam) passent EXCLUSIVEMENT par
+// les RPCs create_team_with_players / update_team_with_players (écriture
+// atomique team + team_players, snapshot de pseudo côté DB). getTeamsByTournament
+// lit l'embed team_players(*). removeMember passe par la RPC
+// remove_tournament_member (gates owner + completed + member_in_team) et peut
+// throw InviteMemberError.
 export interface TournamentRepository {
   getAllTournaments(): Promise<Tournament[]>
   getTournamentById(id: string): Promise<Tournament | undefined>
@@ -18,7 +25,16 @@ export interface TournamentRepository {
   deleteTournament(id: string): Promise<void>
 
   getTeamsByTournament(tournamentId: string): Promise<Team[]>
-  saveTeam(team: Team): Promise<void>
+  createTeam(
+    tournamentId: string,
+    name: string,
+    players: Array<{ userId: string | null, displayName: string }>,
+  ): Promise<Team>
+  updateTeam(
+    teamId: string,
+    name: string,
+    players: Array<{ userId: string | null, displayName: string }>,
+  ): Promise<Team>
   deleteTeam(id: string): Promise<void>
 
   getMatchesByTournament(tournamentId: string): Promise<Match[]>

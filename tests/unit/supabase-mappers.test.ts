@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { Database } from '../../app/types/database.types'
-import type { Match, Profile, Team, Tournament, TournamentMember } from '../../app/types'
+import type { Match, Profile, Team, TeamPlayer, Tournament, TournamentMember } from '../../app/types'
 import {
   mapMatchDomainToInsert,
   mapMatchRowToDomain,
   mapProfileRowToDomain,
-  mapTeamDomainToInsert,
+  mapTeamPlayerRowToDomain,
   mapTeamRowToDomain,
   mapTournamentDomainToInsert,
   mapTournamentMemberRowToDomain,
@@ -14,6 +14,8 @@ import {
 
 type TournamentRow = Database['public']['Tables']['tournaments']['Row']
 type TeamRow = Database['public']['Tables']['teams']['Row']
+type TeamPlayerRow = Database['public']['Tables']['team_players']['Row']
+type TeamRowWithPlayers = TeamRow & { team_players: TeamPlayerRow[] }
 type MatchRow = Database['public']['Tables']['matches']['Row']
 type TournamentMemberRow
   = Database['public']['Tables']['tournament_members']['Row']
@@ -166,48 +168,110 @@ describe('mapTournamentDomainToInsert', () => {
   })
 })
 
-describe('mapTeamRowToDomain', () => {
-  it('translates a complete row to a Team', () => {
-    const row: TeamRow = {
-      id: TEAM_A_ID,
-      tournament_id: TOURNAMENT_ID,
-      name: 'Les Boulistes',
-      players: ['Alice', 'Bob'],
-      created_at: NOW,
-      updated_at: NOW,
-    }
+const PLAYER_FREE_ID = '88888888-8888-4888-8888-888888888888'
+const PLAYER_LINKED_ID = '99999999-9999-4999-8999-999999999999'
 
-    expect(mapTeamRowToDomain(row)).toEqual<Team>({
-      id: TEAM_A_ID,
+function makeTeamPlayerRow(overrides: Partial<TeamPlayerRow> = {}): TeamPlayerRow {
+  return {
+    id: PLAYER_FREE_ID,
+    team_id: TEAM_A_ID,
+    tournament_id: TOURNAMENT_ID,
+    user_id: null,
+    display_name: 'Alice',
+    created_at: NOW,
+    updated_at: NOW,
+    ...overrides,
+  }
+}
+
+describe('mapTeamPlayerRowToDomain', () => {
+  it('translates a free player row (user_id null)', () => {
+    expect(mapTeamPlayerRowToDomain(makeTeamPlayerRow())).toEqual<TeamPlayer>({
+      id: PLAYER_FREE_ID,
+      teamId: TEAM_A_ID,
       tournamentId: TOURNAMENT_ID,
-      name: 'Les Boulistes',
-      players: ['Alice', 'Bob'],
+      userId: null,
+      displayNameSnapshot: 'Alice',
+      createdAt: NOW,
+      updatedAt: NOW,
+    })
+  })
+
+  it('translates a linked player row (user_id set)', () => {
+    const row = makeTeamPlayerRow({
+      id: PLAYER_LINKED_ID,
+      user_id: INVITEE_USER_ID,
+      display_name: 'Bob',
+    })
+    expect(mapTeamPlayerRowToDomain(row)).toEqual<TeamPlayer>({
+      id: PLAYER_LINKED_ID,
+      teamId: TEAM_A_ID,
+      tournamentId: TOURNAMENT_ID,
+      userId: INVITEE_USER_ID,
+      displayNameSnapshot: 'Bob',
       createdAt: NOW,
       updatedAt: NOW,
     })
   })
 })
 
-describe('mapTeamDomainToInsert', () => {
-  it('translates a domain Team to an Insert payload', () => {
-    const team: Team = {
-      id: TEAM_A_ID,
-      tournamentId: TOURNAMENT_ID,
-      name: 'Les Boulistes',
-      players: ['Alice', 'Bob'],
-      createdAt: NOW,
-      updatedAt: NOW,
-    }
-
-    const insert = mapTeamDomainToInsert(team)
-    expect(insert).toEqual({
+describe('mapTeamRowToDomain', () => {
+  it('translates a complete row with embedded team_players to a Team', () => {
+    const row: TeamRowWithPlayers = {
       id: TEAM_A_ID,
       tournament_id: TOURNAMENT_ID,
       name: 'Les Boulistes',
-      players: ['Alice', 'Bob'],
+      created_at: NOW,
+      updated_at: NOW,
+      team_players: [
+        makeTeamPlayerRow(),
+        makeTeamPlayerRow({
+          id: PLAYER_LINKED_ID,
+          user_id: INVITEE_USER_ID,
+          display_name: 'Bob',
+        }),
+      ],
+    }
+
+    expect(mapTeamRowToDomain(row)).toEqual<Team>({
+      id: TEAM_A_ID,
+      tournamentId: TOURNAMENT_ID,
+      name: 'Les Boulistes',
+      players: [
+        {
+          id: PLAYER_FREE_ID,
+          teamId: TEAM_A_ID,
+          tournamentId: TOURNAMENT_ID,
+          userId: null,
+          displayNameSnapshot: 'Alice',
+          createdAt: NOW,
+          updatedAt: NOW,
+        },
+        {
+          id: PLAYER_LINKED_ID,
+          teamId: TEAM_A_ID,
+          tournamentId: TOURNAMENT_ID,
+          userId: INVITEE_USER_ID,
+          displayNameSnapshot: 'Bob',
+          createdAt: NOW,
+          updatedAt: NOW,
+        },
+      ],
+      createdAt: NOW,
+      updatedAt: NOW,
     })
-    expect(insert).not.toHaveProperty('created_at')
-    expect(insert).not.toHaveProperty('updated_at')
+  })
+
+  it('maps an empty team_players embed to an empty players array', () => {
+    const row: TeamRowWithPlayers = {
+      id: TEAM_A_ID,
+      tournament_id: TOURNAMENT_ID,
+      name: 'Équipe vide',
+      created_at: NOW,
+      updated_at: NOW,
+      team_players: [],
+    }
+    expect(mapTeamRowToDomain(row).players).toEqual([])
   })
 })
 

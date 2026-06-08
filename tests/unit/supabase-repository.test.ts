@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '../../app/types/database.types'
-import type { Match, Team, Tournament, TournamentMember } from '../../app/types'
+import type { Match, Tournament, TournamentMember } from '../../app/types'
 import { InviteMemberError, ProfileError } from '../../app/types'
 import { SupabaseRepository } from '../../app/repositories/SupabaseRepository'
 
@@ -72,6 +72,24 @@ function makeRepoWithRpcResult(result: ChainResult): {
   return { repo: new SupabaseRepository(client), rpc }
 }
 
+// Helper pour les RPCs qui écrivent puis refetch (createTeam / updateTeam) :
+// rpc() résout vers rpcResult, et from() vers un chain résolvant chainResult.
+function makeRepoWithRpcAndChain(rpcResult: ChainResult, chainResult: ChainResult): {
+  repo: SupabaseRepository
+  rpc: ReturnType<typeof vi.fn>
+  from: ReturnType<typeof vi.fn>
+  chain: MockChain
+} {
+  const rpcThenable = {
+    then: (onFulfilled: (value: ChainResult) => unknown) => onFulfilled(rpcResult),
+  }
+  const rpc = vi.fn(() => rpcThenable)
+  const chain = makeChainWithResult(chainResult)
+  const from = vi.fn(() => chain)
+  const client = { from, rpc } as unknown as SupabaseClient<Database>
+  return { repo: new SupabaseRepository(client), rpc, from, chain }
+}
+
 const NOW = '2026-01-01T00:00:00.000Z'
 const OWNER_ID = '11111111-1111-4111-8111-111111111111'
 const TOURNAMENT_ID = '22222222-2222-4222-8222-222222222222'
@@ -122,25 +140,28 @@ function makeTournamentDomain(): Tournament {
   }
 }
 
+function makeTeamPlayerRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: '88888888-8888-4888-8888-888888888888',
+    team_id: TEAM_A_ID,
+    tournament_id: TOURNAMENT_ID,
+    user_id: null,
+    display_name: 'Alice',
+    created_at: NOW,
+    updated_at: NOW,
+    ...overrides,
+  }
+}
+
+// teams est toujours lu avec l'embed team_players(*).
 function makeTeamRow() {
   return {
     id: TEAM_A_ID,
     tournament_id: TOURNAMENT_ID,
     name: 'Les Boulistes',
-    players: ['Alice', 'Bob'],
     created_at: NOW,
     updated_at: NOW,
-  }
-}
-
-function makeTeamDomain(): Team {
-  return {
-    id: TEAM_A_ID,
-    tournamentId: TOURNAMENT_ID,
-    name: 'Les Boulistes',
-    players: ['Alice', 'Bob'],
-    createdAt: NOW,
-    updatedAt: NOW,
+    team_players: [makeTeamPlayerRow()],
   }
 }
 
@@ -291,10 +312,12 @@ describe('SupabaseRepository — getTeamsByTournament', () => {
     const teams = await repo.getTeamsByTournament(TOURNAMENT_ID)
 
     expect(from).toHaveBeenCalledWith('teams')
-    expect(chain.select).toHaveBeenCalledWith('*')
+    expect(chain.select).toHaveBeenCalledWith('*, team_players(*)')
     expect(chain.eq).toHaveBeenCalledWith('tournament_id', TOURNAMENT_ID)
     expect(teams).toHaveLength(1)
     expect(teams[0]!.tournamentId).toBe(TOURNAMENT_ID)
+    expect(teams[0]!.players).toHaveLength(1)
+    expect(teams[0]!.players[0]!.displayNameSnapshot).toBe('Alice')
   })
 
   it('throws when Supabase returns an error', async () => {
@@ -305,27 +328,87 @@ describe('SupabaseRepository — getTeamsByTournament', () => {
   })
 })
 
-describe('SupabaseRepository — saveTeam', () => {
-  it('upserts the team with the mapped Insert payload', async () => {
-    const chain = makeChainWithResult({ data: null, error: null })
-    const { repo, from } = makeRepoWithChain(chain)
+describe('SupabaseRepository — createTeam', () => {
+  it('calls the RPC with mapped players and refetches the full team', async () => {
+    const { repo, rpc, from, chain } = makeRepoWithRpcAndChain(
+      { data: TEAM_A_ID, error: null },
+      { data: makeTeamRow(), error: null },
+    )
 
-    await repo.saveTeam(makeTeamDomain())
+    const team = await repo.createTeam(TOURNAMENT_ID, 'Les Boulistes', [
+      { userId: null, displayName: 'Alice' },
+      { userId: INVITEE_USER_ID, displayName: 'Bob' },
+    ])
 
-    expect(from).toHaveBeenCalledWith('teams')
-    expect(chain.upsert).toHaveBeenCalledWith({
-      id: TEAM_A_ID,
-      tournament_id: TOURNAMENT_ID,
-      name: 'Les Boulistes',
-      players: ['Alice', 'Bob'],
+    expect(rpc).toHaveBeenCalledWith('create_team_with_players', {
+      p_tournament_id: TOURNAMENT_ID,
+      p_name: 'Les Boulistes',
+      p_players: [
+        { user_id: null, display_name: 'Alice' },
+        { user_id: INVITEE_USER_ID, display_name: 'Bob' },
+      ],
     })
+    // Refetch ciblé de l'équipe complète.
+    expect(from).toHaveBeenCalledWith('teams')
+    expect(chain.select).toHaveBeenCalledWith('*, team_players(*)')
+    expect(chain.eq).toHaveBeenCalledWith('id', TEAM_A_ID)
+    expect(chain.single).toHaveBeenCalled()
+    expect(team.id).toBe(TEAM_A_ID)
+    expect(team.players).toHaveLength(1)
   })
 
-  it('throws when Supabase returns an error', async () => {
-    const chain = makeChainWithResult({ data: null, error: { message: 'team upsert failed' } })
-    const { repo } = makeRepoWithChain(chain)
+  it('throws when the RPC returns an error', async () => {
+    const { repo } = makeRepoWithRpcAndChain(
+      { data: null, error: { message: 'not_owner raised by RPC' } },
+      { data: null, error: null },
+    )
 
-    await expect(repo.saveTeam(makeTeamDomain())).rejects.toThrow('team upsert failed')
+    await expect(
+      repo.createTeam(TOURNAMENT_ID, 'X', [{ userId: null, displayName: 'A' }]),
+    ).rejects.toThrow('not_owner raised by RPC')
+  })
+
+  it('throws when the RPC returns a null team id', async () => {
+    const { repo } = makeRepoWithRpcAndChain(
+      { data: null, error: null },
+      { data: null, error: null },
+    )
+
+    await expect(
+      repo.createTeam(TOURNAMENT_ID, 'X', [{ userId: null, displayName: 'A' }]),
+    ).rejects.toThrow('create_team_with_players returned null')
+  })
+})
+
+describe('SupabaseRepository — updateTeam', () => {
+  it('calls the RPC with team id + mapped players and refetches', async () => {
+    const { repo, rpc, chain } = makeRepoWithRpcAndChain(
+      { data: TEAM_A_ID, error: null },
+      { data: makeTeamRow(), error: null },
+    )
+
+    const team = await repo.updateTeam(TEAM_A_ID, 'Renommée', [
+      { userId: null, displayName: 'Alice' },
+    ])
+
+    expect(rpc).toHaveBeenCalledWith('update_team_with_players', {
+      p_team_id: TEAM_A_ID,
+      p_name: 'Renommée',
+      p_players: [{ user_id: null, display_name: 'Alice' }],
+    })
+    expect(chain.eq).toHaveBeenCalledWith('id', TEAM_A_ID)
+    expect(team.id).toBe(TEAM_A_ID)
+  })
+
+  it('throws when the RPC returns an error', async () => {
+    const { repo } = makeRepoWithRpcAndChain(
+      { data: null, error: { message: 'team_not_found raised by RPC' } },
+      { data: null, error: null },
+    )
+
+    await expect(
+      repo.updateTeam(TEAM_A_ID, 'X', [{ userId: null, displayName: 'A' }]),
+    ).rejects.toThrow('team_not_found raised by RPC')
   })
 })
 
@@ -591,25 +674,56 @@ describe('SupabaseRepository — inviteMemberByDisplayName', () => {
 })
 
 describe('SupabaseRepository — removeMember', () => {
-  it('deletes the row by member id', async () => {
-    const chain = makeChainWithResult({ data: null, error: null })
-    const { repo, from } = makeRepoWithChain(chain)
+  it('calls the remove_tournament_member RPC with the member id', async () => {
+    const { repo, rpc } = makeRepoWithRpcResult({ data: null, error: null })
 
     await repo.removeMember(MEMBER_ID)
 
-    expect(from).toHaveBeenCalledWith('tournament_members')
-    expect(chain.delete).toHaveBeenCalled()
-    expect(chain.eq).toHaveBeenCalledWith('id', MEMBER_ID)
+    expect(rpc).toHaveBeenCalledWith('remove_tournament_member', {
+      p_member_id: MEMBER_ID,
+    })
   })
 
-  it('throws when Supabase returns an error', async () => {
-    const chain = makeChainWithResult({
-      data: null,
-      error: { message: 'member delete failed' },
-    })
-    const { repo } = makeRepoWithChain(chain)
+  it.each([
+    'member_in_team',
+    'not_owner',
+    'tournament_completed',
+    'not_authenticated',
+  ] as const)(
+    'throws InviteMemberError(%s) when the RPC raises that code',
+    async (code) => {
+      const { repo } = makeRepoWithRpcResult({
+        data: null,
+        error: { message: `error: ${code} raised by RPC` },
+      })
 
-    await expect(repo.removeMember('any')).rejects.toThrow('member delete failed')
+      let caught: unknown = null
+      try {
+        await repo.removeMember(MEMBER_ID)
+      }
+      catch (error) {
+        caught = error
+      }
+      expect(caught).toBeInstanceOf(InviteMemberError)
+      expect((caught as InviteMemberError).code).toBe(code)
+    },
+  )
+
+  it('throws InviteMemberError(unknown) for an unrecognized RPC error', async () => {
+    const { repo } = makeRepoWithRpcResult({
+      data: null,
+      error: { message: 'connection reset by peer' },
+    })
+
+    let caught: unknown = null
+    try {
+      await repo.removeMember(MEMBER_ID)
+    }
+    catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(InviteMemberError)
+    expect((caught as InviteMemberError).code).toBe('unknown')
   })
 })
 

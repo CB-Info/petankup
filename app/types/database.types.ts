@@ -106,12 +106,49 @@ export type Database = {
         }
         Relationships: []
       }
+      team_players: {
+        Row: {
+          created_at: string
+          display_name: string
+          id: string
+          team_id: string
+          tournament_id: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          display_name: string
+          id?: string
+          team_id: string
+          tournament_id: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          display_name?: string
+          id?: string
+          team_id?: string
+          tournament_id?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_players_team_belongs_to_tournament"
+            columns: ["team_id", "tournament_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id", "tournament_id"]
+          },
+        ]
+      }
       teams: {
         Row: {
           created_at: string
           id: string
           name: string
-          players: string[]
           tournament_id: string
           updated_at: string
         }
@@ -119,7 +156,6 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
-          players: string[]
           tournament_id: string
           updated_at?: string
         }
@@ -127,7 +163,6 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
-          players?: string[]
           tournament_id?: string
           updated_at?: string
         }
@@ -223,6 +258,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_team_with_players: {
+        Args: { p_name: string; p_players: Json; p_tournament_id: string }
+        Returns: string
+      }
       invite_tournament_member_by_display_name: {
         Args: { p_display_name: string; p_tournament_id: string }
         Returns: {
@@ -240,9 +279,17 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      remove_tournament_member: {
+        Args: { p_member_id: string }
+        Returns: undefined
+      }
       text_array_has_no_blank_values: {
         Args: { arr: string[] }
         Returns: boolean
+      }
+      update_team_with_players: {
+        Args: { p_name: string; p_players: Json; p_team_id: string }
+        Returns: string
       }
     }
     Enums: {

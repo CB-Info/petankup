@@ -2,6 +2,7 @@
 // Pattern d'erreurs : les actions du store throw ; on attrape ici et on
 // affiche un toast via useErrorToast (voir composables/useErrorToast).
 import type { Match, Team, TournamentStatus } from "../../../types";
+import { getPlayerDisplayName } from "../../../utils/team-player-display";
 
 const route = useRoute();
 const tournamentStore = useTournamentStore();
@@ -146,6 +147,15 @@ const teamsById = computed<Record<string, Team>>(() => {
 
 function getTeamById(teamId: string): Team | null {
   return teamsById.value[teamId] ?? null;
+}
+
+// Joueurs d'une équipe en texte " · " : pseudo live (via profileById) pour
+// les joueurs liés hydratés, snapshot sinon. Les profils du tournoi sont
+// déjà hydratés sur cette page (ownership + membres chargés).
+function formatTeamPlayers(team: Team): string {
+  return team.players
+    .map((player) => getPlayerDisplayName(player, profileById.value))
+    .join(" · ");
 }
 
 type RoundGroup = { roundNumber: number; matches: Match[] };
@@ -494,7 +504,7 @@ useHead(() => ({
                         {{ team.name }}
                       </p>
                       <p class="truncate text-sm text-toned">
-                        {{ team.players.join(" · ") }}
+                        {{ formatTeamPlayers(team) }}
                       </p>
                     </div>
                     <div v-if="isOwner" class="flex shrink-0 gap-1">

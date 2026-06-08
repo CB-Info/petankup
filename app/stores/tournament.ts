@@ -28,7 +28,7 @@ type CreateTournamentInput = Omit<
 
 type AddTeamInput = {
   name: string
-  players: string[]
+  players: Array<{ userId: string | null, displayName: string }>
 }
 
 export const useTournamentStore = defineStore('tournament', () => {
@@ -381,32 +381,34 @@ export const useTournamentStore = defineStore('tournament', () => {
     })
   }
 
+  // L'id, les timestamps et le snapshot de pseudo sont gérés par la RPC
+  // create_team_with_players ; le store ne génère plus rien côté client et
+  // pousse le Team reconstitué retourné par le repo.
   async function addTeam(data: AddTeamInput): Promise<Team> {
     return withLoading(async () => {
       const tournament = requireCurrentTournament()
-      const timestamp = nowIso()
-      const newTeam: Team = {
-        id: crypto.randomUUID(),
-        tournamentId: tournament.id,
-        name: data.name,
-        players: data.players,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      }
-      await repository.saveTeam(newTeam)
+      const newTeam = await repository.createTeam(
+        tournament.id,
+        data.name,
+        data.players,
+      )
       teams.value.push(newTeam)
       return newTeam
     })
   }
 
-  async function updateTeam(team: Team): Promise<void> {
+  async function updateTeam(
+    teamId: string,
+    name: string,
+    players: AddTeamInput['players'],
+  ): Promise<Team> {
     return withLoading(async () => {
-      const updated: Team = { ...team, updatedAt: nowIso() }
-      await repository.saveTeam(updated)
-      const teamIndex = teams.value.findIndex(existing => existing.id === updated.id)
+      const updated = await repository.updateTeam(teamId, name, players)
+      const teamIndex = teams.value.findIndex(team => team.id === updated.id)
       if (teamIndex !== -1) {
         teams.value[teamIndex] = updated
       }
+      return updated
     })
   }
 
