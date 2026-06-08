@@ -59,6 +59,10 @@ watch(
     isLoadingDetail.value = true;
     try {
       await tournamentStore.loadTournament(id);
+      // Fire-and-forget : les membres alimentent le sélecteur de joueurs du
+      // TeamFormModal (et la modal "Gérer les invités"). loadTournamentMembers
+      // a son propre token de course, OK de l'appeler en parallèle sans await.
+      void tournamentStore.loadTournamentMembers(id);
     } catch (error) {
       if (requestId === loadDetailRequestId) showError(error);
     } finally {
