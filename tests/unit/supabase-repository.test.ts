@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '../../app/types/database.types'
 import type { Match, Team, Tournament, TournamentMember } from '../../app/types'
-import { InviteMemberError } from '../../app/types'
+import { InviteMemberError, ProfileError } from '../../app/types'
 import { SupabaseRepository } from '../../app/repositories/SupabaseRepository'
 
 // Mock du client Supabase. Le builder Supabase est un objet PromiseLike :
@@ -14,7 +14,10 @@ import { SupabaseRepository } from '../../app/repositories/SupabaseRepository'
 // toutes les méthodes sont des `vi.fn()` espionnables, et dont le `then`
 // résout au { data, error } passé en paramètre.
 
-type ChainResult = { data: unknown, error: { message: string } | null }
+type ChainResult = {
+  data: unknown
+  error: { message: string, code?: string } | null
+}
 
 type MockChain = {
   select: ReturnType<typeof vi.fn>
@@ -747,5 +750,64 @@ describe('SupabaseRepository — updateMyProfile', () => {
     await expect(repo.updateMyProfile(OWNER_ID, 'X')).rejects.toThrow(
       'new row violates row-level security policy',
     )
+  })
+
+  it('throws ProfileError(display_name_taken) on 23505 over the display_name index', async () => {
+    const chain = makeChainWithResult({
+      data: null,
+      error: {
+        code: '23505',
+        message:
+          'duplicate key value violates unique constraint "profiles_display_name_lower_idx"',
+      },
+    })
+    const { repo } = makeRepoWithChain(chain)
+
+    let caught: unknown
+    try {
+      await repo.updateMyProfile(OWNER_ID, 'Alice')
+    }
+    catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(ProfileError)
+    expect((caught as ProfileError).code).toBe('display_name_taken')
+  })
+
+  it('throws a generic Error (not ProfileError) on 23505 over a different unique index', async () => {
+    const chain = makeChainWithResult({
+      data: null,
+      error: {
+        code: '23505',
+        message:
+          'duplicate key value violates unique constraint "some_other_unique_idx"',
+      },
+    })
+    const { repo } = makeRepoWithChain(chain)
+
+    let caught: unknown
+    try {
+      await repo.updateMyProfile(OWNER_ID, 'Alice')
+    }
+    catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(Error)
+    expect(caught).not.toBeInstanceOf(ProfileError)
+  })
+
+  it('throws a generic Error for non-unique-violation Supabase errors', async () => {
+    const chain = makeChainWithResult({
+      data: null,
+      error: { code: 'PGRST116', message: 'some other error' },
+    })
+    const { repo } = makeRepoWithChain(chain)
+
+    await expect(repo.updateMyProfile(OWNER_ID, 'Alice')).rejects.toThrow(
+      'some other error',
+    )
+    await expect(
+      repo.updateMyProfile(OWNER_ID, 'Alice'),
+    ).rejects.not.toBeInstanceOf(ProfileError)
   })
 })

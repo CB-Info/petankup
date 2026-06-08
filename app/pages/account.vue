@@ -15,6 +15,14 @@
 // contente d'observer hasFetchedCurrentProfile / currentProfile. Le seul
 // loadCurrentProfile() déclenché ici est le bouton "Réessayer" de l'état
 // d'erreur — sûr, car atteindre cet état implique l'identité résolue.
+//
+// Conflit d'unicité du pseudo : updateMyProfile peut throw une
+// ProfileError('display_name_taken') (mappée depuis le 23505 Postgres par
+// le repo). On l'affiche inline sous le champ, pas en toast, pour laisser
+// l'utilisateur corriger sans recharger. Même pattern que les codes
+// d'erreur typés des invitations (InviteMemberError).
+import { ProfileError, type ProfileErrorCode } from "../types";
+
 const tournamentStore = useTournamentStore();
 const { currentProfile, hasFetchedCurrentProfile } =
   storeToRefs(tournamentStore);
@@ -42,6 +50,20 @@ const trimmedFormState = computed(() => ({
 
 const isSubmitting = ref(false);
 
+// Erreur serveur affichée inline sous le champ (conflit d'unicité). Reset
+// à chaque soumission pour ne pas garder une erreur déjà corrigée.
+const displayNameError = ref<string | null>(null);
+
+// Switch exhaustif sans default : TypeScript signalera tout code ajouté à
+// ProfileErrorCode qui ne serait pas mappé ici (miroir de
+// inviteErrorMessage dans TournamentMembersModal).
+function profileErrorMessage(code: ProfileErrorCode): string {
+  switch (code) {
+    case "display_name_taken":
+      return "Ce pseudo est déjà utilisé. Choisissez-en un autre.";
+  }
+}
+
 // Rien à enregistrer si le pseudo est vide après trim, ou identique au
 // pseudo courant — on désactive le submit dans ces cas.
 const canSubmit = computed(() => {
@@ -54,6 +76,7 @@ const canSubmit = computed(() => {
 async function onSubmit() {
   if (isSubmitting.value || !canSubmit.value) return;
   isSubmitting.value = true;
+  displayNameError.value = null;
   try {
     await tournamentStore.updateMyProfile(state.displayName.trim());
     toast.add({
@@ -62,6 +85,10 @@ async function onSubmit() {
       icon: "i-lucide-check",
     });
   } catch (error) {
+    if (error instanceof ProfileError) {
+      displayNameError.value = profileErrorMessage(error.code);
+      return;
+    }
     showError(error);
   } finally {
     isSubmitting.value = false;
@@ -124,7 +151,12 @@ useHead({ title: "Mon compte — Pétankup" });
         class="space-y-4"
         @submit="onSubmit"
       >
-        <UFormField label="Pseudo" name="displayName" required>
+        <UFormField
+          label="Pseudo"
+          name="displayName"
+          :error="displayNameError ?? undefined"
+          required
+        >
           <UInput
             v-model="state.displayName"
             placeholder="Votre pseudo"
