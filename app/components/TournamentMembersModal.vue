@@ -41,6 +41,7 @@ const openModel = computed({
 const tournamentStore = useTournamentStore()
 const { currentTournamentMembers, profileById } = storeToRefs(tournamentStore)
 const { showError } = useErrorToast()
+const toast = useToast()
 
 const inviteState = reactive({ displayName: '' })
 const inviteError = ref<InviteMemberErrorCode | null>(null)
@@ -155,6 +156,18 @@ async function removeMemberAt(member: TournamentMember): Promise<void> {
     await tournamentStore.removeMember(member.id)
   }
   catch (error) {
+    // member_in_team : le membre figure dans une équipe du tournoi. Ce n'est
+    // pas une erreur technique mais une condition métier → toast d'avertissement
+    // explicite plutôt que le toast d'erreur générique.
+    if (error instanceof InviteMemberError && error.code === 'member_in_team') {
+      toast.add({
+        title: 'Membre dans une équipe',
+        description: "Retirez-le d'abord de son équipe avant de pouvoir le désinviter.",
+        color: 'warning',
+        icon: 'i-lucide-alert-triangle',
+      })
+      return
+    }
     showError(error)
   }
   finally {
@@ -178,6 +191,10 @@ function inviteErrorMessage(code: InviteMemberErrorCode): string {
       return 'Cette personne est déjà invitée.'
     case 'tournament_completed':
       return 'Ce tournoi est terminé, plus aucune invitation possible.'
+    case 'member_in_team':
+      // Non déclenché par l'invitation (propre au retrait de membre, traité
+      // par un toast dédié dans removeMemberAt) ; présent pour l'exhaustivité.
+      return 'Action impossible.'
     case 'unknown':
       return 'Une erreur est survenue. Réessayez.'
   }

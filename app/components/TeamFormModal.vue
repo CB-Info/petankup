@@ -46,7 +46,9 @@ const state = reactive<{ name: string, players: string[] }>({
 function resetStateFromProps() {
   if (props.team) {
     state.name = props.team.name
-    state.players = [...props.team.players]
+    // Les inputs texte sont préremplis depuis le snapshot (le pseudo live et
+    // le sélecteur typé arriveront en G.3).
+    state.players = props.team.players.map(player => player.displayNameSnapshot)
   }
   else {
     state.name = computeNextTeamNameDefault(teams.value.map(team => team.name))
@@ -91,13 +93,26 @@ async function onSubmit() {
   isSubmitting.value = true
   try {
     const payload = buildSubmissionPayload()
+    // G.2 : l'UI ne gère encore que des joueurs libres (saisie texte). On
+    // wrappe chaque nom en { userId: null, displayName }. Le sélecteur de
+    // joueurs liés viendra en G.3.
+    const wrappedPlayers = payload.players.map(playerName => ({
+      userId: null,
+      displayName: playerName,
+    }))
     let savedTeam: Team
     if (props.team) {
-      savedTeam = { ...props.team, ...payload }
-      await tournamentStore.updateTeam(savedTeam)
+      savedTeam = await tournamentStore.updateTeam(
+        props.team.id,
+        payload.name,
+        wrappedPlayers,
+      )
     }
     else {
-      savedTeam = await tournamentStore.addTeam(payload)
+      savedTeam = await tournamentStore.addTeam({
+        name: payload.name,
+        players: wrappedPlayers,
+      })
     }
     emit('saved', savedTeam)
     openModel.value = false

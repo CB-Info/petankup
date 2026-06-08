@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { flushPromises } from '@vue/test-utils'
 import type { TournamentRepository } from '../../app/repositories/TournamentRepository'
-import type { Match, Team, Tournament, TournamentMember } from '../../app/types'
+import type { Match, Team, TeamPlayer, Tournament, TournamentMember } from '../../app/types'
 import { InviteMemberError } from '../../app/types'
 
 const STUB_USER_ID = '99999999-9999-4999-8999-999999999999'
@@ -85,6 +85,24 @@ const NOW = '2026-01-01T00:00:00.000Z'
 const UUID_V4_REGEX
   = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
+// Reconstitue un TeamPlayer comme le ferait la RPC : id généré, snapshot du
+// displayName fourni, userId conservé.
+function makeTeamPlayer(
+  teamId: string,
+  tournamentId: string,
+  input: { userId: string | null, displayName: string },
+): TeamPlayer {
+  return {
+    id: crypto.randomUUID(),
+    teamId,
+    tournamentId,
+    userId: input.userId,
+    displayNameSnapshot: input.displayName,
+    createdAt: NOW,
+    updatedAt: NOW,
+  }
+}
+
 function makeTournament(overrides: Partial<Tournament> = {}): Tournament {
   return {
     id: crypto.randomUUID(),
@@ -153,8 +171,32 @@ function createMockRepository(): TournamentRepository {
     },
 
     getTeamsByTournament: async tournamentId => teams.filter(team => team.tournamentId === tournamentId),
-    saveTeam: async (team) => {
-      teams = upsertById(teams, team)
+    createTeam: async (tournamentId, name, players) => {
+      const teamId = crypto.randomUUID()
+      const newTeam: Team = {
+        id: teamId,
+        tournamentId,
+        name,
+        players: players.map(player => makeTeamPlayer(teamId, tournamentId, player)),
+        createdAt: NOW,
+        updatedAt: NOW,
+      }
+      teams = [...teams, newTeam]
+      return newTeam
+    },
+    updateTeam: async (teamId, name, players) => {
+      const existing = teams.find(team => team.id === teamId)
+      const tournamentId = existing?.tournamentId ?? 't-unknown'
+      const updated: Team = {
+        id: teamId,
+        tournamentId,
+        name,
+        players: players.map(player => makeTeamPlayer(teamId, tournamentId, player)),
+        createdAt: existing?.createdAt ?? NOW,
+        updatedAt: NOW,
+      }
+      teams = upsertById(teams, updated)
+      return updated
     },
     deleteTeam: async (id) => {
       teams = teams.filter(team => team.id !== id)
@@ -202,8 +244,21 @@ function createMockRepository(): TournamentRepository {
       return inserted
     },
     removeMember: async (memberId) => {
+      // Reproduit le gate member_in_team de la RPC remove_tournament_member :
+      // refus si le membre figure (par userId) dans une équipe du tournoi.
+      const member = tournamentMembers.find(entry => entry.id === memberId)
+      if (member !== undefined) {
+        const memberIsInATeam = teams.some(
+          team =>
+            team.tournamentId === member.tournamentId
+            && team.players.some(player => player.userId === member.userId),
+        )
+        if (memberIsInATeam) {
+          throw new InviteMemberError('member_in_team')
+        }
+      }
       tournamentMembers = tournamentMembers.filter(
-        member => member.id !== memberId,
+        entry => entry.id !== memberId,
       )
     },
 
@@ -341,9 +396,9 @@ describe('useTournamentStore — teams', () => {
     })
     await store.loadTournament(created.id)
 
-    await store.addTeam({ name: 'Les Boulistes', players: ['Alice', 'Bob'] })
-    await store.addTeam({ name: 'Les Pointus', players: ['Carla', 'Diego'] })
-    await store.addTeam({ name: 'Les Tireurs', players: ['Eva', 'Farid'] })
+    await store.addTeam({ name: 'Les Boulistes', players: [{ userId: null, displayName: 'Alice' }, { userId: null, displayName: 'Bob' }] })
+    await store.addTeam({ name: 'Les Pointus', players: [{ userId: null, displayName: 'Carla' }, { userId: null, displayName: 'Diego' }] })
+    await store.addTeam({ name: 'Les Tireurs', players: [{ userId: null, displayName: 'Eva' }, { userId: null, displayName: 'Farid' }] })
 
     expect(store.teams).toHaveLength(3)
     for (const team of store.teams) {
@@ -360,9 +415,9 @@ describe('useTournamentStore — teams', () => {
       format: 'round_robin',
     })
     await store.loadTournament(created.id)
-    await store.addTeam({ name: 'Équipe A', players: ['Alice'] })
-    const teamToDelete = await store.addTeam({ name: 'Équipe B', players: ['Bob'] })
-    await store.addTeam({ name: 'Équipe C', players: ['Carla'] })
+    await store.addTeam({ name: 'Équipe A', players: [{ userId: null, displayName: 'Alice' }] })
+    const teamToDelete = await store.addTeam({ name: 'Équipe B', players: [{ userId: null, displayName: 'Bob' }] })
+    await store.addTeam({ name: 'Équipe C', players: [{ userId: null, displayName: 'Carla' }] })
 
     await store.deleteTeam(teamToDelete.id)
 
@@ -380,10 +435,10 @@ describe('useTournamentStore — matches', () => {
       format: 'round_robin',
     })
     await store.loadTournament(created.id)
-    await store.addTeam({ name: 'A', players: ['Alice'] })
-    await store.addTeam({ name: 'B', players: ['Bob'] })
-    await store.addTeam({ name: 'C', players: ['Carla'] })
-    await store.addTeam({ name: 'D', players: ['Diego'] })
+    await store.addTeam({ name: 'A', players: [{ userId: null, displayName: 'Alice' }] })
+    await store.addTeam({ name: 'B', players: [{ userId: null, displayName: 'Bob' }] })
+    await store.addTeam({ name: 'C', players: [{ userId: null, displayName: 'Carla' }] })
+    await store.addTeam({ name: 'D', players: [{ userId: null, displayName: 'Diego' }] })
     return { store, tournamentId: created.id }
   }
 
@@ -439,8 +494,8 @@ describe('useTournamentStore — completeTournament', () => {
       format: 'round_robin',
     })
     await store.loadTournament(created.id)
-    await store.addTeam({ name: 'A', players: ['Alice'] })
-    await store.addTeam({ name: 'B', players: ['Bob'] })
+    await store.addTeam({ name: 'A', players: [{ userId: null, displayName: 'Alice' }] })
+    await store.addTeam({ name: 'B', players: [{ userId: null, displayName: 'Bob' }] })
     await store.generateMatches()
     expect(store.matches).toHaveLength(1)
     await store.submitScore(store.matches[0]!.id, 13, 5)
@@ -459,10 +514,10 @@ describe('useTournamentStore — completeTournament', () => {
       format: 'round_robin',
     })
     await store.loadTournament(created.id)
-    await store.addTeam({ name: 'A', players: ['Alice'] })
-    await store.addTeam({ name: 'B', players: ['Bob'] })
-    await store.addTeam({ name: 'C', players: ['Carla'] })
-    await store.addTeam({ name: 'D', players: ['Diego'] })
+    await store.addTeam({ name: 'A', players: [{ userId: null, displayName: 'Alice' }] })
+    await store.addTeam({ name: 'B', players: [{ userId: null, displayName: 'Bob' }] })
+    await store.addTeam({ name: 'C', players: [{ userId: null, displayName: 'Carla' }] })
+    await store.addTeam({ name: 'D', players: [{ userId: null, displayName: 'Diego' }] })
     await store.generateMatches()
     await store.submitScore(store.matches[0]!.id, 13, 4)
 
@@ -1037,6 +1092,37 @@ describe('useTournamentStore — invite/remove members', () => {
     // La liste courante n'a pas perdu son membre — le DELETE repo s'est
     // exécuté sur un id inconnu (no-op côté mock) sans perturber l'état
     // local.
+    expect(store.currentTournamentMembers).toHaveLength(1)
+  })
+
+  it('removeMember — propagates InviteMemberError("member_in_team") when the member is in a team', async () => {
+    const store = useTournamentStore()
+    await flushPromises()
+    const created = await store.createTournament({
+      name: 'Tournoi',
+      date: NOW,
+      format: 'round_robin',
+    })
+    await store.loadTournament(created.id)
+    await store.loadTournamentMembers(created.id)
+    const invited = await store.inviteMemberByDisplayName(created.id, 'Bob')
+    // Bob est ajouté à une équipe en tant que joueur lié à son compte.
+    await store.addTeam({
+      name: 'Les Boulistes',
+      players: [{ userId: invited.userId, displayName: 'Bob' }],
+    })
+
+    let caught: unknown = null
+    try {
+      await store.removeMember(invited.id)
+    }
+    catch (error) {
+      caught = error
+    }
+
+    expect(caught).toBeInstanceOf(InviteMemberError)
+    expect((caught as InviteMemberError).code).toBe('member_in_team')
+    // Le membre n'a pas été retiré.
     expect(store.currentTournamentMembers).toHaveLength(1)
   })
 })

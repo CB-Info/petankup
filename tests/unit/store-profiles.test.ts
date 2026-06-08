@@ -134,7 +134,12 @@ function createMockRepository(overrides: Partial<{
     saveTournament: async () => {},
     deleteTournament: async () => {},
     getTeamsByTournament: async () => [],
-    saveTeam: async () => {},
+    createTeam: async () => {
+      throw new Error('Not implemented in this test mock')
+    },
+    updateTeam: async () => {
+      throw new Error('Not implemented in this test mock')
+    },
     deleteTeam: async () => {},
     getMatchesByTournament: async () => [],
     saveMatch: async () => {},

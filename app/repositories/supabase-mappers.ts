@@ -1,5 +1,5 @@
 import type { Database } from '../types/database.types'
-import type { Match, Profile, Team, Tournament, TournamentMember } from '../types'
+import type { Match, Profile, Team, TeamPlayer, Tournament, TournamentMember } from '../types'
 
 // Traductions pures entre les rows Supabase (snake_case, nullables stricts)
 // et les types domaine (camelCase, optionnels via `?`). Aucune logique
@@ -9,7 +9,10 @@ import type { Match, Profile, Team, Tournament, TournamentMember } from '../type
 type TournamentRow = Database['public']['Tables']['tournaments']['Row']
 type TournamentInsert = Database['public']['Tables']['tournaments']['Insert']
 type TeamRow = Database['public']['Tables']['teams']['Row']
-type TeamInsert = Database['public']['Tables']['teams']['Insert']
+type TeamPlayerRow = Database['public']['Tables']['team_players']['Row']
+// (pas de TeamInsert : teams n'est plus écrit en direct, cf. RPCs.)
+// teams est toujours lu avec ses joueurs embarqués (select '*, team_players(*)').
+type TeamRowWithPlayers = TeamRow & { team_players: TeamPlayerRow[] }
 type MatchRow = Database['public']['Tables']['matches']['Row']
 type MatchInsert = Database['public']['Tables']['matches']['Insert']
 type TournamentMemberRow = Database['public']['Tables']['tournament_members']['Row']
@@ -50,24 +53,31 @@ export function mapTournamentDomainToInsert(
 }
 
 // --- Team ---
+// Pas de mapper Domain → Insert : les écritures sur teams passent
+// exclusivement par les RPCs create_team_with_players /
+// update_team_with_players (comme tournament_members et team_players).
+// La lecture se fait toujours avec l'embed team_players(*).
 
-export function mapTeamRowToDomain(row: TeamRow): Team {
+export function mapTeamPlayerRowToDomain(row: TeamPlayerRow): TeamPlayer {
   return {
     id: row.id,
+    teamId: row.team_id,
     tournamentId: row.tournament_id,
-    name: row.name,
-    players: row.players,
+    userId: row.user_id,
+    displayNameSnapshot: row.display_name,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
 }
 
-export function mapTeamDomainToInsert(team: Team): TeamInsert {
+export function mapTeamRowToDomain(row: TeamRowWithPlayers): Team {
   return {
-    id: team.id,
-    tournament_id: team.tournamentId,
-    name: team.name,
-    players: team.players,
+    id: row.id,
+    tournamentId: row.tournament_id,
+    name: row.name,
+    players: row.team_players.map(mapTeamPlayerRowToDomain),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
   }
 }
 

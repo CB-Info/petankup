@@ -14,7 +14,6 @@ import {
   mapMatchDomainToInsert,
   mapMatchRowToDomain,
   mapProfileRowToDomain,
-  mapTeamDomainToInsert,
   mapTeamRowToDomain,
   mapTournamentDomainToInsert,
   mapTournamentMemberRowToDomain,
@@ -33,6 +32,7 @@ const KNOWN_INVITE_ERROR_CODES: readonly InviteMemberErrorCode[] = [
   'self_invite',
   'already_member',
   'tournament_completed',
+  'member_in_team',
 ]
 
 function parseInviteErrorCode(rawMessage: string): InviteMemberErrorCode {
@@ -88,16 +88,65 @@ export class SupabaseRepository implements TournamentRepository {
   async getTeamsByTournament(tournamentId: string): Promise<Team[]> {
     const { data, error } = await this.client
       .from('teams')
-      .select('*')
+      .select('*, team_players(*)')
       .eq('tournament_id', tournamentId)
     if (error !== null) throw new Error(error.message)
     return (data ?? []).map(mapTeamRowToDomain)
   }
 
-  async saveTeam(team: Team): Promise<void> {
-    const insertPayload = mapTeamDomainToInsert(team)
-    const { error } = await this.client.from('teams').upsert(insertPayload)
+  // Reconstitue un Team complet (avec ses joueurs) après une RPC qui ne
+  // retourne que l'id. Deux round-trips assumés (write RPC puis read embed).
+  private async getTeamByIdWithPlayers(teamId: string): Promise<Team> {
+    const { data, error } = await this.client
+      .from('teams')
+      .select('*, team_players(*)')
+      .eq('id', teamId)
+      .single()
     if (error !== null) throw new Error(error.message)
+    return mapTeamRowToDomain(data)
+  }
+
+  // Écriture atomique team + joueurs via RPC. Le payload mappe le contrat
+  // domaine { userId, displayName } vers le jsonb attendu par la RPC
+  // { user_id, display_name }.
+  async createTeam(
+    tournamentId: string,
+    name: string,
+    players: Array<{ userId: string | null, displayName: string }>,
+  ): Promise<Team> {
+    const playersPayload = players.map(player => ({
+      user_id: player.userId,
+      display_name: player.displayName,
+    }))
+    const { data: createdTeamId, error } = await this.client.rpc(
+      'create_team_with_players',
+      { p_tournament_id: tournamentId, p_name: name, p_players: playersPayload },
+    )
+    if (error !== null) throw new Error(error.message)
+    if (createdTeamId === null) {
+      throw new Error('create_team_with_players returned null')
+    }
+    return this.getTeamByIdWithPlayers(createdTeamId)
+  }
+
+  async updateTeam(
+    teamId: string,
+    name: string,
+    players: Array<{ userId: string | null, displayName: string }>,
+  ): Promise<Team> {
+    const playersPayload = players.map(player => ({
+      user_id: player.userId,
+      display_name: player.displayName,
+    }))
+    const { data: updatedTeamId, error } = await this.client.rpc(
+      'update_team_with_players',
+      { p_team_id: teamId, p_name: name, p_players: playersPayload },
+    )
+    if (error !== null) throw new Error(error.message)
+    if (updatedTeamId === null) {
+      throw new Error('update_team_with_players returned null')
+    }
+    return this.getTeamByIdWithPlayers(updatedTeamId)
   }
 
   async deleteTeam(id: string): Promise<void> {
@@ -171,12 +220,17 @@ export class SupabaseRepository implements TournamentRepository {
     return mapTournamentMemberRowToDomain(data)
   }
 
+  // Retrait d'un membre via la RPC remove_tournament_member (le DELETE direct
+  // n'est plus autorisé depuis G.1 — policy retirée). Gates côté DB : owner,
+  // tournoi non terminé, et member_in_team. Les codes métier remontent en
+  // InviteMemberError (même mécanique que inviteMemberByDisplayName).
   async removeMember(memberId: string): Promise<void> {
-    const { error } = await this.client
-      .from('tournament_members')
-      .delete()
-      .eq('id', memberId)
-    if (error !== null) throw new Error(error.message)
+    const { error } = await this.client.rpc('remove_tournament_member', {
+      p_member_id: memberId,
+    })
+    if (error !== null) {
+      throw new InviteMemberError(parseInviteErrorCode(error.message))
+    }
   }
 
   // --- Profiles ---

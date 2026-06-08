@@ -14,7 +14,17 @@ function makeTeam(id: string, tournamentId = 't1'): Team {
     id,
     tournamentId,
     name: id,
-    players: [id],
+    players: [
+      {
+        id: `${id}-p1`,
+        teamId: id,
+        tournamentId,
+        userId: null,
+        displayNameSnapshot: id,
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+    ],
     createdAt: NOW,
     updatedAt: NOW,
   }

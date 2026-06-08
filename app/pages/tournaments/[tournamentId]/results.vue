@@ -2,12 +2,21 @@
 // Pattern d'erreurs : les actions du store throw ; on attrape ici et on
 // affiche un toast via useErrorToast (voir composables/useErrorToast).
 import type { Ranking, Team } from "../../../types";
+import { getPlayerDisplayName } from "../../../utils/team-player-display";
 
 const route = useRoute();
 const tournamentStore = useTournamentStore();
-const { currentTournament, teams, matches, ranking } =
+const { currentTournament, teams, matches, ranking, profileById } =
   storeToRefs(tournamentStore);
 const { showError } = useErrorToast();
+
+// Joueurs d'une équipe en texte " · " : pseudo live via profileById si
+// hydraté, snapshot sinon. Cf. page détail.
+function formatTeamPlayers(team: Team): string {
+  return team.players
+    .map((player) => getPlayerDisplayName(player, profileById.value))
+    .join(" · ");
+}
 
 const tournamentId = computed(() => route.params.tournamentId as string);
 
@@ -203,7 +212,7 @@ useHead(() => ({
             v-if="entry.team.players.length > 0"
             class="mt-1 line-clamp-2 text-xs text-toned sm:text-sm"
           >
-            {{ entry.team.players.join(" · ") }}
+            {{ formatTeamPlayers(entry.team) }}
           </p>
         </div>
       </div>
