@@ -11,12 +11,32 @@ const {
   matches,
   ranking,
   isOwnerOfCurrentTournament,
+  profileById,
 } = storeToRefs(tournamentStore);
 const { showError } = useErrorToast();
 
 // Alias local lisible : tout l'ownership conditionne des actions admin
 // dans le template, on ne le manipule jamais ailleurs.
 const isOwner = isOwnerOfCurrentTournament;
+
+// Hydratation best-effort du profil de l'organisateur, uniquement quand
+// je ne suis pas l'owner (inutile d'afficher "Organisé par moi"). Le
+// `void` est fire-and-forget ; loadProfilesByIds ne throw jamais.
+watch(
+  currentTournament,
+  (tournament) => {
+    if (tournament && !isOwner.value) {
+      void tournamentStore.loadProfilesByIds([tournament.ownerId]);
+    }
+  },
+  { immediate: true },
+);
+
+// Nom de l'organisateur si son profil est résolu, sinon null (la ligne
+// "Organisé par" est alors omise — pas de placeholder).
+function organizerName(ownerId: string): string | null {
+  return profileById.value[ownerId]?.displayName ?? null;
+}
 
 const tournamentId = computed(() => route.params.tournamentId as string);
 
@@ -404,6 +424,12 @@ useHead(() => ({
             <template v-if="currentTournament.location">
               · {{ currentTournament.location }}
             </template>
+          </p>
+          <p
+            v-if="!isOwner && organizerName(currentTournament.ownerId)"
+            class="truncate text-sm text-toned"
+          >
+            Organisé par {{ organizerName(currentTournament.ownerId) }}
           </p>
         </div>
         <div class="flex shrink-0 flex-col items-end gap-1">
