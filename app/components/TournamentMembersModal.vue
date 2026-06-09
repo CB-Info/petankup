@@ -225,9 +225,12 @@ function inviteErrorMessage(code: InviteMemberErrorCode): string {
             :key="member.id"
             class="flex items-center justify-between gap-2 rounded-lg border border-default bg-elevated p-3"
           >
-            <p class="min-w-0 truncate text-sm text-default">
-              {{ memberDisplayName(member) }}
-            </p>
+            <UUser
+              class="min-w-0"
+              :name="memberDisplayName(member)"
+              :avatar="{ alt: memberDisplayName(member) }"
+              :to="`/profile/${member.userId}`"
+            />
             <UButton
               variant="ghost"
               color="neutral"
