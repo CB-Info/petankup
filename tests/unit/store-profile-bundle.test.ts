@@ -108,7 +108,8 @@ function createMockRepository(overrides: Partial<{
   const repo: BundleMockRepository = {
     getAllTournaments: overrides.getAllTournaments ?? (async () => []),
     getTournamentById: async () => undefined,
-    saveTournament: async () => {},
+    createTournament: async () => {},
+    updateTournament: async () => {},
     deleteTournament: async () => {},
     getTeamsByTournament: async () => [],
     createTeam: async () => {
@@ -119,8 +120,8 @@ function createMockRepository(overrides: Partial<{
     },
     deleteTeam: async () => {},
     getMatchesByTournament: async () => [],
-    saveMatch: async () => {},
-    saveMatches: async () => {},
+    createMatches: async () => {},
+    updateMatch: async () => {},
     getMembersByTournament: async () => [],
     getMyMemberships: overrides.getMyMemberships ?? (async () => []),
     inviteMemberByDisplayName: async () => {
