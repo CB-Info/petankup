@@ -213,6 +213,7 @@ export type Database = {
       }
       tournaments: {
         Row: {
+          completed_at: string | null
           created_at: string
           date: string
           description: string | null
@@ -226,6 +227,7 @@ export type Database = {
           visibility: Database["public"]["Enums"]["tournament_visibility"]
         }
         Insert: {
+          completed_at?: string | null
           created_at?: string
           date: string
           description?: string | null
@@ -239,6 +241,7 @@ export type Database = {
           visibility?: Database["public"]["Enums"]["tournament_visibility"]
         }
         Update: {
+          completed_at?: string | null
           created_at?: string
           date?: string
           description?: string | null
@@ -253,6 +256,105 @@ export type Database = {
         }
         Relationships: []
       }
+      user_stats: {
+        Row: {
+          last_tournament_at: string | null
+          last_updated: string
+          losses: number
+          matches_played: number
+          podiums: number
+          points_conceded: number
+          points_scored: number
+          tournaments_played: number
+          tournaments_won: number
+          user_id: string
+          wins: number
+        }
+        Insert: {
+          last_tournament_at?: string | null
+          last_updated?: string
+          losses?: number
+          matches_played?: number
+          podiums?: number
+          points_conceded?: number
+          points_scored?: number
+          tournaments_played?: number
+          tournaments_won?: number
+          user_id: string
+          wins?: number
+        }
+        Update: {
+          last_tournament_at?: string | null
+          last_updated?: string
+          losses?: number
+          matches_played?: number
+          podiums?: number
+          points_conceded?: number
+          points_scored?: number
+          tournaments_played?: number
+          tournaments_won?: number
+          user_id?: string
+          wins?: number
+        }
+        Relationships: []
+      }
+      user_tournament_results: {
+        Row: {
+          final_rank: number
+          is_podium: boolean
+          is_winner: boolean
+          losses: number
+          points_conceded: number
+          points_scored: number
+          team_id: string
+          tournament_completed_at: string
+          tournament_id: string
+          user_id: string
+          wins: number
+        }
+        Insert: {
+          final_rank: number
+          is_podium?: boolean
+          is_winner?: boolean
+          losses?: number
+          points_conceded?: number
+          points_scored?: number
+          team_id: string
+          tournament_completed_at: string
+          tournament_id: string
+          user_id: string
+          wins?: number
+        }
+        Update: {
+          final_rank?: number
+          is_podium?: boolean
+          is_winner?: boolean
+          losses?: number
+          points_conceded?: number
+          points_scored?: number
+          team_id?: string
+          tournament_completed_at?: string
+          tournament_id?: string
+          user_id?: string
+          wins?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_tournament_results_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_tournament_results_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -261,6 +363,10 @@ export type Database = {
       create_team_with_players: {
         Args: { p_name: string; p_players: Json; p_tournament_id: string }
         Returns: string
+      }
+      get_user_profile: {
+        Args: { p_user_id: string }
+        Returns: Json
       }
       invite_tournament_member_by_display_name: {
         Args: { p_display_name: string; p_tournament_id: string }
