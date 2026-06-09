@@ -1,5 +1,5 @@
 import type { Database } from '../types/database.types'
-import type { Match, Profile, Team, TeamPlayer, Tournament, TournamentMember } from '../types'
+import type { Match, Profile, Team, TeamPlayer, Teammate, Tournament, TournamentMember, UserProfileBundle, UserStats, UserTournamentResult } from '../types'
 
 // Traductions pures entre les rows Supabase (snake_case, nullables stricts)
 // et les types domaine (camelCase, optionnels via `?`). Aucune logique
@@ -142,5 +142,107 @@ export function mapProfileRowToDomain(row: ProfileRow): Profile {
     displayName: row.display_name,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  }
+}
+
+// --- UserProfileBundle (RPC get_user_profile) ---
+// Forme brute du JSON retourné par public.get_user_profile. Snake_case,
+// nullable strict, miroir exact du json_build_object côté SQL. Exporté car
+// le repository (et les tests) en ont besoin pour typer le cast du retour
+// RPC (typé Json dans database.types.ts).
+export type RawUserProfileBundleJson = {
+  profile: {
+    id: string
+    display_name: string
+    created_at: string
+    updated_at: string
+  } | null
+  stats: {
+    matches_played: number
+    wins: number
+    losses: number
+    points_scored: number
+    points_conceded: number
+    tournaments_played: number
+    tournaments_won: number
+    podiums: number
+    last_tournament_at: string | null
+  } | null
+  results: Array<{
+    tournament_id: string
+    tournament_name: string
+    tournament_date: string
+    tournament_completed_at: string
+    team_id: string
+    team_name: string
+    wins: number
+    losses: number
+    points_scored: number
+    points_conceded: number
+    final_rank: number
+    is_winner: boolean
+    is_podium: boolean
+    teammates: Array<{ user_id: string | null, display_name: string }>
+  }>
+}
+
+// Sous-formes brutes dérivées par accès indexé : évite de redéclarer les
+// shapes et garde une source unique (RawUserProfileBundleJson).
+type RawUserStatsJson = NonNullable<RawUserProfileBundleJson['stats']>
+type RawUserTournamentResultJson = RawUserProfileBundleJson['results'][number]
+type RawTeammateJson = RawUserTournamentResultJson['teammates'][number]
+
+function mapUserStatsJsonToDomain(raw: RawUserStatsJson): UserStats {
+  return {
+    matchesPlayed: raw.matches_played,
+    wins: raw.wins,
+    losses: raw.losses,
+    pointsScored: raw.points_scored,
+    pointsConceded: raw.points_conceded,
+    tournamentsPlayed: raw.tournaments_played,
+    tournamentsWon: raw.tournaments_won,
+    podiums: raw.podiums,
+    lastTournamentAt: raw.last_tournament_at,
+  }
+}
+
+function mapTeammateJsonToDomain(raw: RawTeammateJson): Teammate {
+  return {
+    userId: raw.user_id,
+    displayName: raw.display_name,
+  }
+}
+
+function mapUserTournamentResultJsonToDomain(
+  raw: RawUserTournamentResultJson,
+): UserTournamentResult {
+  return {
+    tournamentId: raw.tournament_id,
+    tournamentName: raw.tournament_name,
+    tournamentDate: raw.tournament_date,
+    tournamentCompletedAt: raw.tournament_completed_at,
+    teamId: raw.team_id,
+    teamName: raw.team_name,
+    wins: raw.wins,
+    losses: raw.losses,
+    pointsScored: raw.points_scored,
+    pointsConceded: raw.points_conceded,
+    finalRank: raw.final_rank,
+    isWinner: raw.is_winner,
+    isPodium: raw.is_podium,
+    teammates: raw.teammates.map(mapTeammateJsonToDomain),
+  }
+}
+
+// Traduction technique pure snake_case → camelCase. Aucune logique métier :
+// pas de tri (l'ordre des results est garanti côté RPC), pas d'agrégation,
+// pas de re-hydratation de pseudo (faite au render en Phase K).
+export function mapUserProfileBundleJsonToDomain(
+  raw: RawUserProfileBundleJson,
+): UserProfileBundle {
+  return {
+    profile: raw.profile === null ? null : mapProfileRowToDomain(raw.profile),
+    stats: raw.stats === null ? null : mapUserStatsJsonToDomain(raw.stats),
+    results: (raw.results ?? []).map(mapUserTournamentResultJsonToDomain),
   }
 }

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '../../app/types/database.types'
-import type { Match, Tournament, TournamentMember } from '../../app/types'
+import type { Match, Tournament, TournamentMember, UserProfileBundle } from '../../app/types'
 import { InviteMemberError, ProfileError } from '../../app/types'
 import { SupabaseRepository } from '../../app/repositories/SupabaseRepository'
 
@@ -929,5 +929,135 @@ describe('SupabaseRepository — updateMyProfile', () => {
     await expect(
       repo.updateMyProfile(OWNER_ID, 'Alice'),
     ).rejects.not.toBeInstanceOf(ProfileError)
+  })
+})
+
+describe('SupabaseRepository — getUserProfile', () => {
+  function makeRawProfileBundle() {
+    return {
+      profile: {
+        id: INVITEE_USER_ID,
+        display_name: 'Bob',
+        created_at: NOW,
+        updated_at: NOW,
+      },
+      stats: {
+        matches_played: 2,
+        wins: 1,
+        losses: 1,
+        points_scored: 20,
+        points_conceded: 18,
+        tournaments_played: 1,
+        tournaments_won: 0,
+        podiums: 1,
+        last_tournament_at: NOW,
+      },
+      results: [
+        {
+          tournament_id: TOURNAMENT_ID,
+          tournament_name: 'Tournoi',
+          tournament_date: '2026-05-10',
+          tournament_completed_at: NOW,
+          team_id: TEAM_A_ID,
+          team_name: 'Team Bob',
+          wins: 1,
+          losses: 1,
+          points_scored: 20,
+          points_conceded: 18,
+          final_rank: 2,
+          is_winner: false,
+          is_podium: true,
+          teammates: [{ user_id: OWNER_ID, display_name: 'Alice' }],
+        },
+      ],
+    }
+  }
+
+  it('calls rpc(get_user_profile) with the user id and maps the JSON bundle', async () => {
+    const { repo, rpc } = makeRepoWithRpcResult({
+      data: makeRawProfileBundle(),
+      error: null,
+    })
+
+    const bundle = await repo.getUserProfile(INVITEE_USER_ID)
+
+    expect(rpc).toHaveBeenCalledWith('get_user_profile', {
+      p_user_id: INVITEE_USER_ID,
+    })
+    expect(bundle).toEqual<UserProfileBundle>({
+      profile: {
+        id: INVITEE_USER_ID,
+        displayName: 'Bob',
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+      stats: {
+        matchesPlayed: 2,
+        wins: 1,
+        losses: 1,
+        pointsScored: 20,
+        pointsConceded: 18,
+        tournamentsPlayed: 1,
+        tournamentsWon: 0,
+        podiums: 1,
+        lastTournamentAt: NOW,
+      },
+      results: [
+        {
+          tournamentId: TOURNAMENT_ID,
+          tournamentName: 'Tournoi',
+          tournamentDate: '2026-05-10',
+          tournamentCompletedAt: NOW,
+          teamId: TEAM_A_ID,
+          teamName: 'Team Bob',
+          wins: 1,
+          losses: 1,
+          pointsScored: 20,
+          pointsConceded: 18,
+          finalRank: 2,
+          isWinner: false,
+          isPodium: true,
+          teammates: [{ userId: OWNER_ID, displayName: 'Alice' }],
+        },
+      ],
+    })
+  })
+
+  it('relays not_authenticated as a plain Error (no typed error class)', async () => {
+    const { repo } = makeRepoWithRpcResult({
+      data: null,
+      error: { message: 'not_authenticated' },
+    })
+
+    let caught: unknown
+    try {
+      await repo.getUserProfile(INVITEE_USER_ID)
+    }
+    catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(Error)
+    expect((caught as Error).message).toBe('not_authenticated')
+    expect(caught).not.toBeInstanceOf(InviteMemberError)
+    expect(caught).not.toBeInstanceOf(ProfileError)
+  })
+
+  it('throws Error(message) on any other RPC error', async () => {
+    const { repo } = makeRepoWithRpcResult({
+      data: null,
+      error: { message: 'network down' },
+    })
+
+    await expect(repo.getUserProfile(INVITEE_USER_ID)).rejects.toThrow(
+      'network down',
+    )
+  })
+
+  it('throws when the RPC returns null data without error', async () => {
+    const { repo } = makeRepoWithRpcResult({ data: null, error: null })
+
+    await expect(repo.getUserProfile(INVITEE_USER_ID)).rejects.toThrow(
+      'get_user_profile returned null',
+    )
   })
 })

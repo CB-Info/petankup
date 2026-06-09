@@ -108,3 +108,52 @@ export class ProfileError extends Error {
     this.name = "ProfileError";
   }
 }
+
+export interface UserStats {
+  matchesPlayed: number;
+  wins: number;
+  losses: number;
+  pointsScored: number;
+  pointsConceded: number;
+  tournamentsPlayed: number;
+  tournamentsWon: number;
+  podiums: number;
+  lastTournamentAt: string | null;
+}
+
+export interface Teammate {
+  // null = joueur libre (pas de compte). Pour les coéquipiers liés à un
+  // compte, l'UI (Phase K) résoudra le pseudo live via getPlayerDisplayName
+  // en lisant profileById ; sinon elle retombe sur le snapshot.
+  userId: string | null;
+  displayName: string;
+}
+
+export interface UserTournamentResult {
+  tournamentId: string;
+  tournamentName: string;
+  tournamentDate: string; // ISO date (cf. tournaments.date)
+  tournamentCompletedAt: string; // ISO timestamp
+  teamId: string;
+  teamName: string;
+  wins: number;
+  losses: number;
+  pointsScored: number;
+  pointsConceded: number;
+  finalRank: number;
+  isWinner: boolean;
+  isPodium: boolean;
+  teammates: Teammate[];
+}
+
+export interface UserProfileBundle {
+  // null si la RPC ne trouve pas de ligne profiles pour le user (cas
+  // dégénéré : user supprimé, etc.).
+  profile: Profile | null;
+  // null si le user n'a aucun tournoi completed à son palmarès (absence
+  // de ligne user_stats côté DB).
+  stats: UserStats | null;
+  // [] si pas d'historique. Trié par tournamentCompletedAt desc côté RPC,
+  // l'ordre est à conserver tel quel.
+  results: UserTournamentResult[];
+}

@@ -12,6 +12,7 @@ import type {
   Tournament,
   TournamentMember,
   TournamentVisibility,
+  UserProfileBundle,
 } from '../types'
 import {
   computeRanking,
@@ -193,6 +194,20 @@ export const useTournamentStore = defineStore('tournament', () => {
   // l'erreur tournaments et vice-versa. Typé `unknown` — la UI (C.3)
   // décide de l'affichage.
   const lastLoadCurrentProfileError = ref<unknown>(null)
+
+  // Bundle du profil actuellement consulté (page /profile/[userId], Phase K) :
+  // { profile, stats, results }. Un seul slot — pas de cache par userId (cf.
+  // cadrage Phase J). Cleared au début de chaque loadUserProfile et au logout.
+  const currentProfileBundle = ref<UserProfileBundle | null>(null)
+
+  // True dès qu'un loadUserProfile a réussi pour la session courante. Reste
+  // false en cas d'erreur (distingue "pas chargé" de "chargé sans résultat"),
+  // cohérent avec hasFetchedTournaments. Reset au logout.
+  const hasFetchedProfileBundle = ref(false)
+
+  // Erreur du dernier loadUserProfile, ou null. Typé `unknown` — l'UI
+  // (Phase K) décide de l'affichage. Disjoint des autres erreurs du store.
+  const lastLoadProfileBundleError = ref<unknown>(null)
 
   function nowIso(): string {
     return new Date().toISOString()
@@ -756,6 +771,64 @@ export const useTournamentStore = defineStore('tournament', () => {
     return updated
   }
 
+  // Compteur monotone pour invalider les réponses tardives de
+  // loadUserProfile en cas de loads concurrents (navigation rapide entre
+  // deux profils). Pattern identique à lastLoadTournamentRequestId.
+  let lastLoadProfileBundleRequestId = 0
+
+  // Charge le bundle profil (profil + stats agrégées + journal de tournois)
+  // d'un user quelconque via la RPC get_user_profile. Capture les erreurs
+  // en interne (lastLoadProfileBundleError), ne throw JAMAIS — pattern
+  // aligné sur loadCurrentProfile.
+  //
+  // initialUserId = identité du VIEWER (pas du profil consulté), capturée
+  // pour la garde anti-écriture tardive. userId = profil consulté (peut être
+  // n'importe qui). Double garde avant toute écriture : token monotone
+  // (race load A/B) ET identité du viewer (logout/switch pendant le await).
+  async function loadUserProfile(userId: string): Promise<void> {
+    const initialUserId = currentUserId.value
+    if (initialUserId === null) return
+
+    const requestId = ++lastLoadProfileBundleRequestId
+    return withLoading(async () => {
+      // Clear-at-start : pas de flash de l'ancien profil pendant le RTT.
+      currentProfileBundle.value = null
+
+      try {
+        const bundle = await repository.getUserProfile(userId)
+        if (requestId !== lastLoadProfileBundleRequestId) return
+        if (currentUserId.value !== initialUserId) return
+
+        currentProfileBundle.value = bundle
+        hasFetchedProfileBundle.value = true
+        lastLoadProfileBundleError.value = null
+
+        // Pré-hydratation best-effort des pseudos des coéquipiers liés à un
+        // compte, pour que l'UI (Phase K) puisse résoudre le pseudo live via
+        // getPlayerDisplayName. Fire-and-forget : pas d'await, ne bloque pas
+        // le retour de loadUserProfile. loadProfilesByIds dédupe et filtre le
+        // cache ; on exclut le profil consulté lui-même (déjà dans le bundle).
+        const teammateUserIds = bundle.results
+          .flatMap(result => result.teammates)
+          .map(teammate => teammate.userId)
+          .filter(
+            (teammateUserId): teammateUserId is string =>
+              teammateUserId !== null && teammateUserId !== userId,
+          )
+        if (teammateUserIds.length > 0) {
+          void loadProfilesByIds(teammateUserIds)
+        }
+      }
+      catch (error) {
+        if (requestId !== lastLoadProfileBundleRequestId) return
+        if (currentUserId.value !== initialUserId) return
+        // hasFetchedProfileBundle reste false : distingue "pas chargé" de
+        // "chargé sans résultat".
+        lastLoadProfileBundleError.value = error
+      }
+    })
+  }
+
   // Watcher composé sur [session, user.sub]. Couvre :
   //  - le boot avec session hydratée (immediate fire) ;
   //  - le flow magic-link où useSupabaseUser tarde à s'hydrater
@@ -781,6 +854,10 @@ export const useTournamentStore = defineStore('tournament', () => {
         currentProfile.value = null
         hasFetchedCurrentProfile.value = false
         lastLoadCurrentProfileError.value = null
+        ++lastLoadProfileBundleRequestId
+        currentProfileBundle.value = null
+        hasFetchedProfileBundle.value = false
+        lastLoadProfileBundleError.value = null
         return
       }
       void loadTournamentsForCurrentSession()
@@ -827,5 +904,10 @@ export const useTournamentStore = defineStore('tournament', () => {
     loadCurrentProfile,
     loadProfilesByIds,
     updateMyProfile,
+    // Profile bundle state + action (Phase J)
+    currentProfileBundle,
+    hasFetchedProfileBundle,
+    lastLoadProfileBundleError,
+    loadUserProfile,
   }
 })
