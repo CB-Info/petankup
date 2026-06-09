@@ -1,4 +1,4 @@
-import type { Match, Profile, Team, Tournament, TournamentMember } from '../types'
+import type { Match, Profile, Team, Tournament, TournamentMember, UserProfileBundle } from '../types'
 
 // Contrat de persistance pour le domaine pétanque. Toutes les méthodes
 // sont asynchrones — l'implémentation actuelle (SupabaseRepository) fait
@@ -55,4 +55,13 @@ export interface TournamentRepository {
   getProfileById(id: string): Promise<Profile | undefined>
   getProfilesByIds(ids: string[]): Promise<Profile[]>
   updateMyProfile(userId: string, displayName: string): Promise<Profile>
+
+  // Récupère le bundle complet (profil + stats agrégées + journal de
+  // tournois) d'un user. Implémenté via la RPC SQL get_user_profile :
+  // la table user_tournament_results n'est jamais lue en direct.
+  //
+  // La RPC peut throw 'not_authenticated' si la session n'est pas
+  // résolue ; remontée en Error standard (pas de classe typée, cf.
+  // décision Phase J).
+  getUserProfile(userId: string): Promise<UserProfileBundle>
 }

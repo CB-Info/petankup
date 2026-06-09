@@ -7,6 +7,7 @@ import type {
   Team,
   Tournament,
   TournamentMember,
+  UserProfileBundle,
 } from '../types'
 import { InviteMemberError, ProfileError } from '../types'
 import type { TournamentRepository } from './TournamentRepository'
@@ -18,6 +19,8 @@ import {
   mapTournamentDomainToInsert,
   mapTournamentMemberRowToDomain,
   mapTournamentRowToDomain,
+  mapUserProfileBundleJsonToDomain,
+  type RawUserProfileBundleJson,
 } from './supabase-mappers'
 
 // Codes d'erreur connus levés par la RPC invite_tournament_member_by_display_name
@@ -280,5 +283,20 @@ export class SupabaseRepository implements TournamentRepository {
       throw new Error(error.message)
     }
     return mapProfileRowToDomain(data)
+  }
+
+  async getUserProfile(userId: string): Promise<UserProfileBundle> {
+    const { data, error } = await this.client.rpc('get_user_profile', {
+      p_user_id: userId,
+    })
+    if (error !== null) throw new Error(error.message)
+    if (data === null) {
+      throw new Error('get_user_profile returned null')
+    }
+    // Le retour de la RPC est typé Json (cf. database.types.ts). On le cast
+    // vers la forme brute attendue par le mapper avant traduction. Pas de
+    // classe d'erreur typée (cf. décision Phase J) : 'not_authenticated'
+    // remonte tel quel dans le message de l'Error standard.
+    return mapUserProfileBundleJsonToDomain(data as RawUserProfileBundleJson)
   }
 }

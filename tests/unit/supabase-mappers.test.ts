@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Database } from '../../app/types/database.types'
-import type { Match, Profile, Team, TeamPlayer, Tournament, TournamentMember } from '../../app/types'
+import type { Match, Profile, Team, TeamPlayer, Teammate, Tournament, TournamentMember, UserProfileBundle } from '../../app/types'
 import {
   mapMatchDomainToInsert,
   mapMatchRowToDomain,
@@ -10,6 +10,8 @@ import {
   mapTournamentDomainToInsert,
   mapTournamentMemberRowToDomain,
   mapTournamentRowToDomain,
+  mapUserProfileBundleJsonToDomain,
+  type RawUserProfileBundleJson,
 } from '../../app/repositories/supabase-mappers'
 
 type TournamentRow = Database['public']['Tables']['tournaments']['Row']
@@ -438,5 +440,202 @@ describe('mapProfileRowToDomain', () => {
       createdAt: NOW,
       updatedAt: NOW,
     })
+  })
+})
+
+describe('mapUserProfileBundleJsonToDomain', () => {
+  function makeRawBundle(
+    overrides: Partial<RawUserProfileBundleJson> = {},
+  ): RawUserProfileBundleJson {
+    return {
+      profile: {
+        id: OWNER_ID,
+        display_name: 'Alice',
+        created_at: NOW,
+        updated_at: NOW,
+      },
+      stats: {
+        matches_played: 4,
+        wins: 3,
+        losses: 1,
+        points_scored: 50,
+        points_conceded: 30,
+        tournaments_played: 2,
+        tournaments_won: 1,
+        podiums: 2,
+        last_tournament_at: NOW,
+      },
+      results: [
+        {
+          tournament_id: TOURNAMENT_ID,
+          tournament_name: 'Tournoi du dimanche',
+          tournament_date: '2026-05-10',
+          tournament_completed_at: NOW,
+          team_id: TEAM_A_ID,
+          team_name: 'Les Fanny',
+          wins: 2,
+          losses: 1,
+          points_scored: 30,
+          points_conceded: 20,
+          final_rank: 1,
+          is_winner: true,
+          is_podium: true,
+          teammates: [{ user_id: INVITEE_USER_ID, display_name: 'Bob' }],
+        },
+      ],
+      ...overrides,
+    }
+  }
+
+  it('translates a complete bundle snake_case → camelCase', () => {
+    expect(
+      mapUserProfileBundleJsonToDomain(makeRawBundle()),
+    ).toEqual<UserProfileBundle>({
+      profile: {
+        id: OWNER_ID,
+        displayName: 'Alice',
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+      stats: {
+        matchesPlayed: 4,
+        wins: 3,
+        losses: 1,
+        pointsScored: 50,
+        pointsConceded: 30,
+        tournamentsPlayed: 2,
+        tournamentsWon: 1,
+        podiums: 2,
+        lastTournamentAt: NOW,
+      },
+      results: [
+        {
+          tournamentId: TOURNAMENT_ID,
+          tournamentName: 'Tournoi du dimanche',
+          tournamentDate: '2026-05-10',
+          tournamentCompletedAt: NOW,
+          teamId: TEAM_A_ID,
+          teamName: 'Les Fanny',
+          wins: 2,
+          losses: 1,
+          pointsScored: 30,
+          pointsConceded: 20,
+          finalRank: 1,
+          isWinner: true,
+          isPodium: true,
+          teammates: [{ userId: INVITEE_USER_ID, displayName: 'Bob' }],
+        },
+      ],
+    })
+  })
+
+  it('preserves the order of results (no sorting in the mapper)', () => {
+    const raw = makeRawBundle({
+      results: [
+        {
+          tournament_id: TOURNAMENT_ID,
+          tournament_name: 'Récent',
+          tournament_date: '2026-05-10',
+          tournament_completed_at: '2026-05-10T00:00:00.000Z',
+          team_id: TEAM_A_ID,
+          team_name: 'A',
+          wins: 1,
+          losses: 0,
+          points_scored: 13,
+          points_conceded: 5,
+          final_rank: 1,
+          is_winner: true,
+          is_podium: true,
+          teammates: [],
+        },
+        {
+          tournament_id: TOURNAMENT_ID,
+          tournament_name: 'Ancien',
+          tournament_date: '2026-01-01',
+          tournament_completed_at: '2026-01-01T00:00:00.000Z',
+          team_id: TEAM_B_ID,
+          team_name: 'B',
+          wins: 0,
+          losses: 1,
+          points_scored: 5,
+          points_conceded: 13,
+          final_rank: 2,
+          is_winner: false,
+          is_podium: true,
+          teammates: [],
+        },
+      ],
+    })
+
+    expect(
+      mapUserProfileBundleJsonToDomain(raw).results.map(
+        result => result.tournamentName,
+      ),
+    ).toEqual(['Récent', 'Ancien'])
+  })
+
+  it('maps a null profile to null', () => {
+    expect(
+      mapUserProfileBundleJsonToDomain(makeRawBundle({ profile: null })).profile,
+    ).toBeNull()
+  })
+
+  it('maps null stats to null', () => {
+    expect(
+      mapUserProfileBundleJsonToDomain(makeRawBundle({ stats: null })).stats,
+    ).toBeNull()
+  })
+
+  it('maps empty results to []', () => {
+    expect(
+      mapUserProfileBundleJsonToDomain(makeRawBundle({ results: [] })).results,
+    ).toEqual([])
+  })
+
+  it('keeps a free teammate (user_id null) as userId null with its snapshot name', () => {
+    const raw = makeRawBundle({
+      results: [
+        {
+          tournament_id: TOURNAMENT_ID,
+          tournament_name: 'Tournoi',
+          tournament_date: '2026-05-10',
+          tournament_completed_at: NOW,
+          team_id: TEAM_A_ID,
+          team_name: 'Team',
+          wins: 1,
+          losses: 0,
+          points_scored: 13,
+          points_conceded: 7,
+          final_rank: 1,
+          is_winner: true,
+          is_podium: true,
+          teammates: [{ user_id: null, display_name: 'Pierre' }],
+        },
+      ],
+    })
+
+    expect(
+      mapUserProfileBundleJsonToDomain(raw).results[0]!.teammates,
+    ).toEqual<Teammate[]>([{ userId: null, displayName: 'Pierre' }])
+  })
+
+  it('maps a null last_tournament_at to null', () => {
+    const raw = makeRawBundle({
+      stats: {
+        matches_played: 0,
+        wins: 0,
+        losses: 0,
+        points_scored: 0,
+        points_conceded: 0,
+        tournaments_played: 0,
+        tournaments_won: 0,
+        podiums: 0,
+        last_tournament_at: null,
+      },
+    })
+
+    expect(
+      mapUserProfileBundleJsonToDomain(raw).stats?.lastTournamentAt,
+    ).toBeNull()
   })
 })
