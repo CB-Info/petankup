@@ -175,6 +175,17 @@ useHead({ title: "Mon compte — Pétankup" });
           Enregistrer
         </UButton>
       </UForm>
+
+      <UButton
+        v-if="currentProfile"
+        :to="`/profile/${currentProfile.id}`"
+        variant="outline"
+        color="primary"
+        block
+        class="mt-4"
+      >
+        Voir mon profil public
+      </UButton>
     </UCard>
   </div>
 </template>
