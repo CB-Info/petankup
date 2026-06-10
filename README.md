@@ -1,7 +1,7 @@
 # Pétankup — Pétanque Tournament Manager
 
 Application web privée mobile-first pour gérer des tournois de pétanque entre
-amis. Persistance Supabase, auth magic link.
+amis. Persistance Supabase, auth magic link + Google OAuth.
 
 ## Stack
 
@@ -10,7 +10,7 @@ amis. Persistance Supabase, auth magic link.
 - [Nuxt UI v4](https://ui.nuxt.com) (Tailwind CSS v4 + Reka UI)
 - [Pinia](https://pinia.vuejs.org) — state management
 - [Vitest](https://vitest.dev) + happy-dom — tests unitaires
-- [Supabase](https://supabase.com) — Postgres + auth magic link
+- [Supabase](https://supabase.com) — Postgres + auth (magic link + Google OAuth)
 - [Zod](https://zod.dev) — validation formulaires (intégrée à UForm)
 - Vercel — déploiement cible
 
