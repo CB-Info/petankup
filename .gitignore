@@ -9,6 +9,10 @@ dist
 # Node dependencies
 node_modules
 
+# Artefacts TS compilés — aucun .js natif dans app/
+app/**/*.js
+app/**/*.vue.js
+
 # Logs
 logs
 *.log
