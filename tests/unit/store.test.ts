@@ -158,7 +158,10 @@ function createMockRepository(): TournamentRepository {
   return {
     getAllTournaments: async () => [...tournaments],
     getTournamentById: async id => tournaments.find(tournament => tournament.id === id),
-    saveTournament: async (tournament) => {
+    createTournament: async (tournament) => {
+      tournaments = upsertById(tournaments, tournament)
+    },
+    updateTournament: async (tournament) => {
       tournaments = upsertById(tournaments, tournament)
     },
     deleteTournament: async (id) => {
@@ -204,13 +207,13 @@ function createMockRepository(): TournamentRepository {
     },
 
     getMatchesByTournament: async tournamentId => matches.filter(match => match.tournamentId === tournamentId),
-    saveMatch: async (match) => {
-      matches = upsertById(matches, match)
-    },
-    saveMatches: async (matchesToSave) => {
+    createMatches: async (matchesToSave) => {
       for (const matchToSave of matchesToSave) {
         matches = upsertById(matches, matchToSave)
       }
+    },
+    updateMatch: async (match) => {
+      matches = upsertById(matches, match)
     },
 
     getMembersByTournament: async tournamentId =>
@@ -354,8 +357,8 @@ describe('useTournamentStore — tournaments', () => {
   it('loadTournaments: loads all tournaments persisted in the repository', async () => {
     const firstTournament = makeTournament({ name: 'Premier' })
     const secondTournament = makeTournament({ name: 'Second' })
-    await mockRepositoryRef.current!.saveTournament(firstTournament)
-    await mockRepositoryRef.current!.saveTournament(secondTournament)
+    await mockRepositoryRef.current!.createTournament(firstTournament)
+    await mockRepositoryRef.current!.createTournament(secondTournament)
 
     const store = useTournamentStore()
     await store.loadTournaments()
@@ -542,7 +545,7 @@ describe('useTournamentStore — visibility partition', () => {
     // Tournoi appartenant à un autre user, inséré directement via le
     // repository mocké pour bypasser createTournament qui force ownerId
     // au user courant.
-    await mockRepositoryRef.current!.saveTournament(
+    await mockRepositoryRef.current!.createTournament(
       makeTournament({
         name: 'Theirs',
         ownerId: OTHER_USER_ID,
@@ -570,7 +573,7 @@ describe('useTournamentStore — visibility partition', () => {
       visibility: 'public',
     })
 
-    await mockRepositoryRef.current!.saveTournament(
+    await mockRepositoryRef.current!.createTournament(
       makeTournament({
         name: 'Their public',
         ownerId: OTHER_USER_ID,
@@ -579,7 +582,7 @@ describe('useTournamentStore — visibility partition', () => {
     )
     // Tournoi private d'un autre user : RLS l'aurait masqué côté DB.
     // Filtre JS doublé en sécurité.
-    await mockRepositoryRef.current!.saveTournament(
+    await mockRepositoryRef.current!.createTournament(
       makeTournament({
         name: 'Their private',
         ownerId: OTHER_USER_ID,
@@ -597,7 +600,7 @@ describe('useTournamentStore — visibility partition', () => {
     stubUserRef.value = null
     stubClaimsSub.value = null
     const store = useTournamentStore()
-    await mockRepositoryRef.current!.saveTournament(
+    await mockRepositoryRef.current!.createTournament(
       makeTournament({ visibility: 'public', ownerId: OTHER_USER_ID }),
     )
     await store.loadTournaments()
@@ -668,7 +671,7 @@ describe('useTournamentStore — isOwnerOfCurrentTournament', () => {
 
   it('returns false when the current tournament is owned by someone else', async () => {
     const otherTournament = makeTournament({ ownerId: OTHER_USER_ID })
-    await mockRepositoryRef.current!.saveTournament(otherTournament)
+    await mockRepositoryRef.current!.createTournament(otherTournament)
     const store = useTournamentStore()
     await store.loadTournament(otherTournament.id)
 
@@ -690,7 +693,7 @@ describe('useTournamentStore — isOwnerOfCurrentTournament', () => {
     stubSessionRef.value = null
     stubClaimsSub.value = null
     const someTournament = makeTournament({ ownerId: STUB_USER_ID })
-    await mockRepositoryRef.current!.saveTournament(someTournament)
+    await mockRepositoryRef.current!.createTournament(someTournament)
     const store = useTournamentStore()
     await store.loadTournament(someTournament.id)
 
@@ -751,17 +754,17 @@ describe('useTournamentStore — tournament_members partitioning', () => {
       ownerId: OTHER_USER_ID,
       visibility: 'private',
     })
-    await mockRepositoryRef.current!.saveTournament(
+    await mockRepositoryRef.current!.createTournament(
       makeTournament({ name: 'Privé perso', ownerId: STUB_USER_ID }),
     )
-    await mockRepositoryRef.current!.saveTournament(
+    await mockRepositoryRef.current!.createTournament(
       makeTournament({
         name: 'Public perso',
         ownerId: STUB_USER_ID,
         visibility: 'public',
       }),
     )
-    await mockRepositoryRef.current!.saveTournament(sharedTournament)
+    await mockRepositoryRef.current!.createTournament(sharedTournament)
     vi.spyOn(mockRepositoryRef.current!, 'getMyMemberships').mockResolvedValue([
       makeMembership(sharedTournament.id),
     ])
@@ -774,7 +777,7 @@ describe('useTournamentStore — tournament_members partitioning', () => {
   })
 
   it('sharedTournaments — empty when no memberships', async () => {
-    await mockRepositoryRef.current!.saveTournament(
+    await mockRepositoryRef.current!.createTournament(
       makeTournament({ ownerId: OTHER_USER_ID, visibility: 'public' }),
     )
 
@@ -794,7 +797,7 @@ describe('useTournamentStore — tournament_members partitioning', () => {
     stubSessionRef.value = null
     stubUserRef.value = null
     stubClaimsSub.value = null
-    await mockRepositoryRef.current!.saveTournament(
+    await mockRepositoryRef.current!.createTournament(
       makeTournament({ ownerId: OTHER_USER_ID, visibility: 'public' }),
     )
 
@@ -813,7 +816,7 @@ describe('useTournamentStore — tournament_members partitioning', () => {
       ownerId: OTHER_USER_ID,
       visibility: 'public',
     })
-    await mockRepositoryRef.current!.saveTournament(sharedPublicTournament)
+    await mockRepositoryRef.current!.createTournament(sharedPublicTournament)
     vi.spyOn(mockRepositoryRef.current!, 'getMyMemberships').mockResolvedValue([
       makeMembership(sharedPublicTournament.id),
     ])
@@ -831,7 +834,7 @@ describe('useTournamentStore — tournament_members partitioning', () => {
       ownerId: STUB_USER_ID,
       visibility: 'public',
     })
-    await mockRepositoryRef.current!.saveTournament(ownPublic)
+    await mockRepositoryRef.current!.createTournament(ownPublic)
     // Cas impossible en prod (la policy DB le bloque) : un membership
     // sur son propre tournoi. La garde défensive ownerId !== userId
     // dans sharedTournaments doit l'exclure.
@@ -1137,7 +1140,7 @@ describe('useTournamentStore — auth context (session/sub watcher)', () => {
     stubSessionRef.value = { access_token: 'magic-link-token' }
     stubClaimsSub.value = STUB_USER_ID
 
-    await mockRepositoryRef.current!.saveTournament(
+    await mockRepositoryRef.current!.createTournament(
       makeTournament({ name: 'Mine private', ownerId: STUB_USER_ID }),
     )
 
@@ -1172,7 +1175,7 @@ describe('useTournamentStore — auth context (session/sub watcher)', () => {
     const USER_A = STUB_USER_ID
     const USER_B = '11111111-1111-4111-8111-111111111111'
     stubUserRef.value = { sub: USER_A }
-    await mockRepositoryRef.current!.saveTournament(
+    await mockRepositoryRef.current!.createTournament(
       makeTournament({ name: 'Tournoi de A', ownerId: USER_A }),
     )
     const repoSpy = vi.spyOn(mockRepositoryRef.current!, 'getAllTournaments')
@@ -1188,7 +1191,7 @@ describe('useTournamentStore — auth context (session/sub watcher)', () => {
     // de la home, conceptuellement équivalent au refire watcher en prod).
     stubUserRef.value = { sub: USER_B }
     stubClaimsSub.value = USER_B
-    await mockRepositoryRef.current!.saveTournament(
+    await mockRepositoryRef.current!.createTournament(
       makeTournament({ name: 'Tournoi de B', ownerId: USER_B }),
     )
 
@@ -1256,7 +1259,7 @@ describe('useTournamentStore — auth context (session/sub watcher)', () => {
         claimsResolvers.push(resolve)
       })
 
-    await mockRepositoryRef.current!.saveTournament(
+    await mockRepositoryRef.current!.createTournament(
       makeTournament({ name: 'Tournoi cible', ownerId: STUB_USER_ID }),
     )
     const repoSpy = vi.spyOn(mockRepositoryRef.current!, 'getAllTournaments')

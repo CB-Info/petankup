@@ -13,10 +13,12 @@ import { InviteMemberError, ProfileError } from '../types'
 import type { TournamentRepository } from './TournamentRepository'
 import {
   mapMatchDomainToInsert,
+  mapMatchDomainToUpdate,
   mapMatchRowToDomain,
   mapProfileRowToDomain,
   mapTeamRowToDomain,
   mapTournamentDomainToInsert,
+  mapTournamentDomainToUpdate,
   mapTournamentMemberRowToDomain,
   mapTournamentRowToDomain,
   mapUserProfileBundleJsonToDomain,
@@ -70,11 +72,18 @@ export class SupabaseRepository implements TournamentRepository {
     return data === null ? undefined : mapTournamentRowToDomain(data)
   }
 
-  async saveTournament(tournament: Tournament): Promise<void> {
-    const insertPayload = mapTournamentDomainToInsert(tournament)
+  async createTournament(tournament: Tournament): Promise<void> {
     const { error } = await this.client
       .from('tournaments')
-      .upsert(insertPayload)
+      .insert(mapTournamentDomainToInsert(tournament))
+    if (error !== null) throw new Error(error.message)
+  }
+
+  async updateTournament(tournament: Tournament): Promise<void> {
+    const { error } = await this.client
+      .from('tournaments')
+      .update(mapTournamentDomainToUpdate(tournament))
+      .eq('id', tournament.id)
     if (error !== null) throw new Error(error.message)
   }
 
@@ -168,15 +177,18 @@ export class SupabaseRepository implements TournamentRepository {
     return (data ?? []).map(mapMatchRowToDomain)
   }
 
-  async saveMatch(match: Match): Promise<void> {
-    const insertPayload = mapMatchDomainToInsert(match)
-    const { error } = await this.client.from('matches').upsert(insertPayload)
+  async createMatches(matches: Match[]): Promise<void> {
+    const { error } = await this.client
+      .from('matches')
+      .insert(matches.map(mapMatchDomainToInsert))
     if (error !== null) throw new Error(error.message)
   }
 
-  async saveMatches(matches: Match[]): Promise<void> {
-    const insertPayloads = matches.map(mapMatchDomainToInsert)
-    const { error } = await this.client.from('matches').upsert(insertPayloads)
+  async updateMatch(match: Match): Promise<void> {
+    const { error } = await this.client
+      .from('matches')
+      .update(mapMatchDomainToUpdate(match))
+      .eq('id', match.id)
     if (error !== null) throw new Error(error.message)
   }
 

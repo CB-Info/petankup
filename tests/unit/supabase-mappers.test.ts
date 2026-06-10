@@ -3,11 +3,13 @@ import type { Database } from '../../app/types/database.types'
 import type { Match, Profile, Team, TeamPlayer, Teammate, Tournament, TournamentMember, UserProfileBundle } from '../../app/types'
 import {
   mapMatchDomainToInsert,
+  mapMatchDomainToUpdate,
   mapMatchRowToDomain,
   mapProfileRowToDomain,
   mapTeamPlayerRowToDomain,
   mapTeamRowToDomain,
   mapTournamentDomainToInsert,
+  mapTournamentDomainToUpdate,
   mapTournamentMemberRowToDomain,
   mapTournamentRowToDomain,
   mapUserProfileBundleJsonToDomain,
@@ -637,5 +639,88 @@ describe('mapUserProfileBundleJsonToDomain', () => {
     expect(
       mapUserProfileBundleJsonToDomain(raw).stats?.lastTournamentAt,
     ).toBeNull()
+  })
+})
+
+describe('mapTournamentDomainToUpdate', () => {
+  const tournament: Tournament = {
+    id: TOURNAMENT_ID,
+    name: 'Tournoi',
+    date: '2026-05-10',
+    location: 'Parc Bordelais',
+    description: 'Tournoi entre amis',
+    format: 'round_robin',
+    status: 'in_progress',
+    visibility: 'public',
+    ownerId: OWNER_ID,
+    createdAt: NOW,
+    updatedAt: NOW,
+  }
+
+  it('emits only the mutable columns', () => {
+    expect(mapTournamentDomainToUpdate(tournament)).toEqual({
+      name: 'Tournoi',
+      date: '2026-05-10',
+      location: 'Parc Bordelais',
+      description: 'Tournoi entre amis',
+      status: 'in_progress',
+      visibility: 'public',
+    })
+  })
+
+  it('omits id, immutable and DB-managed columns', () => {
+    const update = mapTournamentDomainToUpdate(tournament)
+    expect(update).not.toHaveProperty('id')
+    expect(update).not.toHaveProperty('owner_id')
+    expect(update).not.toHaveProperty('format')
+    expect(update).not.toHaveProperty('created_at')
+    expect(update).not.toHaveProperty('updated_at')
+    expect(update).not.toHaveProperty('completed_at')
+  })
+
+  it('maps absent location/description to null', () => {
+    const update = mapTournamentDomainToUpdate({
+      ...tournament,
+      location: undefined,
+      description: undefined,
+    })
+    expect(update.location).toBeNull()
+    expect(update.description).toBeNull()
+  })
+})
+
+describe('mapMatchDomainToUpdate', () => {
+  const match: Match = {
+    id: MATCH_ID,
+    tournamentId: TOURNAMENT_ID,
+    teamAId: TEAM_A_ID,
+    teamBId: TEAM_B_ID,
+    scoreA: 13,
+    scoreB: 7,
+    winnerId: TEAM_A_ID,
+    status: 'completed',
+    roundNumber: 1,
+    createdAt: NOW,
+    updatedAt: NOW,
+  }
+
+  it('emits only the score/outcome columns', () => {
+    expect(mapMatchDomainToUpdate(match)).toEqual({
+      score_a: 13,
+      score_b: 7,
+      winner_id: TEAM_A_ID,
+      status: 'completed',
+    })
+  })
+
+  it('omits id, structural and DB-managed columns', () => {
+    const update = mapMatchDomainToUpdate(match)
+    expect(update).not.toHaveProperty('id')
+    expect(update).not.toHaveProperty('tournament_id')
+    expect(update).not.toHaveProperty('team_a_id')
+    expect(update).not.toHaveProperty('team_b_id')
+    expect(update).not.toHaveProperty('round_number')
+    expect(update).not.toHaveProperty('created_at')
+    expect(update).not.toHaveProperty('updated_at')
   })
 })

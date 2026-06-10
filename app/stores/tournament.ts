@@ -273,7 +273,7 @@ export const useTournamentStore = defineStore('tournament', () => {
   }
 
   async function persistTournamentChange(updatedTournament: Tournament): Promise<void> {
-    await repository.saveTournament(updatedTournament)
+    await repository.updateTournament(updatedTournament)
     replaceTournamentInList(updatedTournament)
     syncCurrentTournamentIfMatches(updatedTournament)
   }
@@ -330,7 +330,7 @@ export const useTournamentStore = defineStore('tournament', () => {
         createdAt: timestamp,
         updatedAt: timestamp,
       }
-      await repository.saveTournament(newTournament)
+      await repository.createTournament(newTournament)
       tournaments.value.push(newTournament)
       return newTournament
     })
@@ -447,7 +447,7 @@ export const useTournamentStore = defineStore('tournament', () => {
         tournament.id,
         nowIso(),
       )
-      await repository.saveMatches(generatedMatches)
+      await repository.createMatches(generatedMatches)
       matches.value = generatedMatches
 
       const tournamentInProgress: Tournament = {
@@ -488,7 +488,7 @@ export const useTournamentStore = defineStore('tournament', () => {
     }
 
     return withLoading(async () => {
-      await repository.saveMatch(updatedMatch)
+      await repository.updateMatch(updatedMatch)
       matches.value[matchIndex] = updatedMatch
       refreshRanking()
       return { valid: true }

@@ -5,6 +5,13 @@ import type { Match, Profile, Team, Tournament, TournamentMember, UserProfileBun
 // des requêtes réseau, le contrat reste agnostique du backend pour
 // faciliter d'éventuelles alternatives (mock, cache local, etc.).
 //
+// Convention d'écriture : chaque écriture dit explicitement ce qu'elle fait —
+// createXxx (INSERT) ou updateXxx (UPDATE ciblé par id). Pas d'upsert
+// fourre-tout : distinguer créer de modifier évite les pièges Postgres (un
+// trigger BEFORE UPDATE ne s'applique pas à la phase INSERT spéculative d'un
+// upsert). Tournois et matchs suivent ce pattern ; teams et members passent
+// par des RPCs dédiées, le profil par un update ciblé — l'ensemble est homogène.
+//
 // Membres : les insertions passent par la RPC inviteMemberByDisplayName (la
 // DB y normalise le pseudo et applique les règles owner / self / doublon).
 // Le repository reste pass-through : aucune normalisation côté client.
@@ -21,7 +28,8 @@ import type { Match, Profile, Team, Tournament, TournamentMember, UserProfileBun
 export interface TournamentRepository {
   getAllTournaments(): Promise<Tournament[]>
   getTournamentById(id: string): Promise<Tournament | undefined>
-  saveTournament(tournament: Tournament): Promise<void>
+  createTournament(tournament: Tournament): Promise<void>
+  updateTournament(tournament: Tournament): Promise<void>
   deleteTournament(id: string): Promise<void>
 
   getTeamsByTournament(tournamentId: string): Promise<Team[]>
@@ -38,8 +46,8 @@ export interface TournamentRepository {
   deleteTeam(id: string): Promise<void>
 
   getMatchesByTournament(tournamentId: string): Promise<Match[]>
-  saveMatch(match: Match): Promise<void>
-  saveMatches(matches: Match[]): Promise<void>
+  createMatches(matches: Match[]): Promise<void>
+  updateMatch(match: Match): Promise<void>
 
   getMembersByTournament(tournamentId: string): Promise<TournamentMember[]>
   getMyMemberships(userId: string): Promise<TournamentMember[]>

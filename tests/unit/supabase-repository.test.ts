@@ -23,7 +23,7 @@ type MockChain = {
   select: ReturnType<typeof vi.fn>
   eq: ReturnType<typeof vi.fn>
   in: ReturnType<typeof vi.fn>
-  upsert: ReturnType<typeof vi.fn>
+  insert: ReturnType<typeof vi.fn>
   delete: ReturnType<typeof vi.fn>
   update: ReturnType<typeof vi.fn>
   maybeSingle: ReturnType<typeof vi.fn>
@@ -36,7 +36,7 @@ function makeChainWithResult(result: ChainResult): MockChain {
   chain.select = vi.fn(() => chain)
   chain.eq = vi.fn(() => chain)
   chain.in = vi.fn(() => chain)
-  chain.upsert = vi.fn(() => chain)
+  chain.insert = vi.fn(() => chain)
   chain.delete = vi.fn(() => chain)
   chain.update = vi.fn(() => chain)
   chain.maybeSingle = vi.fn(() => chain)
@@ -254,15 +254,15 @@ describe('SupabaseRepository — getTournamentById', () => {
   })
 })
 
-describe('SupabaseRepository — saveTournament', () => {
-  it('upserts the tournament with the mapped Insert payload', async () => {
+describe('SupabaseRepository — createTournament', () => {
+  it('inserts the tournament with the mapped Insert payload', async () => {
     const chain = makeChainWithResult({ data: null, error: null })
     const { repo, from } = makeRepoWithChain(chain)
 
-    await repo.saveTournament(makeTournamentDomain())
+    await repo.createTournament(makeTournamentDomain())
 
     expect(from).toHaveBeenCalledWith('tournaments')
-    expect(chain.upsert).toHaveBeenCalledWith(
+    expect(chain.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         id: TOURNAMENT_ID,
         owner_id: OWNER_ID,
@@ -275,10 +275,42 @@ describe('SupabaseRepository — saveTournament', () => {
   })
 
   it('throws when Supabase returns an error', async () => {
-    const chain = makeChainWithResult({ data: null, error: { message: 'upsert failed' } })
+    const chain = makeChainWithResult({ data: null, error: { message: 'insert failed' } })
     const { repo } = makeRepoWithChain(chain)
 
-    await expect(repo.saveTournament(makeTournamentDomain())).rejects.toThrow('upsert failed')
+    await expect(repo.createTournament(makeTournamentDomain())).rejects.toThrow('insert failed')
+  })
+})
+
+describe('SupabaseRepository — updateTournament', () => {
+  it('updates only mutable columns and targets the row by id', async () => {
+    const chain = makeChainWithResult({ data: null, error: null })
+    const { repo, from } = makeRepoWithChain(chain)
+
+    await repo.updateTournament(makeTournamentDomain())
+
+    expect(from).toHaveBeenCalledWith('tournaments')
+    expect(chain.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Tournoi',
+        status: 'draft',
+        visibility: 'private',
+      }),
+    )
+    expect(chain.eq).toHaveBeenCalledWith('id', TOURNAMENT_ID)
+    // Colonnes immutables / pilotées par la DB jamais émises.
+    const updatePayload = chain.update.mock.calls[0]![0] as Record<string, unknown>
+    expect(updatePayload).not.toHaveProperty('id')
+    expect(updatePayload).not.toHaveProperty('owner_id')
+    expect(updatePayload).not.toHaveProperty('format')
+    expect(updatePayload).not.toHaveProperty('completed_at')
+  })
+
+  it('throws when Supabase returns an error', async () => {
+    const chain = makeChainWithResult({ data: null, error: { message: 'update failed' } })
+    const { repo } = makeRepoWithChain(chain)
+
+    await expect(repo.updateTournament(makeTournamentDomain())).rejects.toThrow('update failed')
   })
 })
 
@@ -456,56 +488,60 @@ describe('SupabaseRepository — getMatchesByTournament', () => {
   })
 })
 
-describe('SupabaseRepository — saveMatch', () => {
-  it('upserts the match with the mapped Insert payload', async () => {
+describe('SupabaseRepository — updateMatch', () => {
+  it('updates only score/outcome columns and targets the row by id', async () => {
     const chain = makeChainWithResult({ data: null, error: null })
     const { repo, from } = makeRepoWithChain(chain)
 
-    await repo.saveMatch(makeMatchDomain())
+    await repo.updateMatch(makeMatchDomain())
 
     expect(from).toHaveBeenCalledWith('matches')
-    expect(chain.upsert).toHaveBeenCalledWith(
+    expect(chain.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: MATCH_ID,
-        tournament_id: TOURNAMENT_ID,
-        team_a_id: TEAM_A_ID,
-        team_b_id: TEAM_B_ID,
-        round_number: 1,
+        score_a: null,
+        score_b: null,
+        winner_id: null,
         status: 'pending',
       }),
     )
+    expect(chain.eq).toHaveBeenCalledWith('id', MATCH_ID)
+    // Colonnes structurelles / pilotées par la DB jamais émises.
+    const updatePayload = chain.update.mock.calls[0]![0] as Record<string, unknown>
+    expect(updatePayload).not.toHaveProperty('id')
+    expect(updatePayload).not.toHaveProperty('tournament_id')
+    expect(updatePayload).not.toHaveProperty('round_number')
   })
 
   it('throws when Supabase returns an error', async () => {
-    const chain = makeChainWithResult({ data: null, error: { message: 'match upsert failed' } })
+    const chain = makeChainWithResult({ data: null, error: { message: 'match update failed' } })
     const { repo } = makeRepoWithChain(chain)
 
-    await expect(repo.saveMatch(makeMatchDomain())).rejects.toThrow('match upsert failed')
+    await expect(repo.updateMatch(makeMatchDomain())).rejects.toThrow('match update failed')
   })
 })
 
-describe('SupabaseRepository — saveMatches (batch)', () => {
-  it('upserts an array of mapped Insert payloads', async () => {
+describe('SupabaseRepository — createMatches (batch)', () => {
+  it('inserts an array of mapped Insert payloads', async () => {
     const chain = makeChainWithResult({ data: null, error: null })
     const { repo, from } = makeRepoWithChain(chain)
     const firstMatch = makeMatchDomain()
     const secondMatch: Match = { ...firstMatch, id: 'other', roundNumber: 2 }
 
-    await repo.saveMatches([firstMatch, secondMatch])
+    await repo.createMatches([firstMatch, secondMatch])
 
     expect(from).toHaveBeenCalledWith('matches')
-    const upsertArg = chain.upsert.mock.calls[0]![0] as Array<{ id: string, round_number: number }>
-    expect(upsertArg).toHaveLength(2)
-    expect(upsertArg[0]!.id).toBe(MATCH_ID)
-    expect(upsertArg[1]!.id).toBe('other')
-    expect(upsertArg[1]!.round_number).toBe(2)
+    const insertArg = chain.insert.mock.calls[0]![0] as Array<{ id: string, round_number: number }>
+    expect(insertArg).toHaveLength(2)
+    expect(insertArg[0]!.id).toBe(MATCH_ID)
+    expect(insertArg[1]!.id).toBe('other')
+    expect(insertArg[1]!.round_number).toBe(2)
   })
 
   it('throws when Supabase returns an error', async () => {
     const chain = makeChainWithResult({ data: null, error: { message: 'batch failed' } })
     const { repo } = makeRepoWithChain(chain)
 
-    await expect(repo.saveMatches([makeMatchDomain()])).rejects.toThrow('batch failed')
+    await expect(repo.createMatches([makeMatchDomain()])).rejects.toThrow('batch failed')
   })
 })
 

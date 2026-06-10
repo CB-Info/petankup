@@ -8,6 +8,7 @@ import type { Match, Profile, Team, TeamPlayer, Teammate, Tournament, Tournament
 
 type TournamentRow = Database['public']['Tables']['tournaments']['Row']
 type TournamentInsert = Database['public']['Tables']['tournaments']['Insert']
+type TournamentUpdate = Database['public']['Tables']['tournaments']['Update']
 type TeamRow = Database['public']['Tables']['teams']['Row']
 type TeamPlayerRow = Database['public']['Tables']['team_players']['Row']
 // (pas de TeamInsert : teams n'est plus écrit en direct, cf. RPCs.)
@@ -15,6 +16,7 @@ type TeamPlayerRow = Database['public']['Tables']['team_players']['Row']
 type TeamRowWithPlayers = TeamRow & { team_players: TeamPlayerRow[] }
 type MatchRow = Database['public']['Tables']['matches']['Row']
 type MatchInsert = Database['public']['Tables']['matches']['Insert']
+type MatchUpdate = Database['public']['Tables']['matches']['Update']
 type TournamentMemberRow = Database['public']['Tables']['tournament_members']['Row']
 type ProfileRow = Database['public']['Tables']['profiles']['Row']
 
@@ -49,6 +51,24 @@ export function mapTournamentDomainToInsert(
     status: tournament.status,
     visibility: tournament.visibility,
     owner_id: tournament.ownerId,
+  }
+}
+
+// Domain → Update : uniquement les colonnes mutables. id sert de clé (eq),
+// owner_id et format sont immutables, created_at / updated_at / completed_at
+// sont pilotés par des triggers DB — tous volontairement absents pour ne
+// jamais écraser une valeur gérée par la base (cf. invariant completed_at de
+// la Phase I : c'est le trigger BEFORE UPDATE qui le remplit).
+export function mapTournamentDomainToUpdate(
+  tournament: Tournament,
+): TournamentUpdate {
+  return {
+    name: tournament.name,
+    date: tournament.date,
+    location: tournament.location ?? null,
+    description: tournament.description ?? null,
+    status: tournament.status,
+    visibility: tournament.visibility,
   }
 }
 
@@ -110,6 +130,18 @@ export function mapMatchDomainToInsert(match: Match): MatchInsert {
     winner_id: match.winnerId,
     status: match.status,
     round_number: match.roundNumber,
+  }
+}
+
+// Domain → Update : uniquement les colonnes mutables d'un match (le score et
+// son issue). id sert de clé (eq) ; tournament_id / team_a_id / team_b_id /
+// round_number sont fixés à la création ; timestamps gérés par trigger.
+export function mapMatchDomainToUpdate(match: Match): MatchUpdate {
+  return {
+    score_a: match.scoreA,
+    score_b: match.scoreB,
+    winner_id: match.winnerId,
+    status: match.status,
   }
 }
 
