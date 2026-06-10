@@ -45,12 +45,33 @@ function parseInviteErrorCode(rawMessage: string): InviteMemberErrorCode {
   return matched ?? 'unknown'
 }
 
+// Mappe le shape domaine de l'argument createTeam/updateTeam vers le payload
+// jsonb attendu par les RPCs create_team_with_players /
+// update_team_with_players (snake_case côté DB). Helper local : aucun usage
+// hors de ce fichier, pas exporté.
+function mapPlayersToRpcPayload(
+  players: Array<{ userId: string | null, displayName: string }>,
+): Array<{ user_id: string | null, display_name: string }> {
+  return players.map(player => ({
+    user_id: player.userId,
+    display_name: player.displayName,
+  }))
+}
+
 // Implémentation Supabase du contrat TournamentRepository.
 // Les cascades de suppression sont gérées par la DB via ON DELETE CASCADE
 // (voir migration initiale) — le repo se contente de DELETE l'entité ciblée.
-// Sur erreur Supabase, on throw une Error nue ; le store gère le toggle
-// isLoading et propage l'erreur au site d'appel UI qui affiche un toast
-// (voir composables/useErrorToast.ts).
+//
+// Gestion d'erreur, trois cas selon le contexte :
+//   - Par défaut : Error standard portant le message Supabase, propagée au
+//     site d'appel UI qui affiche un toast (cf. composables/useErrorToast).
+//   - inviteMemberByDisplayName / removeMember : InviteMemberError typée
+//     avec code discriminant, mappée depuis les raise exception SQL via
+//     parseInviteErrorCode. Le composant dispatch via instanceof + switch.
+//   - updateMyProfile : ProfileError('display_name_taken') sur conflit 23505
+//     vérifié par code Postgres ET nom de l'index unique ; Error standard
+//     pour les autres erreurs (réseau, RLS, etc.).
+// Le store gère le toggle isLoading dans tous les cas.
 export class SupabaseRepository implements TournamentRepository {
   constructor(private readonly client: SupabaseClient<Database>) {}
 
@@ -126,10 +147,7 @@ export class SupabaseRepository implements TournamentRepository {
     name: string,
     players: Array<{ userId: string | null, displayName: string }>,
   ): Promise<Team> {
-    const playersPayload = players.map(player => ({
-      user_id: player.userId,
-      display_name: player.displayName,
-    }))
+    const playersPayload = mapPlayersToRpcPayload(players)
     const { data: createdTeamId, error } = await this.client.rpc(
       'create_team_with_players',
       { p_tournament_id: tournamentId, p_name: name, p_players: playersPayload },
@@ -146,10 +164,7 @@ export class SupabaseRepository implements TournamentRepository {
     name: string,
     players: Array<{ userId: string | null, displayName: string }>,
   ): Promise<Team> {
-    const playersPayload = players.map(player => ({
-      user_id: player.userId,
-      display_name: player.displayName,
-    }))
+    const playersPayload = mapPlayersToRpcPayload(players)
     const { data: updatedTeamId, error } = await this.client.rpc(
       'update_team_with_players',
       { p_team_id: teamId, p_name: name, p_players: playersPayload },
