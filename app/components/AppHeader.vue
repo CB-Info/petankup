@@ -253,14 +253,18 @@ const titleSizeClass = computed(() =>
           </div>
         </div>
 
-        <button
-          type="button"
-          class="mt-5 flex h-12.5 w-full items-center justify-center gap-2 rounded-[13px] bg-primary font-disp text-[15px] font-extrabold tracking-[0.02em] uppercase text-(--pk-cream)"
+        <!-- ms-0 sur l'icône : `block` pousserait la flèche au bord droit
+             (ms-auto du thème) alors qu'elle reste collée au label. -->
+        <UButton
+          color="primary"
+          block
+          trailing-icon="i-lucide-arrow-right"
+          class="mt-5 h-12.5 gap-2 rounded-[13px] font-disp text-[15px] font-extrabold tracking-[0.02em] uppercase text-(--pk-cream)"
+          :ui="{ trailingIcon: 'ms-0 size-4.5' }"
           @click="emit('reprendre')"
         >
           {{ tournoi.ctaLabel }}
-          <UIcon name="i-lucide-arrow-right" class="size-4.5" />
-        </button>
+        </UButton>
       </div>
     </div>
   </header>

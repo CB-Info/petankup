@@ -8,8 +8,10 @@ import type { BouleTone } from "./BouleAvatar.vue";
 //   (bouton SCORE).
 // Zéro logique métier : qui mène / qui gagne est REÇU en props, jamais déduit.
 // Seule la forme « à jouer » dérive de scores null (forme des données, pas une
-// règle métier). Boutons natifs stylés — UButton n'apporterait que des
-// surcharges vu le rendu très spécifique (audit acté en plan).
+// règle métier). Boutons : les steppers +/− restent natifs (fonds
+// état-dépendants page/blanc/navy/corail selon le meneur, hors système
+// UButton) ; les actions standards (CTA Valider, SCORE) sont des UButton
+// (états hover/focus/disabled/loading natifs) — règle actée à l'audit boutons.
 
 type ScoreboardMode = "saisie" | "liste";
 type TeamSide = "A" | "B";
@@ -26,6 +28,8 @@ const props = withDefaults(
     toneA?: BouleTone;
     toneB?: BouleTone;
     validateDisabled?: boolean;
+    /** Spinner du CTA Valider pendant l'enregistrement async (câblé par l'écran). */
+    validateLoading?: boolean;
   }>(),
   {
     leadingSide: null,
@@ -33,6 +37,7 @@ const props = withDefaults(
     toneA: "horizon",
     toneB: "sand",
     validateDisabled: false,
+    validateLoading: false,
   },
 );
 
@@ -138,14 +143,16 @@ const isPlayed = computed(() => props.scoreA !== null && props.scoreB !== null);
       </span>
     </div>
 
-    <button
-      type="button"
-      class="mt-4 h-14 w-full rounded-[14px] bg-primary font-disp text-[15px] font-extrabold tracking-[0.03em] text-(--pk-cream) shadow-(--pk-shadow-clay-lg) disabled:opacity-50 disabled:shadow-none"
+    <UButton
+      color="primary"
+      block
       :disabled="validateDisabled"
+      :loading="validateLoading"
+      class="mt-4 h-14 rounded-[14px] font-disp text-[15px] font-extrabold tracking-[0.03em] text-(--pk-cream) shadow-(--pk-shadow-clay-lg) disabled:opacity-50 disabled:shadow-none"
       @click="emit('validate')"
     >
-      Valider le score
-    </button>
+      VALIDER LE SCORE
+    </UButton>
   </div>
 
   <!-- ───────────── Mode liste ───────────── -->
@@ -193,14 +200,15 @@ const isPlayed = computed(() => props.scoreA !== null && props.scoreB !== null);
           {{ teamBName }}
         </h3>
       </div>
-      <button
-        type="button"
-        class="inline-flex h-12 shrink-0 items-center gap-1.75 rounded-(--pk-r-md) bg-primary px-4.5 font-disp text-[13px] font-extrabold tracking-[0.04em] uppercase text-(--pk-cream)"
+      <UButton
+        color="primary"
+        icon="i-lucide-plus"
+        class="h-12 shrink-0 gap-1.75 rounded-(--pk-r-md) px-4.5 font-disp text-[13px] font-extrabold tracking-[0.04em] uppercase text-(--pk-cream)"
+        :ui="{ leadingIcon: 'size-4' }"
         @click="emit('score')"
       >
-        <UIcon name="i-lucide-plus" class="size-4" />
         Score
-      </button>
+      </UButton>
     </div>
   </article>
 </template>
