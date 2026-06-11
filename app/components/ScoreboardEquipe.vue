@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { BouleTone } from './BouleAvatar.vue'
+import type { BouleTone } from "./BouleAvatar.vue";
 
 // Bloc de score d'un match (Direction C), en deux modes :
 // - saisie : deux demi-cartes, gros chiffres Space Grotesk, boutons +/−,
@@ -11,60 +11,60 @@ import type { BouleTone } from './BouleAvatar.vue'
 // règle métier). Boutons natifs stylés — UButton n'apporterait que des
 // surcharges vu le rendu très spécifique (audit acté en plan).
 
-type ScoreboardMode = 'saisie' | 'liste'
-type TeamSide = 'A' | 'B'
+type ScoreboardMode = "saisie" | "liste";
+type TeamSide = "A" | "B";
 
 const props = withDefaults(
   defineProps<{
-    mode: ScoreboardMode
-    teamAName: string
-    teamBName: string
-    scoreA: number | null
-    scoreB: number | null
-    leadingSide?: TeamSide | null
-    winnerSide?: TeamSide | null
-    toneA?: BouleTone
-    toneB?: BouleTone
-    validateDisabled?: boolean
+    mode: ScoreboardMode;
+    teamAName: string;
+    teamBName: string;
+    scoreA: number | null;
+    scoreB: number | null;
+    leadingSide?: TeamSide | null;
+    winnerSide?: TeamSide | null;
+    toneA?: BouleTone;
+    toneB?: BouleTone;
+    validateDisabled?: boolean;
   }>(),
   {
     leadingSide: null,
     winnerSide: null,
-    toneA: 'horizon',
-    toneB: 'sand',
+    toneA: "horizon",
+    toneB: "sand",
     validateDisabled: false,
   },
-)
+);
 
 const emit = defineEmits<{
-  increment: [side: TeamSide]
-  decrement: [side: TeamSide]
-  validate: []
-  score: []
-}>()
+  increment: [side: TeamSide];
+  decrement: [side: TeamSide];
+  validate: [];
+  score: [];
+}>();
 
 // Les deux côtés sont symétriques : on les assemble une fois pour itérer dans
 // le template au lieu de dupliquer chaque demi-carte.
 const sides = computed(() => [
   {
-    side: 'A' as TeamSide,
+    side: "A" as TeamSide,
     name: props.teamAName,
     score: props.scoreA,
     tone: props.toneA,
-    isLeading: props.leadingSide === 'A',
-    isWinner: props.winnerSide === 'A',
+    isLeading: props.leadingSide === "A",
+    isWinner: props.winnerSide === "A",
   },
   {
-    side: 'B' as TeamSide,
+    side: "B" as TeamSide,
     name: props.teamBName,
     score: props.scoreB,
     tone: props.toneB,
-    isLeading: props.leadingSide === 'B',
-    isWinner: props.winnerSide === 'B',
+    isLeading: props.leadingSide === "B",
+    isWinner: props.winnerSide === "B",
   },
-])
+]);
 
-const isPlayed = computed(() => props.scoreA !== null && props.scoreB !== null)
+const isPlayed = computed(() => props.scoreA !== null && props.scoreB !== null);
 </script>
 
 <template>
@@ -108,7 +108,7 @@ const isPlayed = computed(() => props.scoreA !== null && props.scoreB !== null)
         <div class="flex gap-2">
           <button
             type="button"
-            class="h-[46px] flex-1 rounded-(--pk-r-md) font-disp text-2xl font-bold"
+            class="h-11.5 flex-1 rounded-(--pk-r-md) font-disp text-2xl font-bold"
             :class="
               entry.isLeading
                 ? 'bg-white text-primary'
@@ -121,7 +121,7 @@ const isPlayed = computed(() => props.scoreA !== null && props.scoreB !== null)
           </button>
           <button
             type="button"
-            class="h-[46px] flex-1 rounded-(--pk-r-md) font-disp text-2xl font-bold text-(--pk-cream)"
+            class="h-11.5 flex-1 rounded-(--pk-r-md) font-disp text-2xl font-bold text-(--pk-cream)"
             :class="entry.isLeading ? 'bg-primary' : 'bg-(--pk-navy)'"
             :aria-label="`Ajouter un point à ${entry.name}`"
             @click="emit('increment', entry.side)"
@@ -132,7 +132,7 @@ const isPlayed = computed(() => props.scoreA !== null && props.scoreB !== null)
       </section>
 
       <span
-        class="absolute top-[92px] left-1/2 z-[2] flex size-[46px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-[3px] border-(--pk-page) bg-(--pk-navy) font-disp text-sm font-extrabold text-(--pk-cream) shadow-(--pk-shadow-medallion)"
+        class="absolute top-23 left-1/2 z-2 flex size-11.5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-[3px] border-(--pk-page) bg-(--pk-navy) font-disp text-sm font-extrabold text-(--pk-cream) shadow-(--pk-shadow-medallion)"
       >
         VS
       </span>
@@ -157,7 +157,7 @@ const isPlayed = computed(() => props.scoreA !== null && props.scoreB !== null)
       <template v-for="(entry, sideIndex) in sides" :key="entry.side">
         <div
           v-if="sideIndex === 1"
-          class="flex w-[38px] items-center justify-center font-disp text-xs font-extrabold text-(--pk-muted)"
+          class="flex w-9.5 items-center justify-center font-disp text-xs font-extrabold text-(--pk-muted)"
         >
           VS
         </div>
@@ -195,7 +195,7 @@ const isPlayed = computed(() => props.scoreA !== null && props.scoreB !== null)
       </div>
       <button
         type="button"
-        class="inline-flex h-12 items-center gap-1.5 rounded-(--pk-r-md) bg-primary px-[18px] font-disp text-[13px] font-extrabold tracking-[0.04em] uppercase text-(--pk-cream)"
+        class="inline-flex h-12 items-center gap-1.5 rounded-(--pk-r-md) bg-primary px-4.5 font-disp text-[13px] font-extrabold tracking-[0.04em] uppercase text-(--pk-cream)"
         @click="emit('score')"
       >
         <UIcon name="i-lucide-plus" class="size-4" />

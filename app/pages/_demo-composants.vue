@@ -1,6 +1,6 @@
 <!-- DEMO TEMPORAIRE — à supprimer en fin de lot composants (ticket de cleanup) -->
 <script setup lang="ts">
-import type { TournamentStatus } from '../types'
+import type { TournamentStatus } from "../types";
 
 // Page de validation isolée des composants du lot (briques de base :
 // BouleAvatar, StatutBadge ; assemblages : AppHeader, ScoreboardEquipe,
@@ -8,50 +8,50 @@ import type { TournamentStatus } from '../types'
 // (redirect auth global).
 
 const TONES = [
-  'horizon',
-  'sand',
-  'gold',
-  'silver',
-  'bronze',
-  'clay',
-  'dark',
-] as const
+  "horizon",
+  "sand",
+  "gold",
+  "silver",
+  "bronze",
+  "clay",
+  "dark",
+] as const;
 
-const SIZES = [40, 60, 96]
+const SIZES = [40, 60, 96];
 
 const STATUTS: { statut: TournamentStatus; live?: boolean; titre: string }[] = [
-  { statut: 'draft', titre: 'Brouillon' },
-  { statut: 'in_progress', titre: 'En cours' },
-  { statut: 'in_progress', live: true, titre: 'En direct (live)' },
-  { statut: 'completed', titre: 'Terminé' },
-]
+  { statut: "draft", titre: "Brouillon" },
+  { statut: "in_progress", titre: "En cours" },
+  { statut: "in_progress", live: true, titre: "En direct (live)" },
+  { statut: "completed", titre: "Terminé" },
+];
 
 // Un panneau par variant : header sur le navy du header, liste sur la crème
 // des cartes. La couleur (toujours or en header, par statut en liste) doit
 // tenir sur son fond.
 const PANELS = [
   {
-    titre: 'Variant header — sur navy',
-    variant: 'header' as const,
-    panelClass: 'bg-(--pk-navy)',
-    captionClass: 'text-(--pk-on-navy-2)',
+    titre: "Variant header — sur navy",
+    variant: "header" as const,
+    panelClass: "bg-(--pk-navy)",
+    captionClass: "text-(--pk-on-navy-2)",
   },
   {
-    titre: 'Variant liste — sur crème',
-    variant: 'liste' as const,
-    panelClass: 'bg-elevated',
-    captionClass: 'text-toned',
+    titre: "Variant liste — sur crème",
+    variant: "liste" as const,
+    panelClass: "bg-elevated",
+    captionClass: "text-toned",
   },
-]
+];
 
 // AppHeader : onglets interactifs (l'état actif vit dans le parent,
 // le composant ne fait qu'émettre tab-change).
 const ONGLETS_DEMO = [
-  { id: 'equipes', label: 'Équipes' },
-  { id: 'matchs', label: 'Matchs' },
-  { id: 'classement', label: 'Classement' },
-]
-const ongletActif = ref('matchs')
+  { id: "equipes", label: "Équipes" },
+  { id: "matchs", label: "Matchs" },
+  { id: "classement", label: "Classement" },
+];
+const ongletActif = ref("matchs");
 </script>
 
 <template>
@@ -127,7 +127,10 @@ const ongletActif = ref('matchs')
           class="space-y-3 rounded-xl p-4"
           :class="panel.panelClass"
         >
-          <p class="text-xs tracking-wide uppercase" :class="panel.captionClass">
+          <p
+            class="text-xs tracking-wide uppercase"
+            :class="panel.captionClass"
+          >
             {{ panel.titre }}
           </p>
           <div class="flex flex-wrap items-center gap-x-5 gap-y-3">
@@ -137,8 +140,14 @@ const ongletActif = ref('matchs')
               :key="entry.titre"
               class="flex flex-col items-start gap-1.5"
             >
-              <StatutBadge :statut="entry.statut" :variant="panel.variant" :live="entry.live" />
-              <span class="text-[11px]" :class="panel.captionClass">{{ entry.titre }}</span>
+              <StatutBadge
+                :statut="entry.statut"
+                :variant="panel.variant"
+                :live="entry.live"
+              />
+              <span class="text-[11px]" :class="panel.captionClass">{{
+                entry.titre
+              }}</span>
             </div>
           </div>
         </div>
@@ -213,8 +222,8 @@ const ongletActif = ref('matchs')
 
       <div class="space-y-2">
         <p class="text-xs text-toned">
-          Accueil — état vide (header = logo + profil seuls ; le contenu
-          « Aucun tournoi » ci-dessous est du contenu de page, hors AppHeader)
+          Accueil — état vide (header = logo + profil seuls ; le contenu « Aucun
+          tournoi » ci-dessous est du contenu de page, hors AppHeader)
         </p>
         <AppHeader mode="accueil" profile-initial="B" />
         <div class="flex flex-col items-center gap-3 px-5 py-8 text-center">
@@ -227,9 +236,9 @@ const ongletActif = ref('matchs')
           </p>
           <button
             type="button"
-            class="flex h-[52px] w-full items-center justify-center gap-2 rounded-[13px] bg-primary font-disp text-[15px] font-extrabold tracking-[0.02em] uppercase text-(--pk-cream)"
+            class="flex h-13 w-full items-center justify-center gap-2 rounded-[13px] bg-primary font-disp text-[15px] font-extrabold tracking-[0.02em] uppercase text-(--pk-cream)"
           >
-            <UIcon name="i-lucide-plus" class="size-[18px]" />
+            <UIcon name="i-lucide-plus" class="size-4.5" />
             Créer un tournoi
           </button>
         </div>
@@ -257,7 +266,9 @@ const ongletActif = ref('matchs')
       </div>
 
       <div class="space-y-2">
-        <p class="text-xs text-toned">Mode liste — match joué (gagnant : Les Bouchons)</p>
+        <p class="text-xs text-toned">
+          Mode liste — match joué (gagnant : Les Bouchons)
+        </p>
         <ScoreboardEquipe
           mode="liste"
           team-a-name="Les Bouchons"
@@ -280,23 +291,98 @@ const ongletActif = ref('matchs')
       </div>
     </section>
 
-    <!-- CarteTournoi : terminé / brouillon -->
+    <!-- CarteTournoi (sans boule) : liséré selon statut -->
     <section class="space-y-4">
       <h2 class="font-disp text-lg font-semibold text-default">
-        CarteTournoi — liséré selon statut
+        CarteTournoi — liséré selon statut (sans boule)
       </h2>
       <div class="space-y-3">
+        <p
+          class="font-disp text-[10px] font-extrabold tracking-widest uppercase text-(--pk-muted)"
+        >
+          Tous les tournois
+        </p>
         <CarteTournoi
-          name="Apéro de printemps"
-          sub-info="12 avr. · Le village"
-          status="completed"
-          tone="gold"
+          name="Tournoi du 14 juillet"
+          sub-info="En cours · 3/6 matchs"
+          status="in_progress"
         />
         <CarteTournoi
           name="Anniversaire Marc"
-          sub-info="20 juin · Boulodrome du port"
+          sub-info="22 juin · Place du village"
           status="draft"
-          tone="sand"
+        />
+        <CarteTournoi
+          name="Apéro de printemps"
+          sub-info="Vainqueur · Les Magnums"
+          status="completed"
+        />
+      </div>
+    </section>
+
+    <!-- CarteEquipe : nom + joueurs + éditer/supprimer -->
+    <section class="space-y-4">
+      <h2 class="font-disp text-lg font-semibold text-default">
+        CarteEquipe — liste des équipes
+      </h2>
+      <p class="text-xs text-toned">
+        L'en-tête « 4 équipes inscrites » et le bouton « Ajouter une équipe »
+        sont du contenu d'écran, hors CarteEquipe.
+      </p>
+      <div class="space-y-3">
+        <p
+          class="font-disp text-[10px] font-extrabold tracking-widest uppercase text-(--pk-muted)"
+        >
+          4 équipes inscrites
+        </p>
+        <CarteEquipe name="Les Bouchons" :players="['Marc', 'Sophie']" />
+        <CarteEquipe name="Les Cagoles" :players="['Léa', 'Tom', 'Anna']" />
+        <CarteEquipe name="Les Pointeurs" :players="['Jules', 'Karim']" />
+        <CarteEquipe name="Les Tireurs" :players="['Eva', 'Paul']" />
+        <button
+          type="button"
+          class="flex h-13 w-full items-center justify-center gap-2 rounded-(--pk-r-card) border-2 border-dashed border-primary-200 font-disp text-[13px] font-extrabold tracking-[0.04em] uppercase text-primary"
+        >
+          <UIcon name="i-lucide-plus" class="size-4" />
+          Ajouter une équipe
+        </button>
+      </div>
+    </section>
+
+    <!-- LigneClassement : en-tête + 4 lignes -->
+    <section class="space-y-4">
+      <h2 class="font-disp text-lg font-semibold text-default">
+        LigneClassement — leader doré + médailles
+      </h2>
+      <div class="space-y-2">
+        <LigneClassementEntete />
+        <LigneClassement
+          :rank="1"
+          team-name="Les Bouchons"
+          :wins="2"
+          :losses="0"
+          :diff="11"
+        />
+        <LigneClassement
+          :rank="2"
+          team-name="Les Tireurs"
+          :wins="2"
+          :losses="1"
+          :diff="4"
+        />
+        <LigneClassement
+          :rank="3"
+          team-name="Les Cagoles"
+          :wins="1"
+          :losses="1"
+          :diff="-2"
+        />
+        <LigneClassement
+          :rank="4"
+          team-name="Les Pointeurs"
+          :wins="0"
+          :losses="3"
+          :diff="-13"
         />
       </div>
     </section>

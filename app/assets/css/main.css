@@ -140,6 +140,8 @@
      usage ombre, pas remplissage (pas un doublon du token primary). */
   --pk-clay-rgb: 224 101 78;
   --pk-shadow-rgb: 18 21 42;
+  --pk-gold-rgb: 226 180 90; /* #E2B45A — ombre dorée du leader du classement */
+  --pk-navy-rgb: 31 37 66; /* #1F2542 — D du leader en navy 60% */
 
   /* Ombres composées */
   --pk-shadow-card: 0 6px 16px -12px rgb(var(--pk-shadow-rgb) / 0.45);
