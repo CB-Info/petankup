@@ -1,3 +1,17 @@
+<script lang="ts">
+// Type public du composant : les consommateurs (ScoreboardEquipe,
+// CarteTournoi…) typent leur prop `tone` dessus via
+// `import type { BouleTone } from './BouleAvatar.vue'`.
+export type BouleTone =
+  | 'horizon'
+  | 'sand'
+  | 'gold'
+  | 'silver'
+  | 'bronze'
+  | 'clay'
+  | 'dark'
+</script>
+
 <script setup lang="ts">
 // Boule de pétanque — motif signature de l'app (avatars d'équipe, compte,
 // podium, décor). Brique PUREMENT visuelle : elle reçoit un `tone`, elle ne le
@@ -8,15 +22,6 @@
 // Recette de rendu prescriptive (source Claude Design) — ne pas réinventer le
 // dégradé ni les offsets. Tout est proportionnel à `size` pour rester net à
 // n'importe quelle échelle.
-
-type BouleTone =
-  | 'horizon'
-  | 'sand'
-  | 'gold'
-  | 'silver'
-  | 'bronze'
-  | 'clay'
-  | 'dark'
 
 const props = withDefaults(
   defineProps<{

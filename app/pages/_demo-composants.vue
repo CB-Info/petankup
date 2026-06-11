@@ -2,8 +2,10 @@
 <script setup lang="ts">
 import type { TournamentStatus } from '../types'
 
-// Page de validation isolée des briques de base (BouleAvatar, StatutBadge).
-// Non liée dans la navigation. Accès en étant connecté (redirect auth global).
+// Page de validation isolée des composants du lot (briques de base :
+// BouleAvatar, StatutBadge ; assemblages : EnteteEcran, ScoreboardEquipe,
+// CarteTournoi). Non liée dans la navigation. Accès en étant connecté
+// (redirect auth global).
 
 const TONES = [
   'horizon',
@@ -41,6 +43,15 @@ const PANELS = [
     captionClass: 'text-toned',
   },
 ]
+
+// EnteteEcran : onglets interactifs (l'état actif vit dans le parent,
+// le composant ne fait qu'émettre tab-change).
+const ONGLETS_DEMO = [
+  { id: 'equipes', label: 'Équipes' },
+  { id: 'matchs', label: 'Matchs' },
+  { id: 'classement', label: 'Classement' },
+]
+const ongletActif = ref('matchs')
 </script>
 
 <template>
@@ -131,6 +142,103 @@ const PANELS = [
             </div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- EnteteEcran : variantes du bandeau navy -->
+    <section class="space-y-4">
+      <h2 class="font-disp text-lg font-semibold text-default">
+        EnteteEcran — kicker / onglets / sheet
+      </h2>
+
+      <div class="space-y-2">
+        <p class="text-xs text-toned">Kicker + titre + sous-titre</p>
+        <EnteteEcran
+          kicker="En direct"
+          title="Tournoi du 14 juillet"
+          subtitle="Boulodrome du port · 4 équipes"
+        />
+      </div>
+
+      <div class="space-y-2">
+        <p class="text-xs text-toned">Retour + onglets (interactifs)</p>
+        <EnteteEcran
+          title="Tournoi du 14 juillet"
+          :back="{ label: 'Accueil', to: '/' }"
+          :tabs="ONGLETS_DEMO"
+          :active-tab="ongletActif"
+          @tab-change="ongletActif = $event"
+        />
+      </div>
+
+      <div class="space-y-2">
+        <p class="text-xs text-toned">Sheet : kicker + close</p>
+        <EnteteEcran kicker="Partage" title="Gérer les invités" closable />
+      </div>
+    </section>
+
+    <!-- ScoreboardEquipe : saisie + liste (joué / à jouer) -->
+    <section class="space-y-4">
+      <h2 class="font-disp text-lg font-semibold text-default">
+        ScoreboardEquipe — saisie et liste
+      </h2>
+
+      <div class="space-y-2">
+        <p class="text-xs text-toned">Mode saisie (meneur : Les Bouchons)</p>
+        <ScoreboardEquipe
+          mode="saisie"
+          team-a-name="Les Bouchons"
+          team-b-name="Les Cagoles"
+          :score-a="13"
+          :score-b="9"
+          leading-side="A"
+          tone-a="gold"
+          tone-b="horizon"
+        />
+      </div>
+
+      <div class="space-y-2">
+        <p class="text-xs text-toned">Mode liste — match joué (gagnant : Les Bouchons)</p>
+        <ScoreboardEquipe
+          mode="liste"
+          team-a-name="Les Bouchons"
+          team-b-name="Les Cagoles"
+          :score-a="13"
+          :score-b="7"
+          winner-side="A"
+        />
+      </div>
+
+      <div class="space-y-2">
+        <p class="text-xs text-toned">Mode liste — match à jouer</p>
+        <ScoreboardEquipe
+          mode="liste"
+          team-a-name="Les Pointeurs"
+          team-b-name="Les Tireurs"
+          :score-a="null"
+          :score-b="null"
+        />
+      </div>
+    </section>
+
+    <!-- CarteTournoi : terminé / brouillon -->
+    <section class="space-y-4">
+      <h2 class="font-disp text-lg font-semibold text-default">
+        CarteTournoi — liséré selon statut
+      </h2>
+      <div class="space-y-3">
+        <CarteTournoi
+          name="Apéro de printemps"
+          sub-info="12 avr. · Le village"
+          status="completed"
+          tone="gold"
+        />
+        <CarteTournoi
+          name="Anniversaire Marc"
+          sub-info="20 juin · Boulodrome du port"
+          status="draft"
+          tone="sand"
+        />
       </div>
     </section>
   </div>
