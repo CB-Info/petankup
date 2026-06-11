@@ -7,7 +7,14 @@
 // changement de compte sans qu'on ait à le faire ici. La page n'a
 // qu'à observer hasFetchedTournaments / lastLoadTournamentsError et
 // fournir un retry manuel sur erreur.
+//
+// Layout désactivé : l'accueil porte son propre header navy (AppHeader
+// mode accueil) — le bandeau crème du layout par défaut ferait doublon.
+// La déconnexion reste accessible via /account (pastille profil), qui
+// conserve le layout.
 import type { TournamentStatus } from "../types";
+
+definePageMeta({ layout: false });
 
 const tournamentStore = useTournamentStore();
 const {
@@ -17,8 +24,17 @@ const {
   hasFetchedTournaments,
   lastLoadTournamentsError,
   profileById,
+  currentProfile,
 } = storeToRefs(tournamentStore);
 const { showError } = useErrorToast();
+
+// Initiale de la pastille profil du header. Le pseudo est déjà hydraté par
+// l'orchestration d'auth du store (loadTournamentsForCurrentSession →
+// loadCurrentProfile, sur tout point d'entrée) — aucun fetch supplémentaire
+// ici. Pastille vide (valeur neutre) le temps du chargement.
+const profileInitial = computed(() =>
+  (currentProfile.value?.displayName ?? "").charAt(0).toUpperCase(),
+);
 
 const isRetrying = ref(false);
 
@@ -113,220 +129,168 @@ const allEmpty = computed(
   () => mineEmpty.value && sharedEmpty.value && publicEmpty.value,
 );
 
-function statusLabel(status: TournamentStatus): string {
-  switch (status) {
-    case "draft":
-      return "Brouillon";
-    case "in_progress":
-      return "En cours";
-    case "completed":
-      return "Terminé";
+// Sous-info d'une CarteTournoi : « date · lieu », complétée du nom de
+// l'organisateur pour les tournois partagés/publics quand son profil est
+// résolu. Le statut n'y figure pas (porté par le label de la carte).
+function tournamentSubInfo(
+  tournament: { date: string; location?: string; ownerId: string },
+  withOrganizer = false,
+): string {
+  const parts = [formatDate(tournament.date)];
+  if (tournament.location) parts.push(tournament.location);
+  if (withOrganizer) {
+    const organizer = organizerName(tournament.ownerId);
+    if (organizer) parts.push(`Par ${organizer}`);
   }
-}
-
-type BadgeColor = "primary" | "secondary" | "success";
-
-function statusBadgeColor(status: TournamentStatus): BadgeColor {
-  switch (status) {
-    case "in_progress":
-      return "primary";
-    case "draft":
-      return "secondary";
-    case "completed":
-      return "success";
-  }
+  return parts.join(" · ");
 }
 
 useHead({ title: "Pétankup — Gestion de tournois" });
 </script>
 
 <template>
-  <div>
-    <div v-if="lastLoadTournamentsError" class="space-y-3 py-16 text-center">
-      <h2 class="text-lg font-semibold text-primary-900">
-        Impossible de charger les tournois
-      </h2>
-      <p class="text-toned">Vérifiez votre connexion et réessayez.</p>
-      <UButton
-        color="primary"
-        size="lg"
-        :loading="isRetrying"
-        class="mt-2"
-        block
-        @click="retryLoadTournaments"
-      >
-        Réessayer
-      </UButton>
-    </div>
+  <div class="min-h-screen bg-default text-default">
+    <div class="mx-auto max-w-2xl">
+      <AppHeader
+        mode="accueil"
+        :profile-initial="profileInitial"
+        @profile="navigateTo('/account')"
+      />
+      <!-- TODO bloc tournoi-en-cours : à brancher quand le store exposera
+           matchsJoues/matchsTotal/equipes du tournoi in_progress (prop
+           `tournoi` d'AppHeader, cf. HeaderTournoi). -->
 
-    <div
-      v-else-if="!hasFetchedTournaments"
-      class="py-16 text-center"
-    >
-      <p class="text-toned">Chargement…</p>
-    </div>
-
-    <div v-else-if="allEmpty" class="py-16 text-center">
-      <h2 class="text-lg font-semibold text-primary-900">
-        Aucun tournoi pour l'instant
-      </h2>
-      <p class="mt-2 text-toned">Créez votre premier tournoi de pétanque</p>
-      <UButton
-        to="/tournaments/new"
-        color="primary"
-        size="lg"
-        class="mt-6"
-        block
-      >
-        Créer un tournoi
-      </UButton>
-    </div>
-
-    <div v-else class="space-y-6">
-      <UButton to="/tournaments/new" color="primary" size="lg" block>
-        Créer un tournoi
-      </UButton>
-
-      <section v-if="!mineEmpty" class="space-y-3">
-        <h2
-          class="text-xs font-semibold uppercase tracking-[0.08em] text-toned"
+      <main class="px-4.5 pt-5.5 pb-10">
+        <div
+          v-if="lastLoadTournamentsError"
+          class="flex flex-col items-center gap-3 py-16 text-center"
         >
-          Mes tournois
-        </h2>
-        <ul class="space-y-3">
-          <li v-for="tournament in sortedMyTournaments" :key="tournament.id">
-            <NuxtLink :to="`/tournaments/${tournament.id}`" class="block">
-              <UCard>
-                <div class="flex items-start justify-between gap-3">
-                  <div class="min-w-0 space-y-1">
-                    <h3 class="truncate font-semibold text-primary-900">
-                      {{ tournament.name }}
-                    </h3>
-                    <p class="text-sm text-toned">
-                      {{ formatDate(tournament.date) }}
-                    </p>
-                    <p
-                      v-if="tournament.location"
-                      class="truncate text-sm text-toned"
-                    >
-                      {{ tournament.location }}
-                    </p>
-                  </div>
-                  <div class="flex shrink-0 flex-col items-end gap-1">
-                    <UBadge
-                      :color="statusBadgeColor(tournament.status)"
-                      variant="soft"
-                    >
-                      {{ statusLabel(tournament.status) }}
-                    </UBadge>
-                    <VisibilityBadge :visibility="tournament.visibility" />
-                  </div>
-                </div>
-              </UCard>
-            </NuxtLink>
-          </li>
-        </ul>
-      </section>
-
-      <section v-if="!sharedEmpty" class="space-y-3">
-        <h2
-          class="text-xs font-semibold uppercase tracking-[0.08em] text-toned"
-        >
-          Partagés avec moi
-        </h2>
-        <ul class="space-y-3">
-          <li
-            v-for="tournament in sortedSharedTournaments"
-            :key="tournament.id"
+          <h2 class="font-disp text-[19px] font-extrabold text-(--pk-ink)">
+            Impossible de charger les tournois
+          </h2>
+          <p class="font-sans text-sm text-(--pk-subtle)">
+            Vérifiez votre connexion et réessayez.
+          </p>
+          <UButton
+            color="primary"
+            block
+            :loading="isRetrying"
+            class="mt-2 h-13 rounded-[13px] font-disp text-[15px] font-extrabold tracking-[0.02em] uppercase text-(--pk-cream)"
+            @click="retryLoadTournaments"
           >
-            <NuxtLink :to="`/tournaments/${tournament.id}`" class="block">
-              <UCard>
-                <div class="flex items-start justify-between gap-3">
-                  <div class="min-w-0 space-y-1">
-                    <h3 class="truncate font-semibold text-primary-900">
-                      {{ tournament.name }}
-                    </h3>
-                    <p class="text-sm text-toned">
-                      {{ formatDate(tournament.date) }}
-                    </p>
-                    <p
-                      v-if="tournament.location"
-                      class="truncate text-sm text-toned"
-                    >
-                      {{ tournament.location }}
-                    </p>
-                    <p
-                      v-if="organizerName(tournament.ownerId)"
-                      class="truncate text-sm text-toned"
-                    >
-                      Organisé par {{ organizerName(tournament.ownerId) }}
-                    </p>
-                  </div>
-                  <div class="flex shrink-0 flex-col items-end gap-1">
-                    <UBadge
-                      :color="statusBadgeColor(tournament.status)"
-                      variant="soft"
-                    >
-                      {{ statusLabel(tournament.status) }}
-                    </UBadge>
-                    <VisibilityBadge :visibility="tournament.visibility" />
-                  </div>
-                </div>
-              </UCard>
-            </NuxtLink>
-          </li>
-        </ul>
-      </section>
+            Réessayer
+          </UButton>
+        </div>
 
-      <section v-if="!publicEmpty" class="space-y-3">
-        <h2
-          class="text-xs font-semibold uppercase tracking-[0.08em] text-toned"
+        <p
+          v-else-if="!hasFetchedTournaments"
+          class="py-16 text-center font-sans text-sm text-(--pk-subtle)"
         >
-          Tournois publics
-        </h2>
-        <ul class="space-y-3">
-          <li
-            v-for="tournament in sortedPublicTournaments"
-            :key="tournament.id"
+          Chargement…
+        </p>
+
+        <div
+          v-else-if="allEmpty"
+          class="flex flex-col items-center gap-3 py-8 text-center"
+        >
+          <BouleAvatar tone="gold" :size="64" />
+          <p class="font-disp text-[19px] font-extrabold text-(--pk-ink)">
+            Aucun tournoi pour l'instant
+          </p>
+          <p class="font-sans text-sm text-(--pk-subtle)">
+            Créez votre premier tournoi de pétanque
+          </p>
+          <UButton
+            to="/tournaments/new"
+            color="primary"
+            icon="i-lucide-plus"
+            block
+            class="mt-2 h-13 rounded-[13px] font-disp text-[15px] font-extrabold tracking-[0.02em] uppercase text-(--pk-cream)"
+            :ui="{ leadingIcon: 'size-4.5' }"
           >
-            <NuxtLink :to="`/tournaments/${tournament.id}`" class="block">
-              <UCard>
-                <div class="flex items-start justify-between gap-3">
-                  <div class="min-w-0 space-y-1">
-                    <h3 class="truncate font-semibold text-primary-900">
-                      {{ tournament.name }}
-                    </h3>
-                    <p class="text-sm text-toned">
-                      {{ formatDate(tournament.date) }}
-                    </p>
-                    <p
-                      v-if="tournament.location"
-                      class="truncate text-sm text-toned"
-                    >
-                      {{ tournament.location }}
-                    </p>
-                    <p
-                      v-if="organizerName(tournament.ownerId)"
-                      class="truncate text-sm text-toned"
-                    >
-                      Organisé par {{ organizerName(tournament.ownerId) }}
-                    </p>
-                  </div>
-                  <div class="flex shrink-0 flex-col items-end gap-1">
-                    <UBadge
-                      :color="statusBadgeColor(tournament.status)"
-                      variant="soft"
-                    >
-                      {{ statusLabel(tournament.status) }}
-                    </UBadge>
-                    <VisibilityBadge :visibility="tournament.visibility" />
-                  </div>
-                </div>
-              </UCard>
-            </NuxtLink>
-          </li>
-        </ul>
-      </section>
+            Créer un tournoi
+          </UButton>
+        </div>
+
+        <div v-else class="space-y-6">
+          <section>
+            <div class="mb-3 flex items-center justify-between">
+              <h2
+                class="font-disp text-[11px] font-extrabold tracking-[0.14em] uppercase text-(--pk-subtle)"
+              >
+                Tous les tournois
+              </h2>
+              <UButton
+                to="/tournaments/new"
+                color="navy"
+                icon="i-lucide-plus"
+                class="h-7.75 gap-1.5 rounded-[10px] px-3.25 font-disp text-xs font-extrabold tracking-[0.04em] uppercase"
+                :ui="{ leadingIcon: 'size-3.75' }"
+              >
+                Nouveau
+              </UButton>
+            </div>
+            <ul v-if="!mineEmpty" class="space-y-2.75">
+              <li
+                v-for="tournament in sortedMyTournaments"
+                :key="tournament.id"
+              >
+                <NuxtLink :to="`/tournaments/${tournament.id}`" class="block">
+                  <CarteTournoi
+                    :name="tournament.name"
+                    :sub-info="tournamentSubInfo(tournament)"
+                    :status="tournament.status"
+                  />
+                </NuxtLink>
+              </li>
+            </ul>
+          </section>
+
+          <section v-if="!sharedEmpty">
+            <h2
+              class="mb-3 font-disp text-[11px] font-extrabold tracking-[0.14em] uppercase text-(--pk-subtle)"
+            >
+              Partagés avec moi
+            </h2>
+            <ul class="space-y-2.75">
+              <li
+                v-for="tournament in sortedSharedTournaments"
+                :key="tournament.id"
+              >
+                <NuxtLink :to="`/tournaments/${tournament.id}`" class="block">
+                  <CarteTournoi
+                    :name="tournament.name"
+                    :sub-info="tournamentSubInfo(tournament, true)"
+                    :status="tournament.status"
+                  />
+                </NuxtLink>
+              </li>
+            </ul>
+          </section>
+
+          <section v-if="!publicEmpty">
+            <h2
+              class="mb-3 font-disp text-[11px] font-extrabold tracking-[0.14em] uppercase text-(--pk-subtle)"
+            >
+              Tournois publics
+            </h2>
+            <ul class="space-y-2.75">
+              <li
+                v-for="tournament in sortedPublicTournaments"
+                :key="tournament.id"
+              >
+                <NuxtLink :to="`/tournaments/${tournament.id}`" class="block">
+                  <CarteTournoi
+                    :name="tournament.name"
+                    :sub-info="tournamentSubInfo(tournament, true)"
+                    :status="tournament.status"
+                  />
+                </NuxtLink>
+              </li>
+            </ul>
+          </section>
+        </div>
+      </main>
     </div>
   </div>
 </template>
