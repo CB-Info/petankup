@@ -175,6 +175,74 @@ const ongletActif = ref('matchs')
         <p class="text-xs text-toned">Sheet : kicker + close</p>
         <EnteteEcran kicker="Partage" title="Gérer les invités" closable />
       </div>
+
+      <div class="space-y-2">
+        <p class="text-xs text-toned">
+          Accueil — bloc tournoi-en-cours (contenu fourni via slot)
+        </p>
+        <EnteteEcran mode="accueil" profile-initial="B">
+          <StatutBadge statut="in_progress" live variant="header" />
+          <h2
+            class="mt-2.5 font-disp text-[30px] font-extrabold leading-[1.05] tracking-[-0.02em] whitespace-pre-line text-(--pk-cream)"
+          >
+            Tournoi du
+14 juillet
+          </h2>
+          <div class="mt-[18px] flex gap-[22px]">
+            <div>
+              <p class="font-num text-2xl font-bold leading-[1.1] text-(--pk-cream)">
+                3/6
+              </p>
+              <p
+                class="mt-[3px] font-disp text-[9.5px] font-bold tracking-[0.12em] uppercase text-(--pk-on-navy-3)"
+              >
+                Matchs
+              </p>
+            </div>
+            <div>
+              <p class="font-num text-2xl font-bold leading-[1.1] text-(--pk-cream)">
+                4
+              </p>
+              <p
+                class="mt-[3px] font-disp text-[9.5px] font-bold tracking-[0.12em] uppercase text-(--pk-on-navy-3)"
+              >
+                Équipes
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="mt-5 flex h-[50px] w-full items-center justify-center gap-2 rounded-[13px] bg-primary font-disp text-[15px] font-extrabold tracking-[0.02em] uppercase text-(--pk-cream)"
+          >
+            Reprendre le tournoi
+            <UIcon name="i-lucide-arrow-right" class="size-[18px]" />
+          </button>
+        </EnteteEcran>
+      </div>
+
+      <div class="space-y-2">
+        <p class="text-xs text-toned">
+          Accueil — état vide (header = logo + profil seuls ; le contenu
+          « Aucun tournoi » ci-dessous est du contenu de page, hors EnteteEcran)
+        </p>
+        <EnteteEcran mode="accueil" profile-initial="B" />
+        <div class="flex flex-col items-center gap-3 px-5 py-8 text-center">
+          <BouleAvatar tone="gold" :size="64" />
+          <p class="font-disp text-[19px] font-extrabold text-(--pk-ink)">
+            Aucun tournoi pour l'instant
+          </p>
+          <p class="font-sans text-sm text-(--pk-subtle)">
+            Crée ton premier tournoi pour lancer la saison.
+          </p>
+          <button
+            type="button"
+            class="flex h-[52px] w-full items-center justify-center gap-2 rounded-[13px] bg-primary font-disp text-[15px] font-extrabold tracking-[0.02em] uppercase text-(--pk-cream)"
+          >
+            <UIcon name="i-lucide-plus" class="size-[18px]" />
+            Créer un tournoi
+          </button>
+        </div>
+      </div>
     </section>
 
     <!-- ScoreboardEquipe : saisie + liste (joué / à jouer) -->
