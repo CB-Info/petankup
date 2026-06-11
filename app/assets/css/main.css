@@ -115,4 +115,45 @@
     var(--pk-navy) 52%,
     var(--pk-navy-deep)
   );
+
+  /* Surfaces & neutres (Direction C) — alias d'usage pour les valeurs CSS des
+     composants d'assemblage (bordures, fonds dans des contextes où les
+     utilitaires sémantiques Nuxt UI ne s'appliquent pas, ex. border du
+     médaillon VS). Les couleurs de MARQUE (clay/gold/green) restent sur les
+     tokens sémantiques Nuxt UI — pas de --pk-clay/gold/green. */
+  --pk-page: #F0ECE6;
+  --pk-card: #FBF8F3;
+  --pk-line: #E5E1D9;
+  --pk-ink: #232231;
+  --pk-subtle: #605E6E;
+  --pk-muted: #97939E;
+
+  /* Texte sur navy — compléments du socle (--pk-cream / --pk-on-navy-2/3).
+     --pk-on-navy est un blanc système froid (status bar, croix), DISTINCT
+     du cream. */
+  --pk-on-navy: #E6EEF0;
+  --pk-on-navy-08: rgb(255 255 255 / 0.08); /* voile onglet inactif */
+  --pk-on-navy-10: rgb(255 255 255 / 0.1); /* voile bouton croix */
+
+  /* Canaux RGB pour ombres composées. --pk-clay-rgb ré-exprime le corail
+     UNIQUEMENT parce qu'une ombre rgb(... / alpha) a besoin des canaux —
+     usage ombre, pas remplissage (pas un doublon du token primary). */
+  --pk-clay-rgb: 224 101 78;
+  --pk-shadow-rgb: 18 21 42;
+  --pk-gold-rgb: 226 180 90; /* #E2B45A — ombre dorée du leader du classement */
+  --pk-navy-rgb: 31 37 66; /* #1F2542 — D du leader en navy 60% */
+
+  /* Ombres composées */
+  --pk-shadow-card: 0 6px 16px -12px rgb(var(--pk-shadow-rgb) / 0.45);
+  --pk-shadow-card-lg: 0 6px 16px -12px rgb(var(--pk-shadow-rgb) / 0.5);
+  --pk-shadow-clay-sm: 0 16px 30px -16px rgb(var(--pk-clay-rgb) / 0.5);
+  --pk-shadow-clay-lg: 0 16px 30px -14px rgb(var(--pk-clay-rgb) / 0.7);
+  --pk-shadow-medallion: 0 8px 16px -6px rgb(0 0 0 / 0.4);
+
+  /* Rayons */
+  --pk-r-header: 24px;
+  --pk-r-panel: 18px;
+  --pk-r-card: 16px;
+  --pk-r-md: 12px;
+  --pk-r-sm: 10px;
 }
