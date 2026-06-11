@@ -3,7 +3,7 @@
 import type { TournamentStatus } from '../types'
 
 // Page de validation isolée des composants du lot (briques de base :
-// BouleAvatar, StatutBadge ; assemblages : EnteteEcran, ScoreboardEquipe,
+// BouleAvatar, StatutBadge ; assemblages : AppHeader, ScoreboardEquipe,
 // CarteTournoi). Non liée dans la navigation. Accès en étant connecté
 // (redirect auth global).
 
@@ -44,7 +44,7 @@ const PANELS = [
   },
 ]
 
-// EnteteEcran : onglets interactifs (l'état actif vit dans le parent,
+// AppHeader : onglets interactifs (l'état actif vit dans le parent,
 // le composant ne fait qu'émettre tab-change).
 const ONGLETS_DEMO = [
   { id: 'equipes', label: 'Équipes' },
@@ -145,15 +145,15 @@ const ongletActif = ref('matchs')
       </div>
     </section>
 
-    <!-- EnteteEcran : variantes du bandeau navy -->
+    <!-- AppHeader : variantes du bandeau navy -->
     <section class="space-y-4">
       <h2 class="font-disp text-lg font-semibold text-default">
-        EnteteEcran — kicker / onglets / sheet
+        AppHeader — variantes interne et accueil
       </h2>
 
       <div class="space-y-2">
         <p class="text-xs text-toned">1 — Retour + titre (Mon compte)</p>
-        <EnteteEcran
+        <AppHeader
           kicker="Profil"
           title="Mon compte"
           :back="{ label: 'Accueil', to: '/' }"
@@ -162,7 +162,7 @@ const ongletActif = ref('matchs')
 
       <div class="space-y-2">
         <p class="text-xs text-toned">2 — + description (Nouveau tournoi)</p>
-        <EnteteEcran
+        <AppHeader
           kicker="Étape 1 / 1"
           title="Nouveau tournoi"
           subtitle="Quelques infos et c'est parti"
@@ -174,7 +174,7 @@ const ongletActif = ref('matchs')
         <p class="text-xs text-toned">
           3 — + description + onglets (Tournoi du 14 juillet)
         </p>
-        <EnteteEcran
+        <AppHeader
           kicker="● En cours"
           title="Tournoi du 14 juillet"
           subtitle="Boulodrome du port · 4 équipes"
@@ -187,7 +187,7 @@ const ongletActif = ref('matchs')
 
       <div class="space-y-2">
         <p class="text-xs text-toned">4 — Close + titre (Saisie de score)</p>
-        <EnteteEcran
+        <AppHeader
           kicker="Manche 1 · Match 1"
           title="Saisie du score"
           closable
@@ -196,54 +196,27 @@ const ongletActif = ref('matchs')
 
       <div class="space-y-2">
         <p class="text-xs text-toned">
-          Accueil — bloc tournoi-en-cours (contenu fourni via slot)
+          Accueil — bloc tournoi-en-cours (données via la prop tournoi)
         </p>
-        <EnteteEcran mode="accueil" profile-initial="B">
-          <StatutBadge statut="in_progress" live variant="header" />
-          <h2
-            class="mt-2.5 font-disp text-[30px] font-extrabold leading-[1.05] tracking-[-0.02em] whitespace-pre-line text-(--pk-cream)"
-          >
-            Tournoi du
-14 juillet
-          </h2>
-          <div class="mt-[18px] flex gap-[22px]">
-            <div>
-              <p class="font-num text-2xl font-bold leading-[1.1] text-(--pk-cream)">
-                3/6
-              </p>
-              <p
-                class="mt-[3px] font-disp text-[9.5px] font-bold tracking-[0.12em] uppercase text-(--pk-on-navy-3)"
-              >
-                Matchs
-              </p>
-            </div>
-            <div>
-              <p class="font-num text-2xl font-bold leading-[1.1] text-(--pk-cream)">
-                4
-              </p>
-              <p
-                class="mt-[3px] font-disp text-[9.5px] font-bold tracking-[0.12em] uppercase text-(--pk-on-navy-3)"
-              >
-                Équipes
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            class="mt-5 flex h-[50px] w-full items-center justify-center gap-2 rounded-[13px] bg-primary font-disp text-[15px] font-extrabold tracking-[0.02em] uppercase text-(--pk-cream)"
-          >
-            Reprendre le tournoi
-            <UIcon name="i-lucide-arrow-right" class="size-[18px]" />
-          </button>
-        </EnteteEcran>
+        <AppHeader
+          mode="accueil"
+          profile-initial="B"
+          :tournoi="{
+            titre: 'Tournoi du\n14 juillet',
+            matchsJoues: 3,
+            matchsTotal: 6,
+            equipes: 4,
+            ctaLabel: 'Reprendre le tournoi',
+          }"
+        />
       </div>
 
       <div class="space-y-2">
         <p class="text-xs text-toned">
           Accueil — état vide (header = logo + profil seuls ; le contenu
-          « Aucun tournoi » ci-dessous est du contenu de page, hors EnteteEcran)
+          « Aucun tournoi » ci-dessous est du contenu de page, hors AppHeader)
         </p>
-        <EnteteEcran mode="accueil" profile-initial="B" />
+        <AppHeader mode="accueil" profile-initial="B" />
         <div class="flex flex-col items-center gap-3 px-5 py-8 text-center">
           <BouleAvatar tone="gold" :size="64" />
           <p class="font-disp text-[19px] font-extrabold text-(--pk-ink)">

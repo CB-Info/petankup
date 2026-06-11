@@ -1,10 +1,26 @@
+<script lang="ts">
+// Types publics du composant, importables par les écrans via
+// `import type { HeaderTournoi } from './AppHeader.vue'`.
+export interface HeaderTournoi {
+  /** Titre du tournoi, multi-ligne via \n (rendu whitespace-pre-line). */
+  titre: string
+  /** Affiché « {matchsJoues}/{matchsTotal} » sous le label MATCHS. */
+  matchsJoues: number
+  matchsTotal: number
+  equipes: number
+  /** Label du CTA, ex. « Reprendre le tournoi ». */
+  ctaLabel: string
+}
+</script>
+
 <script setup lang="ts">
 // Bandeau navy en haut de presque tous les écrans (Direction C), en deux
 // variantes : `interne` (retour, kicker, titre, sous-titre, onglets, close) et
-// `accueil` (logo ● Pétankup + pastille profil, bloc tournoi-en-cours fourni
-// par SLOT — le header est la coquille, l'écran fournit le contenu).
-// Purement présentationnel : navigation, onglet actif, initiale du profil et
-// contenu du slot appartiennent au parent.
+// `accueil` (logo ● Pétankup + pastille profil, bloc tournoi-en-cours piloté
+// par la prop `tournoi` — le composant possède le markup du bloc, l'écran ne
+// fournit que des données). Purement présentationnel : navigation, onglet
+// actif, initiale du profil appartiennent au parent ; le CTA émet `reprendre`
+// sans câbler de navigation.
 //
 // Conçu extensible vers les presets podium/sheet/modale du plan directeur
 // (props `kickerTone`, `titleSize`, `padBottom`), mais SEULES les deux
@@ -15,28 +31,28 @@
 // La status bar n'est jamais simulée : c'est l'OS qui la rend, le conteneur
 // réserve l'espace via `env(safe-area-inset-top)`.
 
-type EnteteMode = 'interne' | 'accueil'
+type HeaderMode = 'interne' | 'accueil'
 
 // `clay` et `subtle` sont pressentis pour les variantes sheet/modale, à
 // valider à leurs écrans ; seul `gold` est utilisé aujourd'hui.
 type KickerTone = 'gold' | 'clay' | 'subtle'
 
-type EnteteOnglet = {
+type HeaderOnglet = {
   id: string
   label: string
 }
 
 const props = withDefaults(
   defineProps<{
-    mode?: EnteteMode
-    /** Requis en mode interne ; en mode accueil le titre vit dans le slot. */
+    mode?: HeaderMode
+    /** Requis en mode interne ; en mode accueil le titre vit dans `tournoi`. */
     title?: string
     kicker?: string
     kickerTone?: KickerTone
     subtitle?: string
     back?: { label: string; to: string }
     closable?: boolean
-    tabs?: EnteteOnglet[]
+    tabs?: HeaderOnglet[]
     activeTab?: string
     /** 26 = écran interne, 30 = accueil. (40 podium : différé.) */
     titleSize?: 26 | 30
@@ -44,6 +60,8 @@ const props = withDefaults(
     padBottom?: number
     /** Initiale de la pastille profil (mode accueil). */
     profileInitial?: string
+    /** Bloc tournoi-en-cours (mode accueil). Absent = état vide. */
+    tournoi?: HeaderTournoi
   }>(),
   {
     mode: 'interne',
@@ -58,6 +76,7 @@ const props = withDefaults(
     titleSize: 26,
     padBottom: undefined,
     profileInitial: undefined,
+    tournoi: undefined,
   },
 )
 
@@ -65,13 +84,14 @@ const emit = defineEmits<{
   close: []
   'tab-change': [tabId: string]
   profile: []
+  reprendre: []
 }>()
-
-const slots = useSlots()
 
 const isAccueil = computed(() => props.mode === 'accueil')
 const hasTabs = computed(() => (props.tabs?.length ?? 0) > 0)
-const hasTournoiContent = computed(() => isAccueil.value && !!slots.default)
+const hasTournoi = computed(
+  () => isAccueil.value && props.tournoi !== undefined,
+)
 
 // Interne : la rangée du haut n'existe que si retour ou close.
 // Accueil : toujours présente (logo + pastille profil).
@@ -83,7 +103,7 @@ const topRowVisible = computed(
 const effectivePadBottom = computed(() => {
   if (props.padBottom !== undefined) return props.padBottom
   if (hasTabs.value) return 16
-  if (isAccueil.value) return hasTournoiContent.value ? 26 : 18
+  if (isAccueil.value) return hasTournoi.value ? 26 : 18
   return 22
 })
 
@@ -155,7 +175,7 @@ const titleSizeClass = computed(() =>
       </div>
 
       <!-- Bloc titre : mode interne uniquement (en accueil, le titre vit dans
-           le slot) -->
+           la prop `tournoi`) -->
       <div
         v-if="!isAccueil"
         :class="topRowVisible ? 'mt-3' : 'mt-2'"
@@ -200,9 +220,48 @@ const titleSizeClass = computed(() =>
         </button>
       </nav>
 
-      <!-- Bloc variable de l'accueil (tournoi-en-cours), fourni par l'écran -->
-      <div v-if="hasTournoiContent" class="mt-5">
-        <slot />
+      <!-- Bloc tournoi-en-cours (mode accueil) : le composant possède le
+           markup, l'écran ne passe que les données via la prop `tournoi` -->
+      <div v-if="hasTournoi && tournoi" class="mt-5">
+        <StatutBadge statut="in_progress" live variant="header" />
+
+        <h1
+          class="mt-2.5 font-disp text-[30px] font-extrabold leading-[1.05] tracking-[-0.02em] whitespace-pre-line text-(--pk-cream)"
+        >
+          {{ tournoi.titre }}
+        </h1>
+
+        <div class="mt-[18px] flex gap-[22px]">
+          <div>
+            <p class="font-num text-2xl font-bold leading-[1.1] text-(--pk-cream)">
+              {{ tournoi.matchsJoues }}/{{ tournoi.matchsTotal }}
+            </p>
+            <p
+              class="mt-[3px] font-disp text-[9.5px] font-bold tracking-[0.12em] uppercase text-(--pk-on-navy-3)"
+            >
+              Matchs
+            </p>
+          </div>
+          <div>
+            <p class="font-num text-2xl font-bold leading-[1.1] text-(--pk-cream)">
+              {{ tournoi.equipes }}
+            </p>
+            <p
+              class="mt-[3px] font-disp text-[9.5px] font-bold tracking-[0.12em] uppercase text-(--pk-on-navy-3)"
+            >
+              Équipes
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          class="mt-5 flex h-[50px] w-full items-center justify-center gap-2 rounded-[13px] bg-primary font-disp text-[15px] font-extrabold tracking-[0.02em] uppercase text-(--pk-cream)"
+          @click="emit('reprendre')"
+        >
+          {{ tournoi.ctaLabel }}
+          <UIcon name="i-lucide-arrow-right" class="size-[18px]" />
+        </button>
       </div>
     </div>
   </header>
