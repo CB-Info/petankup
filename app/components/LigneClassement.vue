@@ -44,7 +44,9 @@ const diffClass = computed(() => {
         : 'border-(--pk-line) bg-(--pk-card) shadow-(--pk-shadow-card-lg)'
     "
   >
-    <span class="w-6 shrink-0 text-center">
+    <!-- Centrage flex (pas text-center) : une icône inline s'alignerait sur
+         la baseline du texte et remonterait au-dessus du centre de la ligne. -->
+    <span class="flex w-6 shrink-0 items-center justify-center">
       <UIcon
         v-if="isLeader"
         name="i-lucide-trophy"
