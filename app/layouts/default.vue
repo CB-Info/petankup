@@ -1,8 +1,7 @@
 <script setup lang="ts">
 // Layout shell : header sticky + zone de contenu centrée mobile-first.
-// Couleurs neutres servies par les utilitaires sémantiques Nuxt UI, qui
-// basculent automatiquement en dark via la classe `.dark` posée sur
-// <html> par @nuxtjs/color-mode (intégré par Nuxt UI).
+// Couleurs neutres servies par les utilitaires sémantiques Nuxt UI
+// (thème « Nuit & Corail », mode clair uniquement — pas de bascule dark).
 //
 // Pattern d'erreurs : signOut peut échouer (réseau). On attrape ici et
 // on affiche un toast via useErrorToast (voir composables/useErrorToast).
@@ -48,12 +47,6 @@ async function onLogout() {
           Pétankup
         </NuxtLink>
         <div class="flex items-center gap-1">
-          <ClientOnly>
-            <UColorModeButton variant="ghost" color="neutral" />
-            <template #fallback>
-              <div class="size-8" />
-            </template>
-          </ClientOnly>
           <UButton
             v-if="session"
             to="/account"

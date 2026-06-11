@@ -1,96 +1,118 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
 
-/* Rampes custom de la charte graphique (cf. CLAUDE.md > Charte graphique).
-   Les nuances 50, 100, 200, 400, 500, 600, 800, 900 viennent directement de
-   la charte. Les nuances 300, 700, 950 sont interpolées (Nuxt UI exige une
-   rampe complète 50→950 pour générer toutes les variantes utilitaires). */
+/* Thème « Nuit & Corail » (cf. CLAUDE.md > Charte graphique).
+   Rampes complètes 50→950 : la nuance 500 est ancrée sur le hex de marque,
+   les nuances claires sur les accents de la charte (soft / line / deep), le
+   reste est interpolé — Nuxt UI exige une rampe complète pour générer toutes
+   les variantes utilitaires. Mode clair uniquement (pas de mode sombre). */
 @theme static {
-  /* Bleu horizon → utilisé comme `primary` dans app.config.ts */
-  --color-horizon-50: #E8F2F5;
-  --color-horizon-100: #C4DEE5;
-  --color-horizon-200: #9DC8D3;
-  --color-horizon-300: #8CB9C6;
-  --color-horizon-400: #7BAAB9;
-  --color-horizon-500: #5A8A98;
-  --color-horizon-600: #3D6E7C;
-  --color-horizon-700: #345F6E;
-  --color-horizon-800: #2B5060;
-  --color-horizon-900: #1A3540;
-  --color-horizon-950: #112830;
+  /* Familles de polices, chargées par @nuxt/fonts (cf. nuxt.config.ts).
+     font-sans = corps (défaut), font-disp = titres / kickers / boutons / stats,
+     font-num = scores et gros chiffres tabulaires. */
+  --font-sans: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-disp: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  --font-num: "Space Grotesk", ui-monospace, monospace;
 
-  /* Sable doré → utilisé comme `secondary` dans app.config.ts */
-  --color-sand-50: #F5F2E4;
-  --color-sand-100: #EDE7C8;
-  --color-sand-200: #E3DAAB;
-  --color-sand-300: #DED39E;
-  --color-sand-400: #D9CC92;
-  --color-sand-500: #C2B574;
-  --color-sand-600: #A89C5A;
-  --color-sand-700: #91874D;
-  --color-sand-800: #7A7240;
-  --color-sand-900: #4A4425;
-  --color-sand-950: #2D2912;
+  /* clay (corail) → utilisé comme `primary` dans app.config.ts.
+     500 = #E0654E ; 100 = soft #F8DDD4 ; 200 = line #EFB8A8. */
+  --color-clay-50: #FCF0EC;
+  --color-clay-100: #F8DDD4;
+  --color-clay-200: #EFB8A8;
+  --color-clay-300: #E89B85;
+  --color-clay-400: #E47E64;
+  --color-clay-500: #E0654E;
+  --color-clay-600: #CB5640;
+  --color-clay-700: #A8442F;
+  --color-clay-800: #863827;
+  --color-clay-900: #6B2F22;
+  --color-clay-950: #3A1611;
+
+  /* gold (doré) → utilisé comme `secondary` dans app.config.ts.
+     500 = #E2B45A ; 700 = deep #B98A2E (texte sur fond doré). */
+  --color-gold-50: #FBF6E9;
+  --color-gold-100: #F5E9C7;
+  --color-gold-200: #EDD9A0;
+  --color-gold-300: #E8CC85;
+  --color-gold-400: #E5C06E;
+  --color-gold-500: #E2B45A;
+  --color-gold-600: #CE9E45;
+  --color-gold-700: #B98A2E;
+  --color-gold-800: #936E28;
+  --color-gold-900: #6F5320;
+  --color-gold-950: #3E2E11;
+
+  /* green → utilisé comme `success` dans app.config.ts.
+     500 = #2F7D5E ; 100 = soft #DBEDE2. */
+  --color-green-50: #EDF6F1;
+  --color-green-100: #DBEDE2;
+  --color-green-200: #B6DAC5;
+  --color-green-300: #88C3A2;
+  --color-green-400: #59A87E;
+  --color-green-500: #2F7D5E;
+  --color-green-600: #2A6E51;
+  --color-green-700: #235943;
+  --color-green-800: #1C4736;
+  --color-green-900: #163A2C;
+  --color-green-950: #0B1F18;
+
+  /* danger → utilisé comme `error` dans app.config.ts.
+     500 = #B23B45 ; 100 = soft #F6DCDF. */
+  --color-danger-50: #FCEFF1;
+  --color-danger-100: #F6DCDF;
+  --color-danger-200: #EBBAC0;
+  --color-danger-300: #DD8E97;
+  --color-danger-400: #C9636F;
+  --color-danger-500: #B23B45;
+  --color-danger-600: #9E343D;
+  --color-danger-700: #832B33;
+  --color-danger-800: #6A242A;
+  --color-danger-900: #561E24;
+  --color-danger-950: #2F1013;
 }
 
-/* Override des variables sémantiques Nuxt UI v4 pour coller aux tons
-   chauds de la charte (cf. CLAUDE.md > Charte graphique > Neutres).
-   Utilisés dans les templates via les utilitaires Nuxt UI (`bg-default`,
+/* Override des variables sémantiques Nuxt UI v4 pour coller à la palette
+   chaude « Nuit & Corail » (cf. CLAUDE.md > Charte graphique > Neutres).
+   Utilisées dans les templates via les utilitaires Nuxt UI (`bg-default`,
    `bg-elevated`, `text-default`, `text-toned`, `text-muted`,
-   `border-default`, etc.).
-   Le danger n'a pas d'équivalent natif → token custom --petankup-danger-*. */
+   `border-default`, etc.). Mode clair uniquement, pas de mode sombre. */
 :root {
-  --ui-bg: #FAFAF6;
-  --ui-bg-elevated: #F2F0EB;
-  --ui-border: #E5E2DB;
-  --ui-text: #2C2A25;
-  --ui-text-highlighted: #2C2A25;
-  --ui-text-toned: #5C5A54;
-  --ui-text-muted: #8A8880;
-  --ui-text-dimmed: #8A8880;
+  --ui-bg: #F0ECE6;
+  --ui-bg-elevated: #FBF8F3;
+  --ui-border: #E5E1D9;
+  --ui-text: #232231;
+  --ui-text-highlighted: #232231;
+  --ui-text-toned: #605E6E;
+  --ui-text-muted: #97939E;
+  --ui-text-dimmed: #97939E;
 
-  --petankup-danger-bg: #FCE8E8;
-  --petankup-danger-text: #A03030;
-}
+  /* Navy & dégradés de marque. Hors tokens sémantiques Nuxt UI (le navy est
+     une ambiance, pas une couleur d'action) → variables CSS `--pk-*`
+     réutilisables par les écrans qui en ont besoin. */
+  --pk-navy: #1F2542;
+  --pk-navy-top: #2B3357;
+  --pk-navy-mid: #3B4570;
+  --pk-navy-deep: #12152A;
+  --pk-cream: #FBF6EE;
+  --pk-on-navy-2: #A9C4CB;
+  --pk-on-navy-3: #88A6AE;
 
-/* En dark mode, on inverse les sémantiques ET on bascule les rampes
-   horizon (bleu → brun fumé) et sand (sable doré → parchemin). Les
-   composants qui utilisent `text-primary-900` deviennent ainsi clairs
-   sur fond sombre, sans avoir à les modifier au cas par cas. */
-.dark {
-  --ui-bg: #1E1916;
-  --ui-bg-elevated: #2A2420;
-  --ui-border: #3D3530;
-  --ui-text: #F0E3C3;
-  --ui-text-highlighted: #F0E3C3;
-  --ui-text-toned: #B0A498;
-  --ui-text-muted: #7A7068;
-  --ui-text-dimmed: #7A7068;
-
-  --petankup-danger-bg: #3A1E1E;
-  --petankup-danger-text: #E06060;
-
-  --color-horizon-50: #2D2320;
-  --color-horizon-100: #3D322C;
-  --color-horizon-200: #4E3F38;
-  --color-horizon-300: #594640;
-  --color-horizon-400: #634C44;
-  --color-horizon-500: #7E6258;
-  --color-horizon-600: #9A7E72;
-  --color-horizon-700: #AF9385;
-  --color-horizon-800: #C4A898;
-  --color-horizon-900: #E0CFC5;
-  --color-horizon-950: #EFE0D8;
-
-  --color-sand-50: #2E2A20;
-  --color-sand-100: #4A4230;
-  --color-sand-200: #6B6040;
-  --color-sand-300: #857A58;
-  --color-sand-400: #A09570;
-  --color-sand-500: #C9B990;
-  --color-sand-600: #DDD0A8;
-  --color-sand-800: #EBE0C0;
-  --color-sand-700: #E2D2B0;
-  --color-sand-900: #F0E3C3;
-  --color-sand-950: #F8EFD8;
+  --pk-grad-header: linear-gradient(
+    165deg,
+    var(--pk-navy-top),
+    var(--pk-navy) 72%,
+    var(--pk-navy-deep)
+  );
+  --pk-grad-podium: radial-gradient(
+    120% 60% at 50% 0%,
+    var(--pk-navy-mid),
+    var(--pk-navy) 50%,
+    var(--pk-navy-deep)
+  );
+  --pk-grad-login: radial-gradient(
+    120% 55% at 50% 0%,
+    var(--pk-navy-top),
+    var(--pk-navy) 52%,
+    var(--pk-navy-deep)
+  );
 }
