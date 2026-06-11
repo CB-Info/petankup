@@ -151,9 +151,9 @@ const isPlayed = computed(() => props.scoreA !== null && props.scoreB !== null);
   <!-- ───────────── Mode liste ───────────── -->
   <article
     v-else
-    class="flex items-stretch overflow-hidden rounded-(--pk-r-card) border border-(--pk-line) bg-(--pk-card) shadow-(--pk-shadow-card-lg)"
+    class="flex overflow-hidden rounded-(--pk-r-card) border border-(--pk-line) bg-(--pk-card) shadow-(--pk-shadow-card-lg)"
   >
-    <template v-if="isPlayed">
+    <div v-if="isPlayed" class="flex flex-1 items-stretch">
       <template v-for="(entry, sideIndex) in sides" :key="entry.side">
         <div
           v-if="sideIndex === 1"
@@ -182,10 +182,10 @@ const isPlayed = computed(() => props.scoreA !== null && props.scoreB !== null);
           </p>
         </div>
       </template>
-    </template>
+    </div>
 
     <div v-else class="flex flex-1 items-center gap-3 p-4">
-      <div class="flex-1 space-y-1">
+      <div class="min-w-0 flex-1 space-y-1">
         <h3 class="font-disp text-[14.5px] font-bold text-(--pk-ink)">
           {{ teamAName }}
         </h3>
@@ -195,7 +195,7 @@ const isPlayed = computed(() => props.scoreA !== null && props.scoreB !== null);
       </div>
       <button
         type="button"
-        class="inline-flex h-12 items-center gap-1.5 rounded-(--pk-r-md) bg-primary px-4.5 font-disp text-[13px] font-extrabold tracking-[0.04em] uppercase text-(--pk-cream)"
+        class="inline-flex h-12 shrink-0 items-center gap-1.75 rounded-(--pk-r-md) bg-primary px-4.5 font-disp text-[13px] font-extrabold tracking-[0.04em] uppercase text-(--pk-cream)"
         @click="emit('score')"
       >
         <UIcon name="i-lucide-plus" class="size-4" />
