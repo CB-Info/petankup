@@ -152,18 +152,32 @@ const ongletActif = ref('matchs')
       </h2>
 
       <div class="space-y-2">
-        <p class="text-xs text-toned">Kicker + titre + sous-titre</p>
+        <p class="text-xs text-toned">1 — Retour + titre (Mon compte)</p>
         <EnteteEcran
-          kicker="En direct"
-          title="Tournoi du 14 juillet"
-          subtitle="Boulodrome du port · 4 équipes"
+          kicker="Profil"
+          title="Mon compte"
+          :back="{ label: 'Accueil', to: '/' }"
         />
       </div>
 
       <div class="space-y-2">
-        <p class="text-xs text-toned">Retour + onglets (interactifs)</p>
+        <p class="text-xs text-toned">2 — + description (Nouveau tournoi)</p>
         <EnteteEcran
+          kicker="Étape 1 / 1"
+          title="Nouveau tournoi"
+          subtitle="Quelques infos et c'est parti"
+          :back="{ label: 'Accueil', to: '/' }"
+        />
+      </div>
+
+      <div class="space-y-2">
+        <p class="text-xs text-toned">
+          3 — + description + onglets (Tournoi du 14 juillet)
+        </p>
+        <EnteteEcran
+          kicker="● En cours"
           title="Tournoi du 14 juillet"
+          subtitle="Boulodrome du port · 4 équipes"
           :back="{ label: 'Accueil', to: '/' }"
           :tabs="ONGLETS_DEMO"
           :active-tab="ongletActif"
@@ -172,8 +186,12 @@ const ongletActif = ref('matchs')
       </div>
 
       <div class="space-y-2">
-        <p class="text-xs text-toned">Sheet : kicker + close</p>
-        <EnteteEcran kicker="Partage" title="Gérer les invités" closable />
+        <p class="text-xs text-toned">4 — Close + titre (Saisie de score)</p>
+        <EnteteEcran
+          kicker="Manche 1 · Match 1"
+          title="Saisie du score"
+          closable
+        />
       </div>
 
       <div class="space-y-2">
