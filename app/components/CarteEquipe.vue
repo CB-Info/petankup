@@ -35,22 +35,26 @@ const playersLine = computed(() => props.players.join(" · "));
       </div>
 
       <div class="flex shrink-0 gap-1.5">
-        <button
-          type="button"
+        <UButton
+          icon="i-lucide-pencil"
+          color="neutral"
+          variant="ghost"
+          square
           :aria-label="`Modifier l'équipe ${name}`"
-          class="inline-flex size-9 items-center justify-center rounded-[10px] border border-(--pk-line) bg-(--pk-page)"
+          class="size-9 justify-center rounded-[10px] border border-(--pk-line) bg-(--pk-page) text-(--pk-subtle)"
+          :ui="{ leadingIcon: 'size-3.75' }"
           @click="emit('edit')"
-        >
-          <UIcon name="i-lucide-pencil" class="size-3.75 text-(--pk-subtle)" />
-        </button>
-        <button
-          type="button"
+        />
+        <UButton
+          icon="i-lucide-trash-2"
+          color="error"
+          variant="soft"
+          square
           :aria-label="`Supprimer l'équipe ${name}`"
-          class="inline-flex size-9 items-center justify-center rounded-[10px] bg-error-100"
+          class="size-9 justify-center rounded-[10px] bg-error-100"
+          :ui="{ leadingIcon: 'size-3.75' }"
           @click="emit('delete')"
-        >
-          <UIcon name="i-lucide-trash-2" class="size-3.75 text-error" />
-        </button>
+        />
       </div>
     </div>
   </article>
