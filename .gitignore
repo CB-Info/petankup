@@ -22,6 +22,9 @@ logs
 .fleet
 .idea
 
+# Supabase CLI local state
+supabase/.temp/
+
 # Local env files
 .env
 .env.*
@@ -41,6 +44,5 @@ references/
 .gitattributes
 
 # macOS metadata
-.DS_Store
 __MACOSX/
 ._*
