@@ -1,73 +1,71 @@
 <script setup lang="ts">
 // Une entrée du journal de bord (Couche 1) : un tournoi terminé du palmarès
-// d'un joueur. Badge Vainqueur / Podium, équipe + coéquipiers cliquables
-// (UUser), footer compact V/D + points. Pseudo coéquipier résolu live via
-// profileById (pré-hydraté par loadUserProfile), fallback snapshot.
-import type { Teammate, UserTournamentResult } from '../types'
-import { getTeammateDisplayName } from '../utils/team-player-display'
+// d'un joueur, en carte compacte — boule médaille (medalTone du rang final,
+// rang en chiffre dedans), nom + date · équipe, badge de rang ordinal et
+// ligne V/D/différentiel. Le différentiel et le libellé ordinal sont des
+// calculs d'AFFICHAGE depuis le résultat stocké — aucun recalcul métier.
+import type { UserTournamentResult } from '../types'
 import { formatDate } from '../utils/format'
 
-defineProps<{
+const props = defineProps<{
   result: UserTournamentResult
 }>()
 
-const tournamentStore = useTournamentStore()
-const { profileById } = storeToRefs(tournamentStore)
-
-function teammateName(teammate: Teammate): string {
-  return getTeammateDisplayName(teammate, profileById.value)
+// Suffixe ordinal FR en exposant, comme la maquette (1ᵉʳ, 2ᵉ, 3ᵉ…).
+function rankLabel(rank: number): string {
+  return rank === 1 ? '1ᵉʳ' : `${rank}ᵉ`
 }
 
-function teammateLink(teammate: Teammate): string | undefined {
-  return teammate.userId !== null ? `/profile/${teammate.userId}` : undefined
-}
+const pointDifferential = computed(
+  () => props.result.pointsScored - props.result.pointsConceded,
+)
+
+const pointDifferentialLabel = computed(() =>
+  pointDifferential.value > 0
+    ? `+${pointDifferential.value}`
+    : `${pointDifferential.value}`,
+)
+
+// Même règle de couleur que la colonne DIFF du classement.
+const pointDifferentialClass = computed(() =>
+  pointDifferential.value >= 0 ? 'text-success' : 'text-primary',
+)
 </script>
 
 <template>
-  <UCard>
-    <div class="flex items-start justify-between gap-3">
-      <div class="min-w-0">
-        <p class="truncate font-semibold text-default">
-          {{ result.tournamentName }}
-        </p>
-        <p class="text-sm text-toned">{{ formatDate(result.tournamentDate) }}</p>
-      </div>
-      <UBadge v-if="result.isWinner" color="primary" variant="soft">
-        Vainqueur
-      </UBadge>
-      <UBadge v-else-if="result.isPodium" color="secondary" variant="soft">
-        Podium
-      </UBadge>
+  <article
+    class="flex items-center gap-2.5 rounded-(--pk-r-card) bg-(--pk-card) p-3.5 shadow-(--pk-shadow-card-lg)"
+  >
+    <BouleAvatar :tone="medalTone(result.finalRank)" :size="40">
+      <span class="text-(--pk-navy)">{{ result.finalRank }}</span>
+    </BouleAvatar>
+
+    <div class="min-w-0 flex-1">
+      <h3 class="truncate font-disp text-[15px] font-bold text-(--pk-ink)">
+        {{ result.tournamentName }}
+      </h3>
+      <p class="mt-0.5 truncate font-sans text-xs text-(--pk-muted)">
+        {{ formatDate(result.tournamentDate) }} · {{ result.teamName }}
+      </p>
     </div>
 
-    <div class="mt-3 space-y-2">
-      <p class="text-sm text-toned">Équipe : {{ result.teamName }}</p>
-      <ul
-        v-if="result.teammates.length > 0"
-        class="flex flex-wrap gap-x-4 gap-y-2"
+    <div class="flex shrink-0 flex-col items-end gap-1">
+      <span
+        class="rounded-full px-2 py-0.5 font-disp text-[10.5px] font-extrabold"
+        :class="
+          result.finalRank === 1
+            ? 'bg-secondary-100 text-secondary-800'
+            : 'bg-(--pk-page) text-(--pk-subtle)'
+        "
       >
-        <li
-          v-for="(teammate, index) in result.teammates"
-          :key="teammate.userId ?? `free-${index}`"
-        >
-          <UUser
-            :name="teammateName(teammate)"
-            :avatar="{ alt: teammateName(teammate) }"
-            size="sm"
-            :to="teammateLink(teammate)"
-          />
-        </li>
-      </ul>
+        {{ rankLabel(result.finalRank) }}
+      </span>
+      <p class="font-sans text-[11px] text-(--pk-muted) tabular-nums">
+        {{ result.wins }}V · {{ result.losses }}D ·
+        <span :class="pointDifferentialClass">{{
+          pointDifferentialLabel
+        }}</span>
+      </p>
     </div>
-
-    <div
-      class="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted tabular-nums"
-    >
-      <span>Rang final : {{ result.finalRank }}</span>
-      <span aria-hidden="true">·</span>
-      <span>V/D : {{ result.wins }}/{{ result.losses }}</span>
-      <span aria-hidden="true">·</span>
-      <span>Points : {{ result.pointsScored }} - {{ result.pointsConceded }}</span>
-    </div>
-  </UCard>
+  </article>
 </template>

@@ -1,7 +1,9 @@
 <script setup lang="ts">
-// Bloc des stats globales d'un profil (Couche 2). Trois cards Tournois /
-// Matchs / Points. Taux de victoire et différentiel sont dérivés à
-// l'affichage (non stockés en DB, cf. cadrage Phase J). Empty state si le
+// Blocs des stats globales d'un profil (Couche 2) : Tournois / Matchs /
+// Points, chacun en rangée kicker (icône + titre) puis carte en colonnes
+// égales centrées (disposition de la maquette). Taux de victoire et
+// différentiel sont dérivés à l'AFFICHAGE depuis le bundle (non stockés
+// en DB, cf. cadrage Phase J) — aucun recalcul métier. Empty state si le
 // joueur n'a aucun tournoi terminé (stats null).
 import type { UserStats } from '../types'
 
@@ -10,78 +12,176 @@ const props = defineProps<{
 }>()
 
 const winRate = computed(() => {
-  if (props.stats === null || props.stats.matchesPlayed === 0) return '—'
+  if (props.stats === null || props.stats.matchesPlayed === 0) return '0%'
   return `${Math.round((props.stats.wins / props.stats.matchesPlayed) * 100)}%`
 })
 
-const pointDifferential = computed(() => {
-  if (props.stats === null) return ''
-  const differential = props.stats.pointsScored - props.stats.pointsConceded
-  return differential > 0 ? `+${differential}` : `${differential}`
-})
+const pointDifferentialValue = computed(() =>
+  props.stats === null
+    ? 0
+    : props.stats.pointsScored - props.stats.pointsConceded,
+)
+
+const pointDifferentialLabel = computed(() =>
+  pointDifferentialValue.value > 0
+    ? `+${pointDifferentialValue.value}`
+    : `${pointDifferentialValue.value}`,
+)
+
+// Différentiel : même règle de couleur que la colonne DIFF du classement.
+const pointDifferentialClass = computed(() =>
+  pointDifferentialValue.value >= 0 ? 'text-success' : 'text-primary',
+)
 </script>
 
 <template>
-  <p v-if="stats === null" class="py-8 text-center text-sm text-muted">
+  <p
+    v-if="stats === null"
+    class="py-8 text-center font-sans text-sm text-(--pk-muted)"
+  >
     Aucun tournoi terminé pour l'instant.
   </p>
-  <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-3">
-    <UCard>
-      <p class="text-sm uppercase text-muted">Tournois</p>
-      <dl class="mt-2 space-y-1 text-sm tabular-nums">
-        <div class="flex items-center justify-between">
-          <dt class="text-toned">Joués</dt>
-          <dd class="font-semibold text-default">{{ stats.tournamentsPlayed }}</dd>
+  <div v-else class="space-y-4">
+    <section>
+      <h3
+        class="mb-2.25 flex items-center gap-1.5 font-disp text-[10px] font-extrabold tracking-widest uppercase text-(--pk-muted)"
+      >
+        <UIcon name="i-lucide-trophy" class="size-3.5 text-secondary" />
+        Tournois
+      </h3>
+      <dl
+        class="grid grid-flow-col auto-cols-fr rounded-(--pk-r-card) bg-(--pk-card) p-3.5 text-center shadow-(--pk-shadow-card-lg)"
+      >
+        <div>
+          <dd class="font-num text-2xl font-bold text-(--pk-ink)">
+            {{ stats.tournamentsPlayed }}
+          </dd>
+          <dt
+            class="mt-1 font-disp text-[8.5px] font-extrabold tracking-[0.06em] uppercase text-(--pk-muted)"
+          >
+            Joués
+          </dt>
         </div>
-        <div class="flex items-center justify-between">
-          <dt class="text-toned">Gagnés</dt>
-          <dd class="font-semibold text-default">{{ stats.tournamentsWon }}</dd>
+        <div>
+          <dd class="font-num text-2xl font-bold text-primary">
+            {{ stats.tournamentsWon }}
+          </dd>
+          <dt
+            class="mt-1 font-disp text-[8.5px] font-extrabold tracking-[0.06em] uppercase text-(--pk-muted)"
+          >
+            Gagnés
+          </dt>
         </div>
-        <div class="flex items-center justify-between">
-          <dt class="text-toned">Podiums</dt>
-          <dd class="font-semibold text-default">{{ stats.podiums }}</dd>
+        <div>
+          <dd class="font-num text-2xl font-bold text-(--pk-ink)">
+            {{ stats.podiums }}
+          </dd>
+          <dt
+            class="mt-1 font-disp text-[8.5px] font-extrabold tracking-[0.06em] uppercase text-(--pk-muted)"
+          >
+            Podiums
+          </dt>
         </div>
       </dl>
-    </UCard>
+    </section>
 
-    <UCard>
-      <p class="text-sm uppercase text-muted">Matchs</p>
-      <dl class="mt-2 space-y-1 text-sm tabular-nums">
-        <div class="flex items-center justify-between">
-          <dt class="text-toned">Joués</dt>
-          <dd class="font-semibold text-default">{{ stats.matchesPlayed }}</dd>
+    <section>
+      <h3
+        class="mb-2.25 flex items-center gap-1.5 font-disp text-[10px] font-extrabold tracking-widest uppercase text-(--pk-muted)"
+      >
+        <UIcon name="i-lucide-target" class="size-3.5 text-primary" />
+        Matchs
+      </h3>
+      <dl
+        class="grid grid-flow-col auto-cols-fr rounded-(--pk-r-card) bg-(--pk-card) p-3.5 text-center shadow-(--pk-shadow-card-lg)"
+      >
+        <div>
+          <dd class="font-num text-2xl font-bold text-(--pk-ink)">
+            {{ stats.matchesPlayed }}
+          </dd>
+          <dt
+            class="mt-1 font-disp text-[8.5px] font-extrabold tracking-[0.06em] uppercase text-(--pk-muted)"
+          >
+            Joués
+          </dt>
         </div>
-        <div class="flex items-center justify-between">
-          <dt class="text-toned">Victoires</dt>
-          <dd class="font-semibold text-default">{{ stats.wins }}</dd>
+        <div>
+          <dd class="font-num text-2xl font-bold text-(--pk-ink)">
+            {{ stats.wins }}
+          </dd>
+          <dt
+            class="mt-1 font-disp text-[8.5px] font-extrabold tracking-[0.06em] uppercase text-(--pk-muted)"
+          >
+            Victoires
+          </dt>
         </div>
-        <div class="flex items-center justify-between">
-          <dt class="text-toned">Défaites</dt>
-          <dd class="font-semibold text-default">{{ stats.losses }}</dd>
+        <div>
+          <dd class="font-num text-2xl font-bold text-(--pk-ink)">
+            {{ stats.losses }}
+          </dd>
+          <dt
+            class="mt-1 font-disp text-[8.5px] font-extrabold tracking-[0.06em] uppercase text-(--pk-muted)"
+          >
+            Défaites
+          </dt>
         </div>
-        <div class="flex items-center justify-between">
-          <dt class="text-toned">Taux de victoire</dt>
-          <dd class="font-semibold text-default">{{ winRate }}</dd>
+        <div>
+          <dd class="font-num text-2xl font-bold text-success">
+            {{ winRate }}
+          </dd>
+          <dt
+            class="mt-1 font-disp text-[8.5px] font-extrabold tracking-[0.06em] uppercase text-(--pk-muted)"
+          >
+            Taux
+          </dt>
         </div>
       </dl>
-    </UCard>
+    </section>
 
-    <UCard>
-      <p class="text-sm uppercase text-muted">Points</p>
-      <dl class="mt-2 space-y-1 text-sm tabular-nums">
-        <div class="flex items-center justify-between">
-          <dt class="text-toned">Marqués</dt>
-          <dd class="font-semibold text-default">{{ stats.pointsScored }}</dd>
+    <section>
+      <h3
+        class="mb-2.25 flex items-center gap-1.5 font-disp text-[10px] font-extrabold tracking-widest uppercase text-(--pk-muted)"
+      >
+        <UIcon name="i-lucide-flame" class="size-3.5 text-success" />
+        Points
+      </h3>
+      <dl
+        class="grid grid-flow-col auto-cols-fr rounded-(--pk-r-card) bg-(--pk-card) p-3.5 text-center shadow-(--pk-shadow-card-lg)"
+      >
+        <div>
+          <dd class="font-num text-2xl font-bold text-(--pk-ink)">
+            {{ stats.pointsScored }}
+          </dd>
+          <dt
+            class="mt-1 font-disp text-[8.5px] font-extrabold tracking-[0.06em] uppercase text-(--pk-muted)"
+          >
+            Marqués
+          </dt>
         </div>
-        <div class="flex items-center justify-between">
-          <dt class="text-toned">Encaissés</dt>
-          <dd class="font-semibold text-default">{{ stats.pointsConceded }}</dd>
+        <div>
+          <dd class="font-num text-2xl font-bold text-(--pk-ink)">
+            {{ stats.pointsConceded }}
+          </dd>
+          <dt
+            class="mt-1 font-disp text-[8.5px] font-extrabold tracking-[0.06em] uppercase text-(--pk-muted)"
+          >
+            Encaissés
+          </dt>
         </div>
-        <div class="flex items-center justify-between">
-          <dt class="text-toned">Différentiel</dt>
-          <dd class="font-semibold text-default">{{ pointDifferential }}</dd>
+        <div>
+          <dd
+            class="font-num text-2xl font-bold"
+            :class="pointDifferentialClass"
+          >
+            {{ pointDifferentialLabel }}
+          </dd>
+          <dt
+            class="mt-1 font-disp text-[8.5px] font-extrabold tracking-[0.06em] uppercase text-(--pk-muted)"
+          >
+            Différentiel
+          </dt>
         </div>
       </dl>
-    </UCard>
+    </section>
   </div>
 </template>
