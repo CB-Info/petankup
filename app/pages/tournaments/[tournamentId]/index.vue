@@ -235,10 +235,11 @@ const matchBeingScoredTeamB = computed(() =>
   matchBeingScored.value ? getTeamById(matchBeingScored.value.teamBId) : null,
 );
 
-function teamNameClass(match: Match, teamId: string): string {
-  if (match.status !== "completed") return "text-primary-900";
-  if (match.winnerId === teamId) return "font-semibold text-primary-900";
-  return "text-toned";
+// Côté gagnant d'un match pour ScoreboardEquipe (présentation pure :
+// simple traduction du winnerId stocké vers 'A'/'B', aucun calcul).
+function matchWinnerSide(match: Match): "A" | "B" | null {
+  if (match.winnerId === null) return null;
+  return match.winnerId === match.teamAId ? "A" : "B";
 }
 
 // Le classement est calculé par le store via computeRanking et affiché
@@ -466,17 +467,7 @@ useHead(() => ({
               >
                 {{ teams.length }} équipes inscrites
               </h2>
-              <span class="font-sans text-xs text-(--pk-muted)">
-                min. 2 pour lancer
-              </span>
             </div>
-
-            <p
-              v-if="tournamentIsLocked"
-              class="font-sans text-xs text-(--pk-muted)"
-            >
-              Le tournoi a démarré, les équipes ne peuvent plus être modifiées.
-            </p>
 
             <div
               v-if="teams.length === 0"
@@ -504,6 +495,13 @@ useHead(() => ({
                 />
               </li>
             </ul>
+
+            <p
+              v-if="tournamentIsLocked"
+              class="font-sans text-xs text-(--pk-muted)"
+            >
+              Le tournoi a démarré, les équipes ne peuvent plus être modifiées.
+            </p>
 
             <UButton
               v-if="isOwner"
@@ -570,65 +568,25 @@ useHead(() => ({
               <section
                 v-for="roundGroup in matchesByRound"
                 :key="roundGroup.roundNumber"
-                class="space-y-3"
+                class="space-y-2.75"
               >
                 <h2
-                  class="text-xs font-semibold uppercase tracking-[0.08em] text-toned"
+                  class="font-disp text-[10px] font-extrabold tracking-widest uppercase text-(--pk-muted)"
                 >
                   Manche {{ roundGroup.roundNumber }}
                 </h2>
-                <ul class="space-y-2">
+                <ul class="space-y-2.75">
                   <li v-for="match in roundGroup.matches" :key="match.id">
-                    <UCard :ui="{ body: 'p-4 sm:p-4' }">
-                      <div class="flex items-center gap-3">
-                        <p
-                          class="min-w-0 flex-1 truncate text-sm"
-                          :class="teamNameClass(match, match.teamAId)"
-                        >
-                          {{ getTeamById(match.teamAId)?.name ?? "—" }}
-                        </p>
-
-                        <div class="shrink-0">
-                          <template v-if="match.status === 'completed'">
-                            <button
-                              v-if="isOwner"
-                              type="button"
-                              class="rounded-md px-2 py-1 text-base font-semibold tabular-nums text-primary-900 hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-60"
-                              :disabled="tournamentIsCompleted"
-                              @click="openScoreModal(match)"
-                            >
-                              {{ match.scoreA }} - {{ match.scoreB }}
-                            </button>
-                            <span
-                              v-else
-                              class="px-2 py-1 text-base font-semibold tabular-nums text-primary-900"
-                            >
-                              {{ match.scoreA }} - {{ match.scoreB }}
-                            </span>
-                          </template>
-                          <template v-else>
-                            <UButton
-                              v-if="isOwner"
-                              variant="soft"
-                              color="primary"
-                              size="sm"
-                              :disabled="tournamentIsCompleted"
-                              @click="openScoreModal(match)"
-                            >
-                              Saisir le score
-                            </UButton>
-                            <p v-else class="text-sm text-toned">À jouer</p>
-                          </template>
-                        </div>
-
-                        <p
-                          class="min-w-0 flex-1 truncate text-right text-sm"
-                          :class="teamNameClass(match, match.teamBId)"
-                        >
-                          {{ getTeamById(match.teamBId)?.name ?? "—" }}
-                        </p>
-                      </div>
-                    </UCard>
+                    <ScoreboardEquipe
+                      mode="liste"
+                      :team-a-name="getTeamById(match.teamAId)?.name ?? '—'"
+                      :team-b-name="getTeamById(match.teamBId)?.name ?? '—'"
+                      :score-a="match.scoreA"
+                      :score-b="match.scoreB"
+                      :winner-side="matchWinnerSide(match)"
+                      :can-score="isOwner && !tournamentIsCompleted"
+                      @score="openScoreModal(match)"
+                    />
                   </li>
                 </ul>
               </section>

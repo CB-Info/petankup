@@ -12,6 +12,12 @@ import type { BouleTone } from "./BouleAvatar.vue";
 // état-dépendants page/blanc/navy/corail selon le meneur, hors système
 // UButton) ; les actions standards (CTA Valider, SCORE) sont des UButton
 // (états hover/focus/disabled/loading natifs) — règle actée à l'audit boutons.
+//
+// `canScore` (mode liste) : le DROIT de saisir/corriger est décidé par
+// l'écran (owner, tournoi non terminé) et reçu ici. À true : le bouton
+// SCORE émet `score`, et la carte d'un match joué devient cliquable
+// (correction de score) en émettant aussi `score`. À false : « À jouer »
+// en texte simple, carte jouée inerte.
 
 type ScoreboardMode = "saisie" | "liste";
 type TeamSide = "A" | "B";
@@ -30,6 +36,8 @@ const props = withDefaults(
     validateDisabled?: boolean;
     /** Spinner du CTA Valider pendant l'enregistrement async (câblé par l'écran). */
     validateLoading?: boolean;
+    /** Droit de saisir/corriger un score (mode liste) — reçu, jamais déduit. */
+    canScore?: boolean;
   }>(),
   {
     leadingSide: null,
@@ -38,6 +46,7 @@ const props = withDefaults(
     toneB: "sand",
     validateDisabled: false,
     validateLoading: false,
+    canScore: true,
   },
 );
 
@@ -47,6 +56,12 @@ const emit = defineEmits<{
   validate: [];
   score: [];
 }>();
+
+// La carte d'un match joué n'est un vrai <button> que si la correction de
+// score est permise — sinon un simple <div> inerte, sans handler.
+function onPlayedCardClick() {
+  if (props.canScore) emit("score");
+}
 
 // Les deux côtés sont symétriques : on les assemble une fois pour itérer dans
 // le template au lieu de dupliquer chaque demi-carte.
@@ -160,7 +175,15 @@ const isPlayed = computed(() => props.scoreA !== null && props.scoreB !== null);
     v-else
     class="flex overflow-hidden rounded-(--pk-r-card) border border-(--pk-line) bg-(--pk-card) shadow-(--pk-shadow-card-lg)"
   >
-    <div v-if="isPlayed" class="flex flex-1 items-stretch">
+    <component
+      :is="canScore ? 'button' : 'div'"
+      v-if="isPlayed"
+      v-bind="
+        canScore ? { type: 'button', 'aria-label': 'Modifier le score' } : {}
+      "
+      class="flex flex-1 items-stretch text-left"
+      @click="onPlayedCardClick"
+    >
       <template v-for="(entry, sideIndex) in sides" :key="entry.side">
         <div
           v-if="sideIndex === 1"
@@ -189,7 +212,7 @@ const isPlayed = computed(() => props.scoreA !== null && props.scoreB !== null);
           </p>
         </div>
       </template>
-    </div>
+    </component>
 
     <div v-else class="flex flex-1 items-center gap-3 p-4">
       <div class="min-w-0 flex-1 space-y-1">
@@ -201,6 +224,7 @@ const isPlayed = computed(() => props.scoreA !== null && props.scoreB !== null);
         </h3>
       </div>
       <UButton
+        v-if="canScore"
         color="primary"
         icon="i-lucide-plus"
         class="h-12 shrink-0 gap-1.75 rounded-(--pk-r-md) px-4.5 font-disp text-[13px] font-extrabold tracking-[0.04em] uppercase text-(--pk-cream)"
@@ -209,6 +233,9 @@ const isPlayed = computed(() => props.scoreA !== null && props.scoreB !== null);
       >
         Score
       </UButton>
+      <p v-else class="shrink-0 font-sans text-sm text-(--pk-muted)">
+        À jouer
+      </p>
     </div>
   </article>
 </template>
