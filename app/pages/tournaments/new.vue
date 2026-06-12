@@ -1,7 +1,12 @@
 <script setup lang="ts">
 // Pattern d'erreurs : les actions du store throw ; on attrape ici et on
 // affiche un toast via useErrorToast (voir composables/useErrorToast).
-import type { TournamentVisibility } from "../../types";
+//
+// Layout désactivé : l'écran porte son propre header navy (AppHeader mode
+// interne) — le bandeau crème du layout ferait doublon.
+import type { TournamentFormat, TournamentVisibility } from "../../types";
+
+definePageMeta({ layout: false });
 
 const tournamentStore = useTournamentStore();
 const { showError } = useErrorToast();
@@ -19,18 +24,34 @@ const state = reactive({
   location: "",
   description: "",
   visibility: "private" as TournamentVisibility,
+  // Une seule option aujourd'hui : la carte Format est sélectionnable
+  // pour préparer les futurs formats, le payload reste identique.
+  format: "round_robin" as TournamentFormat,
 });
 
+// TODO: les options de visibilité et de format seront à terme chargées
+// depuis une table BDD — listes en dur temporaires.
 const visibilityOptions = [
   {
     value: "private",
     label: "Privé",
-    description: "Visible par vous uniquement",
+    description: "Visible par vous",
+    icon: "i-lucide-lock",
   },
   {
     value: "public",
     label: "Public",
-    description: "Visible par tous les utilisateurs connectés",
+    description: "Visible par tous",
+    icon: "i-lucide-globe",
+  },
+];
+
+const formatOptions = [
+  {
+    value: "round_robin",
+    label: "Championnat",
+    description: "Toutes les équipes se rencontrent",
+    icon: "i-lucide-target",
   },
 ];
 
@@ -45,7 +66,7 @@ async function onSubmit() {
     const createdTournament = await tournamentStore.createTournament({
       name: state.name.trim(),
       date: state.date,
-      format: "round_robin",
+      format: state.format,
       location: trimmedLocation === "" ? undefined : trimmedLocation,
       description: trimmedDescription === "" ? undefined : trimmedDescription,
       visibility: state.visibility,
@@ -59,76 +80,144 @@ async function onSubmit() {
 }
 
 useHead({ title: "Nouveau tournoi — Pétankup" });
+
+// Styles partagés des champs (valeurs maquette : h 51, fond card, bordure
+// 1.5px line, radius 12, texte 15.5, placeholder muted).
+const FIELD_LABEL_CLASS =
+  "font-disp text-[10px] font-extrabold tracking-widest uppercase text-(--pk-muted)";
+const FIELD_BASE_CLASS =
+  "h-12.75 w-full rounded-(--pk-r-md) border-[1.5px] border-(--pk-line) bg-(--pk-card) px-3.5 font-sans text-[15.5px] text-(--pk-ink) placeholder:text-(--pk-muted)";
 </script>
 
 <template>
-  <div class="space-y-4">
-    <UButton to="/" variant="ghost" color="neutral" size="sm">
-      ← Retour à l'accueil
-    </UButton>
+  <div class="min-h-screen bg-default text-default">
+    <div class="mx-auto max-w-2xl">
+      <AppHeader
+        kicker="Étape 1 / 1"
+        title="Nouveau tournoi"
+        subtitle="Quelques infos et c'est parti"
+        :back="{ label: 'Accueil', to: '/' }"
+      />
 
-    <UCard>
-      <template #header>
-        <h1 class="text-xl font-semibold text-primary-900">Créer un tournoi</h1>
-      </template>
-
-      <UForm
-        :schema="tournamentSchema"
-        :state="state"
-        class="space-y-4"
-        @submit="onSubmit"
-      >
-        <UFormField label="Nom du tournoi" name="name" required>
-          <UInput
-            v-model="state.name"
-            placeholder="Ex : Tournoi de l'été"
-            class="w-full"
-          />
-        </UFormField>
-
-        <UFormField label="Date" name="date" required>
-          <UInput v-model="state.date" type="date" class="w-full" />
-        </UFormField>
-
-        <UFormField label="Lieu" name="location">
-          <UInput
-            v-model="state.location"
-            placeholder="Ex : Parc Bordelais"
-            class="w-full"
-          />
-        </UFormField>
-
-        <UFormField label="Description" name="description">
-          <UTextarea
-            v-model="state.description"
-            placeholder="Notes, règles spéciales..."
-            :maxlength="500"
-            :rows="4"
-            class="w-full"
-          />
-        </UFormField>
-
-        <UFormField label="Visibilité" name="visibility" required>
-          <URadioGroup
-            v-model="state.visibility"
-            :items="visibilityOptions"
-          />
-        </UFormField>
-
-        <UFormField label="Format">
-          <p class="text-toned">Championnat (toutes rondes)</p>
-        </UFormField>
-
-        <UButton
-          type="submit"
-          color="primary"
-          size="lg"
-          :loading="isSubmitting"
-          block
+      <main class="px-4.5 pt-5.5 pb-10">
+        <UForm
+          :schema="tournamentSchema"
+          :state="state"
+          class="space-y-4"
+          @submit="onSubmit"
         >
-          Créer le tournoi
-        </UButton>
-      </UForm>
-    </UCard>
+          <UFormField
+            label="Nom du tournoi"
+            name="name"
+            required
+            :ui="{ label: FIELD_LABEL_CLASS }"
+          >
+            <UInput
+              v-model="state.name"
+              placeholder="Ex : Tournoi de l'été"
+              variant="none"
+              class="w-full"
+              :ui="{ base: FIELD_BASE_CLASS }"
+            />
+          </UFormField>
+
+          <div class="grid grid-cols-2 gap-2.75">
+            <UFormField
+              label="Date"
+              name="date"
+              required
+              :ui="{ label: FIELD_LABEL_CLASS }"
+            >
+              <UInput
+                v-model="state.date"
+                type="date"
+                icon="i-lucide-calendar"
+                variant="none"
+                class="w-full"
+                :ui="{
+                  base: `${FIELD_BASE_CLASS} ps-10.5`,
+                  leadingIcon: 'size-4.5 text-(--pk-muted)',
+                }"
+              />
+            </UFormField>
+
+            <UFormField
+              label="Lieu"
+              name="location"
+              :ui="{ label: FIELD_LABEL_CLASS }"
+            >
+              <UInput
+                v-model="state.location"
+                placeholder="Parc Bordelais"
+                icon="i-lucide-map-pin"
+                variant="none"
+                class="w-full"
+                :ui="{
+                  base: `${FIELD_BASE_CLASS} ps-10.5`,
+                  leadingIcon: 'size-4.5 text-(--pk-muted)',
+                }"
+              />
+            </UFormField>
+          </div>
+
+          <UFormField
+            label="Description"
+            name="description"
+            :ui="{ label: FIELD_LABEL_CLASS }"
+          >
+            <UTextarea
+              v-model="state.description"
+              placeholder="Notes, règles spéciales…"
+              :maxlength="500"
+              :rows="4"
+              variant="none"
+              class="w-full"
+              :ui="{
+                base: `${FIELD_BASE_CLASS} h-auto py-2.75`,
+              }"
+            />
+          </UFormField>
+
+          <UFormField
+            label="Visibilité"
+            name="visibility"
+            required
+            :ui="{ label: FIELD_LABEL_CLASS }"
+          >
+            <CarteSelection
+              v-model="state.visibility"
+              :options="visibilityOptions"
+              :columns="2"
+              name="visibility"
+            />
+          </UFormField>
+
+          <UFormField
+            label="Format"
+            name="format"
+            :ui="{ label: FIELD_LABEL_CLASS }"
+          >
+            <CarteSelection
+              v-model="state.format"
+              :options="formatOptions"
+              :columns="1"
+              name="format"
+            />
+          </UFormField>
+
+          <UButton
+            type="submit"
+            color="primary"
+            block
+            icon="i-lucide-plus"
+            :loading="isSubmitting"
+            class="h-13.5 gap-2.25 rounded-[14px] font-disp text-[14.5px] font-extrabold tracking-[0.03em] uppercase text-(--pk-cream) shadow-(--pk-shadow-clay-lg)"
+            :ui="{ leadingIcon: 'size-4.5' }"
+          >
+            Créer le tournoi
+          </UButton>
+        </UForm>
+      </main>
+    </div>
   </div>
 </template>
