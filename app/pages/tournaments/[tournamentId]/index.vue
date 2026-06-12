@@ -597,30 +597,45 @@ useHead(() => ({
           <div v-else-if="activeTab === '2'" class="space-y-4">
             <div
               v-if="!hasAnyCompletedMatch"
-              class="rounded-xl border border-dashed border-default bg-elevated p-6 text-center"
+              class="rounded-(--pk-r-card) border border-dashed border-(--pk-line) bg-(--pk-card) p-6 text-center"
             >
-              <p class="text-sm text-toned">
+              <p class="font-sans text-sm text-(--pk-subtle)">
                 Le classement apparaîtra après le premier match.
               </p>
             </div>
 
             <div v-else class="space-y-4">
-              <RankingTable :ranking="ranking" :teams="teams" />
+              <div class="space-y-2">
+                <LigneClassementEntete />
+                <LigneClassement
+                  v-for="entry in ranking"
+                  :key="entry.teamId"
+                  :rank="entry.rank"
+                  :team-name="getTeamById(entry.teamId)?.name ?? '—'"
+                  :wins="entry.wins"
+                  :losses="entry.losses"
+                  :diff="entry.pointDifference"
+                />
+              </div>
 
-              <div v-if="tournamentStatus === 'in_progress'" class="space-y-2">
+              <div
+                v-if="tournamentStatus === 'in_progress'"
+                class="space-y-2 pt-2"
+              >
                 <UButton
                   v-if="canCompleteTournament && isOwner"
+                  color="navy"
                   icon="i-lucide-trophy"
-                  color="primary"
-                  size="lg"
                   block
+                  class="h-13.5 gap-2.25 rounded-[14px] font-disp text-[14.5px] font-extrabold tracking-[0.03em] uppercase text-(--pk-cream)"
+                  :ui="{ leadingIcon: 'size-4.5' }"
                   @click="askCompleteConfirmation"
                 >
                   Terminer le tournoi
                 </UButton>
                 <p
                   v-else-if="pendingMatchCount > 0"
-                  class="text-center text-sm text-toned"
+                  class="text-center font-sans text-xs text-(--pk-muted)"
                 >
                   {{ pendingMatchCount }}
                   {{
@@ -633,9 +648,9 @@ useHead(() => ({
 
               <div
                 v-else-if="tournamentIsCompleted"
-                class="space-y-3 rounded-xl border border-default bg-elevated p-4 text-center"
+                class="space-y-3 rounded-(--pk-r-card) border border-(--pk-line) bg-(--pk-card) p-4 text-center"
               >
-                <p class="text-sm text-toned">
+                <p class="font-sans text-sm text-(--pk-subtle)">
                   Tournoi terminé le
                   {{ formatDate(currentTournament.updatedAt) }}
                 </p>
@@ -645,6 +660,7 @@ useHead(() => ({
                   color="primary"
                   icon="i-lucide-trophy"
                   block
+                  class="h-12 rounded-(--pk-r-md) font-disp text-[13px] font-extrabold tracking-[0.04em] uppercase"
                 >
                   Voir les résultats
                 </UButton>
