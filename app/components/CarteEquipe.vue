@@ -4,11 +4,25 @@
 // intentions via les emits `edit`/`delete` — il ne modifie ni ne supprime
 // rien lui-même. L'en-tête de liste (« N équipes inscrites ») et le bouton
 // « Ajouter une équipe » vivent dans l'écran, pas ici.
+//
+// Deux états d'actions DISTINCTS (ne pas fusionner) :
+// - `showActions: false` → boutons masqués (l'utilisateur n'a pas le droit,
+//   ex. non-owner) ;
+// - `actionsDisabled: true` → boutons visibles mais désactivés (le droit
+//   existe mais l'état le bloque, ex. tournoi verrouillé).
 
-const props = defineProps<{
-  name: string;
-  players: string[];
-}>();
+const props = withDefaults(
+  defineProps<{
+    name: string;
+    players: string[];
+    showActions?: boolean;
+    actionsDisabled?: boolean;
+  }>(),
+  {
+    showActions: true,
+    actionsDisabled: false,
+  },
+);
 
 const emit = defineEmits<{
   edit: [];
@@ -34,12 +48,13 @@ const playersLine = computed(() => props.players.join(" · "));
         </p>
       </div>
 
-      <div class="flex shrink-0 gap-1.5">
+      <div v-if="showActions" class="flex shrink-0 gap-1.5">
         <UButton
           icon="i-lucide-pencil"
           color="neutral"
           variant="ghost"
           square
+          :disabled="actionsDisabled"
           :aria-label="`Modifier l'équipe ${name}`"
           class="size-9 justify-center rounded-[10px] border border-(--pk-line) bg-(--pk-page) text-(--pk-subtle)"
           :ui="{ leadingIcon: 'size-3.75' }"
@@ -50,6 +65,7 @@ const playersLine = computed(() => props.players.join(" · "));
           color="error"
           variant="soft"
           square
+          :disabled="actionsDisabled"
           :aria-label="`Supprimer l'équipe ${name}`"
           class="size-9 justify-center rounded-[10px] bg-error-100"
           :ui="{ leadingIcon: 'size-3.75' }"

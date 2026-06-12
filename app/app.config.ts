@@ -30,6 +30,12 @@ export default defineAppConfig({
           navy: '',
           cream: '',
         },
+        // Variante de bordure pointillée (boutons « ajouter » : équipe,
+        // tournoi…). Base sans fond façon ghost + bordure dashed corail ;
+        // motif récurrent → centralisé ici plutôt que des classes répétées.
+        variant: {
+          dashed: '',
+        },
       },
       compoundVariants: [
         {
@@ -43,6 +49,12 @@ export default defineAppConfig({
           variant: 'solid',
           class:
             'bg-(--pk-cream) text-(--pk-navy) hover:bg-white active:bg-white disabled:bg-(--pk-cream) aria-disabled:bg-(--pk-cream) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--pk-cream)',
+        },
+        {
+          color: 'primary',
+          variant: 'dashed',
+          class:
+            'text-primary border-[1.5px] border-dashed border-primary-200 hover:bg-primary/10 active:bg-primary/10 disabled:bg-transparent aria-disabled:bg-transparent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
         },
       ],
     },

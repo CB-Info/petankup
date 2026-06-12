@@ -166,6 +166,15 @@ function getTeamById(teamId: string): Team | null {
   return teamsById.value[teamId] ?? null;
 }
 
+// Noms affichés des joueurs d'une équipe (présentation pure) : pseudo live
+// si le profil est résolu, sinon snapshot — via l'util partagée, comme
+// le faisait TeamMemberList.
+function teamPlayersNames(team: Team): string[] {
+  return team.players.map((player) =>
+    getPlayerDisplayName(player, profileById.value),
+  );
+}
+
 type RoundGroup = { roundNumber: number; matches: Match[] };
 
 // Les matchs sont stockés à plat avec un champ `roundNumber` ; on les regroupe
@@ -179,7 +188,10 @@ const matchesByRound = computed<RoundGroup[]>(() => {
   }
   return [...groupedMatches.entries()]
     .sort(([roundNumberA], [roundNumberB]) => roundNumberA - roundNumberB)
-    .map(([roundNumber, matchesInRound]) => ({ roundNumber, matches: matchesInRound }));
+    .map(([roundNumber, matchesInRound]) => ({
+      roundNumber,
+      matches: matchesInRound,
+    }));
 });
 
 const tournamentStatus = computed(() => currentTournament.value?.status);
@@ -448,121 +460,108 @@ useHead(() => ({
         <main class="px-4.5 pt-5.5 pb-10">
           <!-- ───── Onglet Équipes ───── -->
           <div v-if="activeTab === '0'" class="space-y-4">
-            <p v-if="tournamentIsLocked" class="text-sm text-toned">
+            <div class="flex items-center justify-between">
+              <h2
+                class="font-disp text-[10px] font-extrabold tracking-widest uppercase text-(--pk-muted)"
+              >
+                {{ teams.length }} équipes inscrites
+              </h2>
+              <span class="font-sans text-xs text-(--pk-muted)">
+                min. 2 pour lancer
+              </span>
+            </div>
+
+            <p
+              v-if="tournamentIsLocked"
+              class="font-sans text-xs text-(--pk-muted)"
+            >
               Le tournoi a démarré, les équipes ne peuvent plus être modifiées.
             </p>
 
             <div
               v-if="teams.length === 0"
-              class="space-y-3 rounded-xl border border-dashed border-default bg-elevated p-6 text-center"
+              class="space-y-1 rounded-(--pk-r-card) border border-dashed border-(--pk-line) bg-(--pk-card) p-6 text-center"
             >
-              <h2 class="text-base font-semibold text-primary-900">
+              <h3
+                class="font-disp text-[16.5px] font-extrabold text-(--pk-ink)"
+              >
                 Aucune équipe pour l'instant
-              </h2>
-              <p class="text-sm text-toned">
+              </h3>
+              <p class="font-sans text-sm text-(--pk-subtle)">
                 Ajoutez les équipes participantes au tournoi
               </p>
-              <UButton
-                v-if="isOwner"
-                icon="i-lucide-plus"
-                color="primary"
-                size="lg"
-                :disabled="tournamentIsLocked"
-                block
-                @click="openCreateForm"
-              >
-                Ajouter une équipe
-              </UButton>
             </div>
 
-            <div v-else class="space-y-3">
-              <UButton
-                v-if="isOwner"
-                icon="i-lucide-plus"
-                color="primary"
-                size="lg"
-                :disabled="tournamentIsLocked"
-                block
-                @click="openCreateForm"
-              >
-                Ajouter une équipe
-              </UButton>
+            <ul v-else class="space-y-2.75">
+              <li v-for="team in teams" :key="team.id">
+                <CarteEquipe
+                  :name="team.name"
+                  :players="teamPlayersNames(team)"
+                  :show-actions="isOwner"
+                  :actions-disabled="tournamentIsLocked"
+                  @edit="openEditForm(team)"
+                  @delete="askDeleteConfirmation(team)"
+                />
+              </li>
+            </ul>
 
-              <ul class="space-y-3">
-                <li v-for="team in teams" :key="team.id">
-                  <UCard>
-                    <div class="flex items-start justify-between gap-3">
-                      <div class="min-w-0 space-y-1">
-                        <p class="truncate font-semibold text-primary-900">
-                          {{ team.name }}
-                        </p>
-                        <TeamMemberList :players="team.players" />
-                      </div>
-                      <div v-if="isOwner" class="flex shrink-0 gap-1">
-                        <UButton
-                          variant="ghost"
-                          color="neutral"
-                          icon="i-lucide-pencil"
-                          :disabled="tournamentIsLocked"
-                          aria-label="Modifier l'équipe"
-                          @click="openEditForm(team)"
-                        />
-                        <UButton
-                          variant="ghost"
-                          color="neutral"
-                          icon="i-lucide-trash-2"
-                          :disabled="tournamentIsLocked"
-                          aria-label="Supprimer l'équipe"
-                          @click="askDeleteConfirmation(team)"
-                        />
-                      </div>
-                    </div>
-                  </UCard>
-                </li>
-              </ul>
+            <UButton
+              v-if="isOwner"
+              color="primary"
+              variant="dashed"
+              icon="i-lucide-plus"
+              block
+              :disabled="tournamentIsLocked"
+              class="h-13 gap-2 rounded-[14px] font-disp text-[13.5px] font-extrabold tracking-[0.04em] uppercase"
+              :ui="{ leadingIcon: 'size-4' }"
+              @click="openCreateForm"
+            >
+              Ajouter une équipe
+            </UButton>
+
+            <div
+              v-if="
+                tournamentStatus === 'draft' && isOwner && hasEnoughTeamsToStart
+              "
+              class="space-y-2.5 pt-2"
+            >
+              <UButton
+                color="primary"
+                block
+                :loading="isGeneratingMatches"
+                class="h-13.5 rounded-[14px] font-disp text-[14.5px] font-extrabold tracking-[0.03em] uppercase text-(--pk-cream) shadow-(--pk-shadow-clay-lg)"
+                @click="startTournament"
+              >
+                Lancer le tournoi
+              </UButton>
+              <p class="text-center font-sans text-xs text-(--pk-muted)">
+                Une fois lancé, les équipes sont verrouillées.
+              </p>
             </div>
           </div>
 
           <!-- ───── Onglet Matchs ───── -->
           <div v-else-if="activeTab === '1'" class="space-y-4">
-            <template v-if="tournamentStatus === 'draft' && isOwner">
-              <div
-                v-if="!hasEnoughTeamsToStart"
-                class="rounded-xl border border-dashed border-default bg-elevated p-6 text-center"
-              >
-                <p class="text-sm text-toned">
-                  Ajoutez au moins 2 équipes pour lancer le tournoi.
-                </p>
-              </div>
-
-              <div
-                v-else
-                class="space-y-3 rounded-xl border border-dashed border-default bg-elevated p-6 text-center"
-              >
-                <h2 class="text-base font-semibold text-primary-900">
-                  Les équipes sont prêtes
-                </h2>
-                <p class="text-sm text-toned">
-                  Lancez le tournoi pour générer le calendrier des matchs.
-                </p>
-                <UButton
-                  icon="i-lucide-play"
-                  color="primary"
-                  size="lg"
-                  :loading="isGeneratingMatches"
-                  block
-                  @click="startTournament"
-                >
-                  Lancer le tournoi
-                </UButton>
-              </div>
-            </template>
+            <!-- En brouillon, le CTA « Lancer le tournoi » vit dans l'onglet
+                 Équipes — ici, uniquement les messages informatifs. -->
+            <div
+              v-if="
+                tournamentStatus === 'draft' &&
+                isOwner &&
+                !hasEnoughTeamsToStart
+              "
+              class="rounded-(--pk-r-card) border border-dashed border-(--pk-line) bg-(--pk-card) p-6 text-center"
+            >
+              <p class="font-sans text-sm text-(--pk-subtle)">
+                Ajoutez au moins 2 équipes pour lancer le tournoi.
+              </p>
+            </div>
 
             <div
               v-else-if="tournamentStatus === 'draft'"
-              class="rounded-xl border border-dashed border-default bg-elevated p-6 text-center"
+              class="rounded-(--pk-r-card) border border-dashed border-(--pk-line) bg-(--pk-card) p-6 text-center"
             >
-              <p class="text-sm text-toned">
+              <p class="font-sans text-sm text-(--pk-subtle)">
                 Le tournoi n'a pas encore démarré.
               </p>
             </div>
