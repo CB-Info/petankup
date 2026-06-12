@@ -149,6 +149,11 @@
   --pk-shadow-clay-sm: 0 16px 30px -16px rgb(var(--pk-clay-rgb) / 0.5);
   --pk-shadow-clay-lg: 0 16px 30px -14px rgb(var(--pk-clay-rgb) / 0.7);
   --pk-shadow-medallion: 0 8px 16px -6px rgb(0 0 0 / 0.4);
+  /* Cartes de sélection (CarteSelection) : flottement doux inactif,
+     terracotta actif. Géométries maquette ; couleurs ramenées aux canaux
+     RGB du système (pas de rgba orphelin). */
+  --pk-shadow-select-active: 0 12px 24px -14px rgb(var(--pk-clay-rgb) / 0.5);
+  --pk-shadow-select-inactive: 0 4px 12px -10px rgb(var(--pk-shadow-rgb) / 0.3);
 
   /* Rayons */
   --pk-r-header: 24px;

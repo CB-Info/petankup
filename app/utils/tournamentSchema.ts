@@ -21,6 +21,10 @@ export const tournamentSchema = z.object({
     .optional()
     .or(z.literal('')),
   visibility: z.enum(['private', 'public']).default('private'),
+  // Une seule valeur aujourd'hui (round-robin only, cf. CLAUDE.md) — le
+  // champ est typé pour la carte de sélection Format, sans sur-construire
+  // pour des formats qui n'existent pas encore.
+  format: z.enum(['round_robin']).default('round_robin'),
 })
 
 export type TournamentFormState = z.infer<typeof tournamentSchema>
