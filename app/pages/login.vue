@@ -81,77 +81,102 @@ useHead({ title: "Connexion — Pétankup" });
 
 <template>
   <div
-    class="flex min-h-screen items-center justify-center bg-default p-4 text-default"
+    class="flex min-h-screen items-center justify-center px-5 py-10 [background:var(--pk-grad-login)]"
   >
-    <UCard class="w-full max-w-md">
-      <template #header>
-        <h1 class="text-xl font-semibold text-primary-900">Pétankup</h1>
-        <p class="mt-1 text-sm text-toned">
-          Connecte-toi pour gérer tes tournois entre amis.
-        </p>
-      </template>
+    <div class="w-full max-w-84.5 text-center">
+      <template v-if="!linkSent">
+        <div class="flex justify-center">
+          <BouleAvatar tone="gold" :size="68" />
+        </div>
 
-      <div v-if="!linkSent">
+        <h1
+          class="mt-3.5 font-disp text-[26px] font-extrabold tracking-[0.02em] uppercase text-(--pk-cream)"
+        >
+          Pétankup
+        </h1>
+        <p class="mt-1.5 font-sans text-[13.5px] text-(--pk-on-navy-2)">
+          Vos tournois entre amis, sans prise de tête.
+        </p>
+
         <UButton
-          variant="outline"
-          color="neutral"
-          size="lg"
-          :loading="isSubmitting"
+          color="cream"
           block
+          :loading="isSubmitting"
+          class="mt-7 h-13.5 gap-2.75 rounded-[14px] font-sans text-[15.5px] font-bold shadow-[0_18px_34px_-16px_rgb(0_0_0/0.5)]"
           @click="onGoogleLogin"
         >
+          <GoogleLogo class="h-4.5 w-auto shrink-0" />
           Continuer avec Google
         </UButton>
 
-        <div class="my-4 flex items-center gap-3">
-          <div class="h-px flex-1 bg-default" />
-          <span class="text-xs uppercase tracking-wider text-toned">ou</span>
-          <div class="h-px flex-1 bg-default" />
+        <div class="my-4.5 flex items-center gap-3.5">
+          <div class="h-px flex-1 bg-white/12" />
+          <span
+            class="font-disp text-[11px] font-extrabold tracking-[0.14em] text-(--pk-on-navy-2)"
+          >
+            OU
+          </span>
+          <div class="h-px flex-1 bg-white/12" />
         </div>
-      </div>
 
-      <div v-if="linkSent" class="space-y-3 text-center">
-        <UIcon
-          name="i-lucide-mail-check"
-          class="mx-auto size-10 text-primary-500"
-        />
-        <h2 class="text-base font-semibold text-primary-900">
+        <UForm
+          :schema="loginSchema"
+          :state="state"
+          class="space-y-4 text-left"
+          @submit="onSubmit"
+        >
+          <UFormField
+            label="Email"
+            name="email"
+            required
+            :ui="{
+              label:
+                'font-disp text-[11px] font-extrabold tracking-[0.1em] uppercase text-(--pk-on-navy-3)',
+            }"
+          >
+            <UInput
+              v-model="state.email"
+              type="email"
+              autocomplete="email"
+              placeholder="ton.email@exemple.com"
+              variant="none"
+              class="w-full"
+              :ui="{
+                base: 'h-13 w-full rounded-[13px] border-[1.5px] border-white/14 bg-white/6 px-4 font-sans text-[15.5px] text-(--pk-cream) placeholder:text-(--pk-on-navy-3)',
+              }"
+            />
+          </UFormField>
+
+          <UButton
+            type="submit"
+            color="primary"
+            block
+            :loading="isSubmitting"
+            icon="i-lucide-arrow-right"
+            class="h-13.5 gap-2.25 rounded-[14px] font-disp text-[14.5px] font-extrabold tracking-[0.03em] uppercase text-(--pk-cream) shadow-(--pk-shadow-clay-lg)"
+            :ui="{ leadingIcon: 'size-4.5' }"
+          >
+            Recevoir le lien magique
+          </UButton>
+        </UForm>
+
+        <p class="mt-5.5 font-sans text-xs leading-[1.6] text-(--pk-on-navy-3)">
+          En continuant, vous acceptez nos conditions. Aucune publicité,
+          aucune revente de données.
+        </p>
+      </template>
+
+      <div v-else class="space-y-3">
+        <UIcon name="i-lucide-mail-check" class="mx-auto size-10 text-secondary" />
+        <h2 class="font-disp text-[19px] font-extrabold text-(--pk-cream)">
           Vérifie ta boîte mail
         </h2>
-        <p class="text-sm text-toned">
+        <p class="font-sans text-sm text-(--pk-on-navy-2)">
           Un lien de connexion a été envoyé à
-          <span class="font-medium text-primary-900">{{ state.email }}</span
+          <span class="font-bold text-(--pk-cream)">{{ state.email }}</span
           >. Le lien expire après quelques minutes.
         </p>
       </div>
-
-      <UForm
-        v-else
-        :schema="loginSchema"
-        :state="state"
-        class="space-y-4"
-        @submit="onSubmit"
-      >
-        <UFormField label="Email" name="email" required>
-          <UInput
-            v-model="state.email"
-            type="email"
-            autocomplete="email"
-            placeholder="ton.email@exemple.com"
-            class="w-full"
-          />
-        </UFormField>
-
-        <UButton
-          type="submit"
-          color="primary"
-          size="lg"
-          :loading="isSubmitting"
-          block
-        >
-          Recevoir le lien magique
-        </UButton>
-      </UForm>
-    </UCard>
+    </div>
   </div>
 </template>

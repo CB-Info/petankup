@@ -14,17 +14,21 @@ export default defineAppConfig({
       error: 'danger',
       neutral: 'stone',
     },
-    // Variante navy de UButton, déclarée UNE fois ici (mécanisme officiel
-    // Nuxt UI v4 : le thème runtime étend le thème généré avec ce bloc, et
-    // depuis la 4.8 les variants custom remontent dans les types →
-    // `<UButton color="navy">` est typé). Scopée au bouton volontairement :
-    // le navy est une ambiance (--pk-*), pas une couleur sémantique globale —
-    // on n'étend PAS ui.theme.colors (qui exigerait une rampe navy 50→950).
-    // Focus : anneau navy (lisible sur les surfaces crème), pas de corail.
+    // Variantes navy et cream de UButton, déclarées UNE fois ici (mécanisme
+    // officiel Nuxt UI v4 : le thème runtime étend le thème généré avec ce
+    // bloc, et depuis la 4.8 les variants custom remontent dans les types →
+    // `<UButton color="navy">` / `color="cream"` sont typés). Scopées au
+    // bouton volontairement : navy et cream sont des ambiances (--pk-*), pas
+    // des couleurs sémantiques globales — on n'étend PAS ui.theme.colors
+    // (qui exigerait des rampes 50→950).
+    // navy : bouton sombre sur surfaces crème (focus : anneau navy, pas de
+    // corail). cream : bouton clair sur fonds navy (Google de la connexion,
+    // futurs sheets/modales — focus : anneau cream, lisible sur navy).
     button: {
       variants: {
         color: {
           navy: '',
+          cream: '',
         },
       },
       compoundVariants: [
@@ -33,6 +37,12 @@ export default defineAppConfig({
           variant: 'solid',
           class:
             'bg-(--pk-navy) text-(--pk-cream) hover:bg-(--pk-navy-top) active:bg-(--pk-navy-top) disabled:bg-(--pk-navy) aria-disabled:bg-(--pk-navy) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--pk-navy)',
+        },
+        {
+          color: 'cream',
+          variant: 'solid',
+          class:
+            'bg-(--pk-cream) text-(--pk-navy) hover:bg-white active:bg-white disabled:bg-(--pk-cream) aria-disabled:bg-(--pk-cream) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--pk-cream)',
         },
       ],
     },
