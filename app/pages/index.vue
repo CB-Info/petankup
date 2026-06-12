@@ -36,6 +36,16 @@ const profileInitial = computed(() =>
   (currentProfile.value?.displayName ?? "").charAt(0).toUpperCase(),
 );
 
+const user = useSupabaseUser();
+
+// Pastille profil → MON profil public (sens de navigation inversé : le
+// compte s'atteint depuis le profil). user.sub d'abord (pattern repo),
+// currentProfile en secours au boot ; dernier recours : /account.
+function goToMyProfile() {
+  const myUserId = user.value?.sub ?? currentProfile.value?.id;
+  void navigateTo(myUserId ? `/profile/${myUserId}` : "/account");
+}
+
 const isRetrying = ref(false);
 
 async function retryLoadTournaments() {
@@ -154,7 +164,7 @@ useHead({ title: "Pétankup — Gestion de tournois" });
       <AppHeader
         mode="accueil"
         :profile-initial="profileInitial"
-        @profile="navigateTo('/account')"
+        @profile="goToMyProfile"
       />
       <!-- TODO bloc tournoi-en-cours : à brancher quand le store exposera
            matchsJoues/matchsTotal/equipes du tournoi in_progress (prop
