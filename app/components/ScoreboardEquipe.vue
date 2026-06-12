@@ -12,6 +12,12 @@ import type { BouleTone } from "./BouleAvatar.vue";
 // état-dépendants page/blanc/navy/corail selon le meneur, hors système
 // UButton) ; les actions standards (CTA Valider, SCORE) sont des UButton
 // (états hover/focus/disabled/loading natifs) — règle actée à l'audit boutons.
+//
+// `canScore` (mode liste) : le DROIT de saisir/corriger est décidé par
+// l'écran (owner, tournoi non terminé) et reçu ici. À true : le bouton
+// SCORE émet `score`, et la carte d'un match joué devient cliquable
+// (correction de score) en émettant aussi `score`. À false : « À jouer »
+// en texte simple, carte jouée inerte.
 
 type ScoreboardMode = "saisie" | "liste";
 type TeamSide = "A" | "B";
@@ -30,6 +36,14 @@ const props = withDefaults(
     validateDisabled?: boolean;
     /** Spinner du CTA Valider pendant l'enregistrement async (câblé par l'écran). */
     validateLoading?: boolean;
+    /** Droit de saisir/corriger un score (mode liste) — reçu, jamais déduit. */
+    canScore?: boolean;
+    /**
+     * Gros chiffre éditable au clavier (mode saisie uniquement). Coexiste
+     * avec les steppers : les deux chemins émettent, le parent reste la
+     * source de vérité de la valeur.
+     */
+    editable?: boolean;
   }>(),
   {
     leadingSide: null,
@@ -38,6 +52,8 @@ const props = withDefaults(
     toneB: "sand",
     validateDisabled: false,
     validateLoading: false,
+    canScore: true,
+    editable: false,
   },
 );
 
@@ -46,7 +62,27 @@ const emit = defineEmits<{
   decrement: [side: TeamSide];
   validate: [];
   score: [];
+  /** Saisie clavier : string filtrée chiffres-only (peut être vide). */
+  "set-score": [side: TeamSide, value: string];
 }>();
+
+// Saisie clavier du gros chiffre : on purge les non-chiffres directement
+// dans le champ puis on émet la string filtrée — aucune validation métier
+// ici (elle reste chez le parent, à la soumission).
+function onScoreInput(side: TeamSide, event: Event) {
+  const input = event.target as HTMLInputElement;
+  const filtered = input.value.replace(/\D/g, "");
+  input.value = filtered;
+  emit("set-score", side, filtered);
+}
+
+// La carte d'un match joué n'est un vrai <button> que si la correction de
+// score est permise — sinon un simple <div> inerte, sans handler.
+function onPlayedCardClick() {
+  if (props.canScore) emit("score");
+}
+
+const slots = useSlots();
 
 // Les deux côtés sont symétriques : on les assemble une fois pour itérer dans
 // le template au lieu de dupliquer chaque demi-carte.
@@ -103,7 +139,20 @@ const isPlayed = computed(() => props.scoreA !== null && props.scoreB !== null);
           </h3>
         </div>
 
+        <input
+          v-if="editable"
+          type="text"
+          inputmode="numeric"
+          pattern="[0-9]*"
+          placeholder="0"
+          :value="entry.score ?? ''"
+          :aria-label="`Score de ${entry.name}`"
+          class="mt-1.5 mb-3 w-full bg-transparent text-center font-num text-[60px] font-bold leading-none tracking-[-0.02em] focus:outline-none"
+          :class="entry.isLeading ? 'text-(--pk-ink)' : 'text-(--pk-subtle)'"
+          @input="onScoreInput(entry.side, $event)"
+        >
         <p
+          v-else
           class="mt-1.5 mb-3 text-center font-num text-[60px] font-bold leading-none tracking-[-0.02em]"
           :class="entry.isLeading ? 'text-(--pk-ink)' : 'text-(--pk-subtle)'"
         >
@@ -143,12 +192,20 @@ const isPlayed = computed(() => props.scoreA !== null && props.scoreB !== null);
       </span>
     </div>
 
+    <!-- Contenu d'écran entre les cartes et le CTA (ex. bandeau d'info) :
+         le composant fournit l'emplacement, pas le contenu. -->
+    <div v-if="slots['before-validate']" class="mt-4">
+      <slot name="before-validate" />
+    </div>
+
     <UButton
       color="primary"
       block
+      icon="i-lucide-check"
       :disabled="validateDisabled"
       :loading="validateLoading"
-      class="mt-4 h-14 rounded-[14px] font-disp text-[15px] font-extrabold tracking-[0.03em] text-(--pk-cream) shadow-(--pk-shadow-clay-lg) disabled:opacity-50 disabled:shadow-none"
+      class="mt-4 h-14 gap-2.25 rounded-[14px] font-disp text-[15px] font-extrabold tracking-[0.03em] text-(--pk-cream) shadow-(--pk-shadow-clay-lg) disabled:opacity-50 disabled:shadow-none"
+      :ui="{ leadingIcon: 'size-4.5' }"
       @click="emit('validate')"
     >
       VALIDER LE SCORE
@@ -160,7 +217,15 @@ const isPlayed = computed(() => props.scoreA !== null && props.scoreB !== null);
     v-else
     class="flex overflow-hidden rounded-(--pk-r-card) border border-(--pk-line) bg-(--pk-card) shadow-(--pk-shadow-card-lg)"
   >
-    <div v-if="isPlayed" class="flex flex-1 items-stretch">
+    <component
+      :is="canScore ? 'button' : 'div'"
+      v-if="isPlayed"
+      v-bind="
+        canScore ? { type: 'button', 'aria-label': 'Modifier le score' } : {}
+      "
+      class="flex flex-1 items-stretch text-left"
+      @click="onPlayedCardClick"
+    >
       <template v-for="(entry, sideIndex) in sides" :key="entry.side">
         <div
           v-if="sideIndex === 1"
@@ -189,7 +254,7 @@ const isPlayed = computed(() => props.scoreA !== null && props.scoreB !== null);
           </p>
         </div>
       </template>
-    </div>
+    </component>
 
     <div v-else class="flex flex-1 items-center gap-3 p-4">
       <div class="min-w-0 flex-1 space-y-1">
@@ -201,6 +266,7 @@ const isPlayed = computed(() => props.scoreA !== null && props.scoreB !== null);
         </h3>
       </div>
       <UButton
+        v-if="canScore"
         color="primary"
         icon="i-lucide-plus"
         class="h-12 shrink-0 gap-1.75 rounded-(--pk-r-md) px-4.5 font-disp text-[13px] font-extrabold tracking-[0.04em] uppercase text-(--pk-cream)"
@@ -209,6 +275,7 @@ const isPlayed = computed(() => props.scoreA !== null && props.scoreB !== null);
       >
         Score
       </UButton>
+      <p v-else class="shrink-0 font-sans text-sm text-(--pk-muted)">À jouer</p>
     </div>
   </article>
 </template>

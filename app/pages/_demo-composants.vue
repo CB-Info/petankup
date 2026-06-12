@@ -339,13 +339,16 @@ const ongletActif = ref("matchs");
         <CarteEquipe name="Les Cagoles" :players="['Léa', 'Tom', 'Anna']" />
         <CarteEquipe name="Les Pointeurs" :players="['Jules', 'Karim']" />
         <CarteEquipe name="Les Tireurs" :players="['Eva', 'Paul']" />
-        <button
-          type="button"
-          class="flex h-13 w-full items-center justify-center gap-2 rounded-(--pk-r-card) border-2 border-dashed border-primary-200 font-disp text-[13px] font-extrabold tracking-[0.04em] uppercase text-primary"
+        <UButton
+          color="primary"
+          variant="dashed"
+          icon="i-lucide-plus"
+          block
+          class="h-13 gap-2 rounded-[14px] font-disp text-[13.5px] font-extrabold tracking-[0.04em] uppercase"
+          :ui="{ leadingIcon: 'size-4' }"
         >
-          <UIcon name="i-lucide-plus" class="size-4" />
           Ajouter une équipe
-        </button>
+        </UButton>
       </div>
     </section>
 
