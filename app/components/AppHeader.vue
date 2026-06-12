@@ -98,8 +98,7 @@ const hasTournoi = computed(
 // Interne : la rangée du haut n'existe que si retour, actions ou close.
 // Accueil : toujours présente (logo + pastille profil).
 const topRowVisible = computed(
-  () =>
-    isAccueil.value || !!props.back || props.closable || !!slots.actions,
+  () => isAccueil.value || !!props.back || props.closable || !!slots.actions,
 );
 
 // 16 avec onglets ; accueil : 26 avec bloc tournoi, 18 vide ; sinon 22.
@@ -165,10 +164,7 @@ const titleSizeClass = computed(() =>
           </NuxtLink>
           <!-- Actions d'écran (pastilles navy fournies par la page) : côté
                droit de la rangée, avant l'éventuel bouton de fermeture. -->
-          <div
-            v-if="slots.actions"
-            class="ml-auto flex items-center gap-1.75"
-          >
+          <div v-if="slots.actions" class="ml-auto flex items-center gap-1.75">
             <slot name="actions" />
           </div>
           <button
@@ -222,7 +218,7 @@ const titleSizeClass = computed(() =>
           "
           @click="emit('tab-change', tab.id)"
         >
-          {{ tab.label }}
+          {{ tab.label.toUpperCase() }}
         </button>
       </nav>
 
