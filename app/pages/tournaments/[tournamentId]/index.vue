@@ -125,7 +125,33 @@ const headerTabs = tabItems.map((tab, index) => ({
   label: tab.label,
 }));
 
-const activeTab = ref("0");
+// Onglet initial : param de query optionnel `?tab=` (nom FR → slot
+// existant), pour ouvrir directement un onglet depuis un lien (ex. le
+// bouton « Revoir le classement » du podium). Lecture one-shot au setup
+// (chaque navigation vers cette page remonte le composant) ; param
+// absent ou invalide → onglet par défaut, comportement inchangé.
+const TAB_QUERY_PARAM_TO_SLOT: Record<
+  string,
+  (typeof tabItems)[number]["slot"]
+> = {
+  equipes: "teams",
+  matchs: "matches",
+  classement: "ranking",
+};
+
+function initialTabIndex(): string {
+  const tabQueryParam = route.query.tab;
+  const requestedSlot =
+    typeof tabQueryParam === "string"
+      ? TAB_QUERY_PARAM_TO_SLOT[tabQueryParam]
+      : undefined;
+  const tabIndex = requestedSlot
+    ? tabItems.findIndex((tab) => tab.slot === requestedSlot)
+    : -1;
+  return tabIndex >= 0 ? String(tabIndex) : "0";
+}
+
+const activeTab = ref(initialTabIndex());
 
 const formModalOpen = ref(false);
 const editingTeam = ref<Team | null>(null);
