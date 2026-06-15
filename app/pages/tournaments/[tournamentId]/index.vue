@@ -193,8 +193,7 @@ function getTeamById(teamId: string): Team | null {
 }
 
 // Noms affichés des joueurs d'une équipe (présentation pure) : pseudo live
-// si le profil est résolu, sinon snapshot — via l'util partagée, comme
-// le faisait TeamMemberList.
+// si le profil est résolu, sinon snapshot — via l'util partagée.
 function teamPlayersNames(team: Team): string[] {
   return team.players.map((player) =>
     getPlayerDisplayName(player, profileById.value),
