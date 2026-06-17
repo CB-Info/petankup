@@ -72,158 +72,77 @@ Dashboard. Ne pas activer `enableManualLinking` pour l'instant.
 - Documenter ce que Nuxt UI fait déjà (initiales auto sur `UAvatar`
   quand `alt` est fourni, etc.) plutôt que de réimplémenter.
 
-## Charte graphique
+## Charte graphique — « Nuit & Corail »
 
-### Identité visuelle
+Mode clair forcé (le dark mode est supprimé). L'identité repose sur un navy profond pour les en-têtes et écrans de célébration, un corail (clay) pour les actions, du doré pour les accents (avatars, podium, classement), sur des surfaces crème.
 
-Ambiance décontractée et conviviale. Tons chauds, coins arrondis,
-espacement généreux. L'app doit évoquer un après-midi de pétanque
-entre amis, pas un dashboard corporate.
+### Polices
 
-### Couleurs — Light mode
+Trois familles, déclarées en variables CSS (`main.css`) et exposées en utilitaires Tailwind :
 
-Primaire (bleu horizon) :
+- **`font-disp` = Archivo** — titres, kickers, labels, boutons, stats (bold/extrabold, souvent capitales + letter-spacing).
+- **`font-sans` = Hanken Grotesk** — corps de texte (police par défaut).
+- **`font-num` = Space Grotesk** — scores et gros chiffres tabulaires.
 
-- 50: #E8F2F5 — fond léger, hover subtil
-- 100: #C4DEE5 — tags, badges
-- 200: #9DC8D3 — bordures accent
-- 400: #7BAAB9 — couleur de référence
-- 500: #5A8A98 — boutons principaux, liens
-- 600: #3D6E7C — hover boutons
-- 800: #2B5060 — texte sur fond primaire clair
-- 900: #1A3540 — texte fort
+### Couleurs de marque = tokens sémantiques Nuxt UI
 
-Secondaire (sable doré) :
+Mappées sur les rôles sémantiques dans `app/app.config.ts` (ne pas les redéfinir ailleurs) :
 
-- 50: #F5F2E4 — fond alternatif, tags doux
-- 100: #EDE7C8 — séparateurs, accents légers
-- 200: #E3DAAB — bordures secondaires
-- 400: #D9CC92 — couleur de référence
-- 500: #C2B574 — boutons secondaires
-- 600: #A89C5A — hover secondaire
-- 800: #7A7240 — texte sur fond secondaire
-- 900: #4A4425 — texte fort secondaire
+- **primary = clay (corail) `#E0654E`** — actions principales, CTA, sélection active.
+- **secondary = gold (doré) `#E2B45A`** — avatars, accents podium/classement, kickers dorés.
+- **success = green `#2F7D5E`** — différentiels positifs, taux de victoire.
+- **error = danger `#B23B45`** — erreurs, suppression.
 
-Neutres :
+Ces quatre rôles ont leurs rampes complètes (50→950). **Ne jamais créer de tokens `--pk-clay` / `--pk-gold` / `--pk-green`** qui dupliqueraient les rôles sémantiques.
 
-- bg: #FAFAF6 — fond de page
-- surface: #F2F0EB — cartes, zones surélevées
-- border: #E5E2DB — bordures par défaut
-- muted: #8A8880 — texte désactivé, placeholders
-- subtle: #5C5A54 — texte secondaire
-- text: #2C2A25 — texte principal
+### Navy, dégradés, neutres = variables `--pk-*` (dans `main.css`)
 
-Sémantiques :
+Le navy est une couleur d'ambiance (pas de rampe sémantique). Variables `--pk-*`, à utiliser via `bg-(--pk-…)` / `text-(--pk-…)` :
 
-- success: bg #DCEEE2, text #2B6B3E
-- warning: bg #FFF3D6, text #8A6B1A
-- danger: bg #FCE8E8, text #A03030
-- info: bg #E6F0FA, text #2B5F8A
+**Navy & profondeur** — `--pk-navy: #1F2542` · `--pk-navy-top: #2B3357` · `--pk-navy-mid: #3B4570` · `--pk-navy-deep: #12152A`
 
-### Couleurs — Dark mode
+**Surfaces claires** — `--pk-page: #F0ECE6` (fond) · `--pk-card: #FBF8F3` (cartes) · `--pk-cream: #FBF6EE` (crème) · `--pk-line: #E5E1D9` (bordures)
 
-Primaire (brun fumé) :
+**Texte** — `--pk-ink: #232231` (fort) · `--pk-subtle: #605E6E` (secondaire) · `--pk-muted: #97939E` (atténué)
 
-- 50: #2D2320 — fond léger dark
-- 100: #3D322C
-- 200: #4E3F38
-- 400: #634C44 — couleur de référence
-- 500: #7E6258 — boutons principaux dark
-- 600: #9A7E72
-- 800: #C4A898
-- 900: #E0CFC5
+**Texte sur navy** — `--pk-cream` · `--pk-on-navy-2: #A9C4CB` · `--pk-on-navy-3: #88A6AE` · `--pk-on-navy: #E6EEF0` (blanc froid système). Voiles : `--pk-on-navy-08` (onglet inactif) · `--pk-on-navy-10` (croix).
 
-Secondaire (parchemin) :
+**Dégradés navy (prêts)** — `--pk-grad-header` (en-têtes) · `--pk-grad-login` (connexion) · `--pk-grad-podium` (podium).
 
-- 50: #2E2A20
-- 100: #4A4230
-- 200: #6B6040
-- 400: #A09570
-- 500: #C9B990
-- 600: #DDD0A8
-- 800: #EBE0C0
-- 900: #F0E3C3 — couleur de référence
+**Canaux RGB (ombres composées)** — `--pk-clay-rgb: 224 101 78` · `--pk-gold-rgb: 226 180 90` · `--pk-navy-rgb: 31 37 66`.
 
-Neutres dark :
+### Ombres & rayons (tokens)
 
-- bg: #1E1916
-- surface: #2A2420
-- border: #3D3530
-- muted: #7A7068
-- subtle: #B0A498
-- text: #F0E3C3
+- Ombres : `--pk-shadow-card`, `--pk-shadow-card-lg`, `--pk-shadow-clay-sm`, `--pk-shadow-clay-lg`, `--pk-shadow-select-active`, `--pk-shadow-medallion` (liste exacte dans `main.css`).
+- Rayons : `--pk-r-header: 24px` · `--pk-r-panel: 18px` · `--pk-r-card: 16px` · `--pk-r-md: 12px` · `--pk-r-sm: 10px`.
 
-### Application des couleurs (règles)
+### Boutons
 
-- **Bouton principal** : bg primaire-500, hover primaire-600, texte blanc
-- **Bouton secondaire** : bg secondaire-400, hover secondaire-500,
-  texte secondaire-900
-- **Cards** : bg surface, border border, radius arrondi (rounded-xl)
-- **Tags statut** : En cours → primaire-100/primaire-800,
-  Draft → secondaire-50/secondaire-800,
-  Terminé → success bg/text
-- **Classement positions** : 1er → primaire-500, 2e → primaire-400,
-  3e → secondaire-500, reste → muted
-- **Inputs** : bg surface, border border, focus ring primaire-400
-- **Fond de page** : bg (jamais blanc pur #fff)
-- **Texte principal** : text (jamais noir pur #000)
+`UButton` pour toute action (`color`/`variant`). Variantes custom déclarées **une seule fois** dans `app.config.ts` (scopées au bouton, pas des couleurs globales) :
 
-### Conventions de nommage couleurs dans les templates
+- `color="navy"` — bouton navy (ex. « Terminer le tournoi »).
+- `color="cream"` — bouton clair sur navy (Google, sheets/modales).
+- `variant="dashed"` (sur `color="primary"`) — bordure pointillée corail (« Ajouter une équipe », « Se déconnecter »).
 
-**Rampes primaire/secondaire** : ne jamais utiliser les noms internes
-`horizon-*` ou `sand-*` dans les fichiers `.vue`. Toujours utiliser
-les alias sémantiques `primary-*` et `secondary-*`. Les rampes
-`horizon` et `sand` ne sont que des implémentations dans `main.css`
-et `app.config.ts` — le code applicatif ne les connaît pas.
+Contrôles **identitaires à état** (pastilles navy translucides, onglets actif/inactif, steppers meneur) = `<button>` natifs (le navy n'a pas de rampe 50→950 exprimable par `UButton`).
 
-**Neutres** : ne pas créer de variables CSS custom pour les neutres.
-Utiliser les classes sémantiques Nuxt UI, qui sont overridées dans
-`main.css` pour coller à la charte :
+### Composants Direction C (design system maison)
 
-| Besoin                  | Classe Nuxt UI   | Valeur light |
-| ----------------------- | ---------------- | ------------ |
-| Fond de page            | `bg-default`     | #FAFAF6      |
-| Surface (cards, header) | `bg-elevated`    | #F2F0EB      |
-| Bordure par défaut      | `border-default` | #E5E2DB      |
-| Texte principal         | `text-default`   | #2C2A25      |
-| Texte secondaire        | `text-toned`     | #5C5A54      |
-| Texte désactivé         | `text-muted`     | #8A8880      |
+`AppHeader`, `BouleAvatar` (+ util `medalTone`), `StatutBadge`, `CarteTournoi`, `CarteEquipe`, `ScoreboardEquipe`, `LigneClassement` (+ `LigneClassementEntete`), `CarteSelection`, `GoogleLogo`. **Audit Nuxt UI obligatoire avant tout nouveau composant maison.**
 
-Ces classes basculent automatiquement en dark mode via les overrides
-`--ui-*` dans `main.css`. Pas besoin de `dark:` manuels.
+### Règles de couleur transverses
 
-**Danger** : les couleurs danger n'ont pas d'équivalent Nuxt UI natif.
-Utiliser `bg-(--petankup-danger-bg)` et `text-(--petankup-danger-text)`,
-définis dans `main.css`.
-
-### Nuxt UI — Intégration des couleurs
-
-Les couleurs custom se configurent dans `app.config.ts` via le
-système de tokens Nuxt UI. Utiliser la couleur `primary` pour le
-bleu horizon et `secondary` pour le sable doré. Les neutres
-passent par le thème `neutral`.
-
-### Typographie
-
-- Police par défaut de Nuxt UI (système)
-- Pas de police custom en V1
-- Titres : font-weight 600, tailles via composants Nuxt UI
-- Corps : font-weight 400, text-base (16px)
-
-### Spacing et arrondis
-
-- Arrondis généreux : rounded-xl sur les cards, rounded-lg sur les
-  boutons et inputs, rounded-full sur les avatars/positions
-- Padding confortable : p-4 minimum sur les cards, p-3 sur les boutons
-- Espacement vertical : space-y-4 entre les sections
+- DIFF positif → `success` ; DIFF négatif → `primary` (corail), pas de token dédié.
+- Une seule source par couleur : utiliser le rôle sémantique s'il existe ; ne créer un `--pk-*` que pour navy/neutres/dégradés/ombres.
+- Orphelins (couleur hors palette dans une maquette) : mapper sur le token existant le plus proche ; nouveau token seulement après validation.
 
 ### Mobile-first
 
-- Tous les layouts en colonne unique sur mobile
-- Boutons full-width sur mobile (w-full)
-- Touch targets minimum 44px
-- Pas de hover-only — tout doit être accessible au tap
-- Texte minimum 14px, jamais en dessous
+- Layouts en colonne unique sur mobile
+- Boutons full-width (w-full)
+- Touch targets min 44px
+- Pas de hover-only — tout au tap
+- Texte min 14px
 
 ## Design system de référence
 
