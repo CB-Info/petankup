@@ -5,22 +5,6 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   modules: ["@nuxt/ui", "@nuxt/eslint", "@pinia/nuxt", "@nuxtjs/supabase"],
   css: ["~/assets/css/main.css"],
-  app: {
-    head: {
-      // viewport-fit=cover : requis pour que env(safe-area-inset-top) se
-      // résolve à une valeur réelle sur iOS/standalone. Sans ça l'inset vaut 0
-      // et le pt-[env(...)] du header n'a aucun effet (bande claire au-dessus).
-      viewport: "width=device-width, initial-scale=1, viewport-fit=cover",
-      meta: [
-        // Teinte le chrome du navigateur (Android Chrome) en navy, en
-        // continuité avec le header. Valeur en dur : la balise <meta> est lue
-        // avant le CSS, elle ne peut pas référencer une variable CSS. #2B3357
-        // == --pk-navy-top (stop haut de --pk-grad-header), couleur exacte du
-        // bord supérieur du header où s'affiche la barre de statut.
-        { name: "theme-color", content: "#2B3357" },
-      ],
-    },
-  },
   ui: {
     // Mode clair forcé : désactive l'intégration @nuxtjs/color-mode (qui reste
     // embarquée par @nuxt/ui, mais n'agit plus). <html> ne reçoit jamais la
