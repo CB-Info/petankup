@@ -1,74 +1,80 @@
 <script setup lang="ts">
-// Layout shell : header sticky + zone de contenu centrée mobile-first.
+// Layout shell : header unique + zone de contenu centrée mobile-first.
 // Couleurs neutres servies par les utilitaires sémantiques Nuxt UI
 // (thème « Nuit & Corail », mode clair uniquement — pas de bascule dark).
 //
-// Pattern d'erreurs : signOut peut échouer (réseau). On attrape ici et
-// on affiche un toast via useErrorToast (voir composables/useErrorToast).
-//
-// Pourquoi `useSupabaseSession()` et non `useSupabaseUser()` pour gater
-// le bouton logout : le ref user n'est pas fiable au premier mount du
-// layout après auth via magic link. Le module @nuxtjs/supabase hydrate
-// `useSupabaseUser` via son hook `page:start`, qui ne fire pas pour la
-// transition initiale issue de `navigateTo()` depuis confirm.vue —
-// résultat : le bouton resterait invisible jusqu'à la première
-// navigation interne. La session, elle, est mise à jour de façon
-// déterministe par le plugin du module via `getSession()` au boot.
-//
-// Note : `session.value.user` est un User Supabase standard (champs
-// `id`, `email`, ...), à ne pas confondre avec `useSupabaseUser()`
-// qui expose un JwtPayload (champ `sub` pour l'ID). Le store applicatif
-// lit `sub` via useSupabaseUser car il tourne dans un contexte navigué
-// où le ref est déjà hydraté — la distinction est importante pour ne
-// pas refaire l'erreur du Ticket 4 suite 3.
+// Une seule source de header : AppHeader est monté ICI, une fois, piloté par
+// l'état de `useAppHeader`. Chaque page déclare sa config dans son setup.
+// La déconnexion ne vit plus dans le layout : elle est accessible via /account
+// (page profil → « Modifier mes infos »), donc aucun bouton logout ici.
 
-const client = useSupabaseClient();
-const session = useSupabaseSession();
-const { showError } = useErrorToast();
+import type { AppHeaderState } from "~/composables/useAppHeader";
 
-async function onLogout() {
-  try {
-    const { error } = await client.auth.signOut();
-    if (error) throw new Error(error.message);
-    await navigateTo("/login");
-  } catch (error) {
-    showError(error);
-  }
+const { state: header } = useAppHeader();
+
+// On retire les callbacks (on*) et `actions` avant de v-bind : les on*
+// deviendraient des listeners en double avec les @… ci-dessous, et `actions`
+// passe par le slot, pas par une prop d'AppHeader.
+//
+// `header.value` est DeepReadonly (readonly() côté composable) alors qu'AppHeader
+// attend des props mutables (ses tableaux, ex. `tabs`). On ne fait que lire ici,
+// donc l'assertion locale vers AppHeaderState est sûre.
+const headerProps = computed(() => {
+  if (!header.value) return null;
+  const { onProfile, onClose, onTabChange, onReprendre, actions, ...props } =
+    header.value as AppHeaderState;
+  return props;
+});
+
+const headerActions = computed(() => header.value?.actions ?? []);
+
+// Relais des emits vers les callbacks de l'état (fonctions nommées plutôt
+// qu'expressions inline : lisibilité + narrowing TS propre).
+function handleProfile() {
+  const onProfile = header.value?.onProfile;
+  // Défaut raisonnable si la page n'en fournit pas : aller au compte.
+  if (onProfile) onProfile();
+  else void navigateTo("/account");
+}
+function handleClose() {
+  header.value?.onClose?.();
+}
+function handleTabChange(tabId: string) {
+  header.value?.onTabChange?.(tabId);
+}
+function handleReprendre() {
+  header.value?.onReprendre?.();
 }
 </script>
 
 <template>
   <div class="min-h-screen bg-default text-default">
-    <header class="sticky top-0 z-10 border-b border-default bg-elevated">
-      <div
-        class="mx-auto flex min-h-14 max-w-2xl items-center justify-between gap-2 px-4 py-3"
+    <div class="mx-auto max-w-2xl">
+      <AppHeader
+        v-if="headerProps"
+        v-bind="headerProps"
+        @profile="handleProfile"
+        @close="handleClose"
+        @tab-change="handleTabChange"
+        @reprendre="handleReprendre"
       >
-        <NuxtLink to="/" class="text-lg font-semibold text-primary-900">
-          Pétankup
-        </NuxtLink>
-        <div class="flex items-center gap-1">
-          <UButton
-            v-if="session"
-            to="/account"
-            icon="i-lucide-user"
-            variant="ghost"
-            color="neutral"
-            aria-label="Mon compte"
-          />
-          <UButton
-            v-if="session"
-            icon="i-lucide-log-out"
-            variant="ghost"
-            color="neutral"
-            aria-label="Se déconnecter"
-            @click="onLogout"
-          />
-        </div>
-      </div>
-    </header>
+        <template v-if="headerActions.length" #actions>
+          <button
+            v-for="action in headerActions"
+            :key="action.id"
+            type="button"
+            :aria-label="action.ariaLabel"
+            class="inline-flex size-8.5 items-center justify-center rounded-(--pk-r-sm) bg-(--pk-on-navy-10) text-(--pk-on-navy)"
+            @click="action.onClick"
+          >
+            <UIcon :name="action.icon" class="size-4.5" />
+          </button>
+        </template>
+      </AppHeader>
 
-    <main class="mx-auto max-w-2xl p-4">
-      <slot />
-    </main>
+      <main class="px-4.5 pt-5.5 pb-10">
+        <slot />
+      </main>
+    </div>
   </div>
 </template>
