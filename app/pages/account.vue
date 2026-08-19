@@ -22,13 +22,10 @@
 // l'utilisateur corriger sans recharger. Même pattern que les codes
 // d'erreur typés des invitations (InviteMemberError).
 //
-// Layout désactivé : l'écran porte son propre header navy (AppHeader mode
-// interne) — le bandeau crème du layout ferait doublon. La déconnexion,
-// qui vivait sur l'icône logout de ce bandeau, est rapatriée ici sur le
-// bouton « Se déconnecter » (même logique, déclencheur déplacé).
+// Header (mode interne) déclaré via useAppHeader, rendu une fois par le
+// layout. La déconnexion vit ici (bouton « Se déconnecter ») : le layout n'a
+// plus de header legacy ni d'icône logout, donc /account en est l'unique point.
 import { ProfileError, type ProfileErrorCode } from "../types";
-
-definePageMeta({ layout: false });
 
 const tournamentStore = useTournamentStore();
 const { currentProfile, hasFetchedCurrentProfile } =
@@ -43,6 +40,17 @@ const user = useSupabaseUser();
 const profileBackTo = computed(() =>
   user.value?.sub ? `/profile/${user.value.sub}` : "/",
 );
+
+// Config header. watchEffect pour suivre profileBackTo (résolu après hydratation).
+const { set: setHeader } = useAppHeader();
+watchEffect(() => {
+  setHeader({
+    mode: "interne",
+    kicker: "Compte",
+    title: "Mon compte",
+    back: { label: "Profil", to: profileBackTo.value },
+  });
+});
 
 const state = reactive({ displayName: "" });
 
@@ -144,100 +152,90 @@ const FIELD_BASE_CLASS =
 </script>
 
 <template>
-  <div class="min-h-screen bg-default text-default">
-    <div class="mx-auto max-w-2xl">
-      <AppHeader
-        kicker="Compte"
-        title="Mon compte"
-        :back="{ label: 'Profil', to: profileBackTo }"
-      />
+  <div>
+    <p
+      v-if="!hasFetchedCurrentProfile"
+      class="py-16 text-center font-sans text-sm text-(--pk-subtle)"
+    >
+      Chargement…
+    </p>
 
-      <main class="px-4.5 pt-5.5 pb-10">
-        <p
-          v-if="!hasFetchedCurrentProfile"
-          class="py-16 text-center font-sans text-sm text-(--pk-subtle)"
-        >
-          Chargement…
-        </p>
-
-        <div
-          v-else-if="currentProfile === null"
-          class="flex flex-col items-center gap-3 py-16 text-center"
-        >
-          <h2 class="font-disp text-[19px] font-extrabold text-(--pk-ink)">
-            Profil indisponible
-          </h2>
-          <p class="font-sans text-sm text-(--pk-subtle)">
-            Vérifiez votre connexion et réessayez.
-          </p>
-          <UButton
-            color="primary"
-            block
-            :loading="isRetrying"
-            class="mt-2 h-13 rounded-[13px] font-disp text-[15px] font-extrabold tracking-[0.02em] uppercase text-(--pk-cream)"
-            @click="retryLoadProfile"
-          >
-            Réessayer
-          </UButton>
-        </div>
-
-        <template v-else>
-          <UForm
-            :schema="profileSchema"
-            :state="trimmedFormState"
-            class="space-y-4"
-            @submit="onSubmit"
-          >
-            <UFormField
-              label="Pseudo"
-              name="displayName"
-              :error="displayNameError ?? undefined"
-              required
-              :ui="{ label: FIELD_LABEL_CLASS }"
-            >
-              <UInput
-                v-model="state.displayName"
-                placeholder="Votre pseudo"
-                icon="i-lucide-users"
-                variant="none"
-                class="w-full"
-                :ui="{
-                  base: `${FIELD_BASE_CLASS} ps-10.5`,
-                  leadingIcon: 'size-4.5 text-(--pk-muted)',
-                }"
-              />
-              <template #help>
-                <span class="font-sans text-xs text-(--pk-muted)">
-                  Visible par les autres joueurs de vos tournois.
-                </span>
-              </template>
-            </UFormField>
-
-            <UButton
-              type="submit"
-              color="primary"
-              block
-              icon="i-lucide-check"
-              :loading="isSubmitting"
-              :disabled="!canSubmit"
-              class="h-13.5 gap-2.25 rounded-[14px] font-disp text-[14.5px] font-extrabold tracking-[0.03em] uppercase text-(--pk-cream) shadow-(--pk-shadow-clay-lg)"
-              :ui="{ leadingIcon: 'size-4.5' }"
-            >
-              Enregistrer
-            </UButton>
-          </UForm>
-
-          <UButton
-            color="primary"
-            variant="dashed"
-            block
-            class="mt-3 h-12.5 rounded-[14px] font-disp text-[13.5px] font-extrabold tracking-[0.04em] uppercase"
-            @click="onLogout"
-          >
-            Se déconnecter
-          </UButton>
-        </template>
-      </main>
+    <div
+      v-else-if="currentProfile === null"
+      class="flex flex-col items-center gap-3 py-16 text-center"
+    >
+      <h2 class="font-disp text-[19px] font-extrabold text-(--pk-ink)">
+        Profil indisponible
+      </h2>
+      <p class="font-sans text-sm text-(--pk-subtle)">
+        Vérifiez votre connexion et réessayez.
+      </p>
+      <UButton
+        color="primary"
+        block
+        :loading="isRetrying"
+        class="mt-2 h-13 rounded-[13px] font-disp text-[15px] font-extrabold tracking-[0.02em] uppercase text-(--pk-cream)"
+        @click="retryLoadProfile"
+      >
+        Réessayer
+      </UButton>
     </div>
+
+    <template v-else>
+      <UForm
+        :schema="profileSchema"
+        :state="trimmedFormState"
+        class="space-y-4"
+        @submit="onSubmit"
+      >
+        <UFormField
+          label="Pseudo"
+          name="displayName"
+          :error="displayNameError ?? undefined"
+          required
+          :ui="{ label: FIELD_LABEL_CLASS }"
+        >
+          <UInput
+            v-model="state.displayName"
+            placeholder="Votre pseudo"
+            icon="i-lucide-users"
+            variant="none"
+            class="w-full"
+            :ui="{
+              base: `${FIELD_BASE_CLASS} ps-10.5`,
+              leadingIcon: 'size-4.5 text-(--pk-muted)',
+            }"
+          />
+          <template #help>
+            <span class="font-sans text-xs text-(--pk-muted)">
+              Visible par les autres joueurs de vos tournois.
+            </span>
+          </template>
+        </UFormField>
+
+        <UButton
+          type="submit"
+          color="primary"
+          block
+          icon="i-lucide-check"
+          :loading="isSubmitting"
+          :disabled="!canSubmit"
+          class="h-13.5 gap-2.25 rounded-[14px] font-disp text-[14.5px] font-extrabold tracking-[0.03em] uppercase text-(--pk-cream) shadow-(--pk-shadow-clay-lg)"
+          :ui="{ leadingIcon: 'size-4.5' }"
+        >
+          Enregistrer
+        </UButton>
+      </UForm>
+
+      <UButton
+        color="primary"
+        variant="dashed"
+        block
+        class="mt-3 h-12.5 rounded-[14px] font-disp text-[13.5px] font-extrabold tracking-[0.04em] uppercase"
+        @click="onLogout"
+      >
+        Se déconnecter
+      </UButton>
+    </template>
   </div>
 </template>

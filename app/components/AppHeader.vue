@@ -11,6 +11,17 @@ export interface HeaderTournoi {
   /** Label du CTA, ex. « Reprendre le tournoi ». */
   ctaLabel: string;
 }
+
+export type HeaderMode = "interne" | "accueil";
+
+// `clay` et `subtle` sont pressentis pour les variantes sheet/modale, à
+// valider à leurs écrans ; seul `gold` est utilisé aujourd'hui.
+export type KickerTone = "gold" | "clay" | "subtle";
+
+export type HeaderOnglet = {
+  id: string;
+  label: string;
+};
 </script>
 
 <script setup lang="ts">
@@ -30,17 +41,9 @@ export interface HeaderTournoi {
 //
 // La status bar n'est jamais simulée : c'est l'OS qui la rend, le conteneur
 // réserve l'espace via `env(safe-area-inset-top)`.
-
-type HeaderMode = "interne" | "accueil";
-
-// `clay` et `subtle` sont pressentis pour les variantes sheet/modale, à
-// valider à leurs écrans ; seul `gold` est utilisé aujourd'hui.
-type KickerTone = "gold" | "clay" | "subtle";
-
-type HeaderOnglet = {
-  id: string;
-  label: string;
-};
+//
+// Types (HeaderMode, KickerTone, HeaderOnglet) exportés depuis le bloc
+// <script> non-setup en tête de fichier, pour réutilisation par useAppHeader.
 
 const props = withDefaults(
   defineProps<{

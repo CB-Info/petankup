@@ -8,10 +8,7 @@
 // départ tout en laissant hasFetchedProfileBundle à true entre deux profils
 // — sans flag local, une navigation profil→profil rendrait un bundle null.
 //
-// Layout désactivé : l'écran porte son propre header navy (AppHeader mode
-// interne) — le bandeau crème du layout ferait doublon.
-
-definePageMeta({ layout: false });
+// Header (mode interne) déclaré via useAppHeader, rendu une fois par le layout.
 
 const route = useRoute();
 const tournamentStore = useTournamentStore();
@@ -58,6 +55,17 @@ const profile = computed(() => currentProfileBundle.value?.profile ?? null);
 const stats = computed(() => currentProfileBundle.value?.stats ?? null);
 const results = computed(() => currentProfileBundle.value?.results ?? []);
 
+// Config header. watchEffect pour suivre le pseudo (arrive après le mount).
+const { set: setHeader } = useAppHeader();
+watchEffect(() => {
+  setHeader({
+    mode: "interne",
+    kicker: "Profil",
+    title: profile.value?.displayName ?? "Profil",
+    back: { label: "Accueil", to: "/" },
+  });
+});
+
 useHead({
   title: computed(() =>
     profile.value
@@ -68,109 +76,99 @@ useHead({
 </script>
 
 <template>
-  <div class="min-h-screen bg-default text-default">
-    <div class="mx-auto max-w-2xl">
-      <AppHeader
-        kicker="Profil"
-        :title="profile?.displayName ?? 'Profil'"
-        :back="{ label: 'Accueil', to: '/' }"
-      />
+  <div>
+    <p
+      v-if="isLoadingProfile"
+      class="py-16 text-center font-sans text-sm text-(--pk-subtle)"
+    >
+      Chargement du profil…
+    </p>
 
-      <main class="px-4.5 pt-5.5 pb-10">
+    <div
+      v-else-if="lastLoadProfileBundleError"
+      class="flex flex-col items-center gap-3 py-16 text-center"
+    >
+      <h2 class="font-disp text-[19px] font-extrabold text-(--pk-ink)">
+        Impossible de charger le profil
+      </h2>
+      <p class="font-sans text-sm text-(--pk-subtle)">
+        Vérifiez votre connexion et réessayez.
+      </p>
+      <UButton
+        color="primary"
+        block
+        class="mt-2 h-13 rounded-[13px] font-disp text-[15px] font-extrabold tracking-[0.02em] uppercase text-(--pk-cream)"
+        @click="loadProfile(userId)"
+      >
+        Réessayer
+      </UButton>
+    </div>
+
+    <div
+      v-else-if="profile === null"
+      class="flex flex-col items-center gap-3 py-16 text-center"
+    >
+      <h2 class="font-disp text-[19px] font-extrabold text-(--pk-ink)">
+        Profil introuvable
+      </h2>
+      <UButton
+        to="/"
+        variant="ghost"
+        color="neutral"
+        icon="i-lucide-arrow-left"
+      >
+        Retour à l'accueil
+      </UButton>
+    </div>
+
+    <div v-else-if="profile" class="space-y-6">
+      <!-- Hero : boule + pseudo + (soi uniquement) bouton Modifier -->
+      <div class="flex flex-col items-center gap-3 pt-2 text-center">
+        <BouleAvatar
+          tone="gold"
+          :size="96"
+          :aria-label="`Profil de ${profile.displayName}`"
+        >
+          <span class="text-(--pk-navy)">
+            {{ profile.displayName.charAt(0).toUpperCase() }}
+          </span>
+        </BouleAvatar>
+        <h2 class="font-disp text-[19px] font-extrabold text-(--pk-ink)">
+          {{ profile.displayName }}
+        </h2>
+        <UButton
+          v-if="isSelfProfile"
+          to="/account"
+          color="primary"
+          variant="soft"
+          icon="i-lucide-pencil"
+          class="h-9.5 rounded-full bg-primary-100 px-4.5 font-disp text-[12.5px] font-extrabold tracking-[0.04em] uppercase"
+          :ui="{ leadingIcon: 'size-3.5' }"
+        >
+          Modifier mes infos
+        </UButton>
+      </div>
+
+      <ProfileStatsCards :stats="stats" />
+
+      <section class="space-y-3">
+        <h2
+          class="font-disp text-[10px] font-extrabold tracking-widest uppercase text-(--pk-muted)"
+        >
+          Journal de bord
+        </h2>
         <p
-          v-if="isLoadingProfile"
-          class="py-16 text-center font-sans text-sm text-(--pk-subtle)"
+          v-if="results.length === 0"
+          class="font-sans text-sm text-(--pk-subtle)"
         >
-          Chargement du profil…
+          Aucun tournoi joué pour l'instant.
         </p>
-
-        <div
-          v-else-if="lastLoadProfileBundleError"
-          class="flex flex-col items-center gap-3 py-16 text-center"
-        >
-          <h2 class="font-disp text-[19px] font-extrabold text-(--pk-ink)">
-            Impossible de charger le profil
-          </h2>
-          <p class="font-sans text-sm text-(--pk-subtle)">
-            Vérifiez votre connexion et réessayez.
-          </p>
-          <UButton
-            color="primary"
-            block
-            class="mt-2 h-13 rounded-[13px] font-disp text-[15px] font-extrabold tracking-[0.02em] uppercase text-(--pk-cream)"
-            @click="loadProfile(userId)"
-          >
-            Réessayer
-          </UButton>
-        </div>
-
-        <div
-          v-else-if="profile === null"
-          class="flex flex-col items-center gap-3 py-16 text-center"
-        >
-          <h2 class="font-disp text-[19px] font-extrabold text-(--pk-ink)">
-            Profil introuvable
-          </h2>
-          <UButton
-            to="/"
-            variant="ghost"
-            color="neutral"
-            icon="i-lucide-arrow-left"
-          >
-            Retour à l'accueil
-          </UButton>
-        </div>
-
-        <div v-else-if="profile" class="space-y-6">
-          <!-- Hero : boule + pseudo + (soi uniquement) bouton Modifier -->
-          <div class="flex flex-col items-center gap-3 pt-2 text-center">
-            <BouleAvatar
-              tone="gold"
-              :size="96"
-              :aria-label="`Profil de ${profile.displayName}`"
-            >
-              <span class="text-(--pk-navy)">
-                {{ profile.displayName.charAt(0).toUpperCase() }}
-              </span>
-            </BouleAvatar>
-            <h2 class="font-disp text-[19px] font-extrabold text-(--pk-ink)">
-              {{ profile.displayName }}
-            </h2>
-            <UButton
-              v-if="isSelfProfile"
-              to="/account"
-              color="primary"
-              variant="soft"
-              icon="i-lucide-pencil"
-              class="h-9.5 rounded-full bg-primary-100 px-4.5 font-disp text-[12.5px] font-extrabold tracking-[0.04em] uppercase"
-              :ui="{ leadingIcon: 'size-3.5' }"
-            >
-              Modifier mes infos
-            </UButton>
-          </div>
-
-          <ProfileStatsCards :stats="stats" />
-
-          <section class="space-y-3">
-            <h2
-              class="font-disp text-[10px] font-extrabold tracking-widest uppercase text-(--pk-muted)"
-            >
-              Journal de bord
-            </h2>
-            <p
-              v-if="results.length === 0"
-              class="font-sans text-sm text-(--pk-subtle)"
-            >
-              Aucun tournoi joué pour l'instant.
-            </p>
-            <ul v-else class="space-y-2.75">
-              <li v-for="result in results" :key="result.tournamentId">
-                <ProfileJournalEntry :result="result" />
-              </li>
-            </ul>
-          </section>
-        </div>
-      </main>
+        <ul v-else class="space-y-2.75">
+          <li v-for="result in results" :key="result.tournamentId">
+            <ProfileJournalEntry :result="result" />
+          </li>
+        </ul>
+      </section>
     </div>
   </div>
 </template>
