@@ -38,8 +38,10 @@ skills-lock.json
 # VS Code
 .vscode/
 
-# Docs & references
-references/
+# Docs & references — le dossier reste ignoré (design-system généré),
+# mais le cahier des charges est versionné (source de vérité produit).
+references/*
+!references/cahier_des_charges.md
 .gitattributes
 
 # macOS metadata
