@@ -7,6 +7,7 @@
 // activeTab est un ref local, le header le met à jour via onTabChange.
 import type { Match, Team, TournamentStatus } from "../../../types";
 import type { HeaderAction } from "~/composables/useAppHeader";
+import type { CarteEquipePlayer } from "~/components/CarteEquipe.vue";
 
 const route = useRoute();
 const tournamentStore = useTournamentStore();
@@ -192,12 +193,15 @@ function getTeamById(teamId: string): Team | null {
   return teamsById.value[teamId] ?? null;
 }
 
-// Noms affichés des joueurs d'une équipe (présentation pure) : pseudo live
-// si le profil est résolu, sinon snapshot — via l'util partagée.
-function teamPlayersNames(team: Team): string[] {
-  return team.players.map((player) =>
-    getPlayerDisplayName(player, profileById.value),
-  );
+// Joueurs d'une équipe pour la carte (présentation pure) : nom résolu
+// (pseudo live si le profil est hydraté, sinon snapshot — via l'util
+// partagée) + userId pour que la carte lie les joueurs à compte vers leur
+// profil (les joueurs libres restent du texte).
+function teamCardPlayers(team: Team): CarteEquipePlayer[] {
+  return team.players.map((player) => ({
+    displayName: getPlayerDisplayName(player, profileById.value),
+    userId: player.userId,
+  }));
 }
 
 type RoundGroup = { roundNumber: number; matches: Match[] };
@@ -225,6 +229,13 @@ const tournamentIsCompleted = computed(
   () => tournamentStatus.value === "completed",
 );
 
+// Source de vérité unique du droit de saisir un score (même pattern que
+// canManageMembers) : consommé par la garde d'ouverture de la modale ET
+// par la prop can-score des scoreboards.
+const canScore = computed(
+  () => isOwner.value && !tournamentIsCompleted.value,
+);
+
 const hasEnoughTeamsToStart = computed(() => teams.value.length >= 2);
 
 const isGeneratingMatches = ref(false);
@@ -248,7 +259,7 @@ const scoreModalOpen = ref(false);
 const matchBeingScored = ref<Match | null>(null);
 
 function openScoreModal(match: Match) {
-  if (tournamentIsCompleted.value) return;
+  if (!canScore.value) return;
   matchBeingScored.value = match;
   scoreModalOpen.value = true;
 }
@@ -524,7 +535,7 @@ useHead(() => ({
           <li v-for="team in teams" :key="team.id">
             <CarteEquipe
               :name="team.name"
-              :players="teamPlayersNames(team)"
+              :players="teamCardPlayers(team)"
               :show-actions="isOwner"
               :actions-disabled="tournamentIsLocked"
               @edit="openEditForm(team)"
@@ -621,7 +632,7 @@ useHead(() => ({
                   :score-a="match.scoreA"
                   :score-b="match.scoreB"
                   :winner-side="matchWinnerSide(match)"
-                  :can-score="isOwner && !tournamentIsCompleted"
+                  :can-score="canScore"
                   @score="openScoreModal(match)"
                 />
               </li>

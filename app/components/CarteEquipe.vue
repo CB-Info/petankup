@@ -1,9 +1,20 @@
+<script lang="ts">
+// Joueur affiché sur la carte : nom déjà résolu par l'écran (pseudo live ou
+// snapshot) + userId pour lier vers le profil. userId null = joueur libre,
+// rendu en texte simple (pas de profil, jamais de lien).
+export type CarteEquipePlayer = {
+  displayName: string;
+  userId: string | null;
+};
+</script>
+
 <script setup lang="ts">
 // Carte d'une équipe dans la liste du tournoi : nom, ligne des joueurs
-// (joints par « · »), boutons éditer/supprimer. Le composant SIGNALE les
-// intentions via les emits `edit`/`delete` — il ne modifie ni ne supprime
-// rien lui-même. L'en-tête de liste (« N équipes inscrites ») et le bouton
-// « Ajouter une équipe » vivent dans l'écran, pas ici.
+// (séparés par « · », les joueurs à compte liant vers leur profil), boutons
+// éditer/supprimer. Le composant SIGNALE les intentions via les emits
+// `edit`/`delete` — il ne modifie ni ne supprime rien lui-même. L'en-tête de
+// liste (« N équipes inscrites ») et le bouton « Ajouter une équipe » vivent
+// dans l'écran, pas ici.
 //
 // Deux états d'actions DISTINCTS (ne pas fusionner) :
 // - `showActions: false` → boutons masqués (l'utilisateur n'a pas le droit,
@@ -11,10 +22,10 @@
 // - `actionsDisabled: true` → boutons visibles mais désactivés (le droit
 //   existe mais l'état le bloque, ex. tournoi verrouillé).
 
-const props = withDefaults(
+withDefaults(
   defineProps<{
     name: string;
-    players: string[];
+    players: CarteEquipePlayer[];
     showActions?: boolean;
     actionsDisabled?: boolean;
   }>(),
@@ -28,8 +39,6 @@ const emit = defineEmits<{
   edit: [];
   delete: [];
 }>();
-
-const playersLine = computed(() => props.players.join(" · "));
 </script>
 
 <template>
@@ -43,8 +52,25 @@ const playersLine = computed(() => props.players.join(" · "));
         >
           {{ name }}
         </h3>
+        <!-- Rendu au repos identique à l'ancienne string jointe par « · » ;
+             seule l'interactivité s'ajoute sur les joueurs à compte. -->
         <p class="mt-0.5 truncate font-sans text-[12.5px] text-(--pk-muted)">
-          {{ playersLine }}
+          <template
+            v-for="(player, playerIndex) in players"
+            :key="playerIndex"
+          >
+            <span v-if="playerIndex > 0"> · </span>
+            <!-- py-2 sur un élément inline : n'affecte pas la hauteur de
+                 ligne (rendu au repos inchangé) mais agrandit la zone de
+                 tap verticale — mobile-first. -->
+            <NuxtLink
+              v-if="player.userId !== null"
+              :to="`/profile/${player.userId}`"
+              :aria-label="`Voir le profil de ${player.displayName}`"
+              class="py-2 hover:underline active:underline focus-visible:outline-2 focus-visible:outline-primary"
+            >{{ player.displayName }}</NuxtLink>
+            <span v-else>{{ player.displayName }}</span>
+          </template>
         </p>
       </div>
 

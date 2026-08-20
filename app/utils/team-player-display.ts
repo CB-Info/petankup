@@ -30,3 +30,18 @@ export function getTeammateDisplayName(
   }
   return teammate.displayName
 }
+
+// Liste FR naturelle (« Marc », « Marc et Julie », « Marc, Julie et Paul »),
+// déléguée à Intl comme le fait déjà utils/format.ts pour les dates.
+const frenchListFormatter = new Intl.ListFormat('fr-FR', {
+  style: 'long',
+  type: 'conjunction',
+})
+
+// Ligne « avec … » du journal de bord. null si aucun coéquipier
+// (tête-à-tête) — l'appelant ne rend alors rien, ni libellé vide ni
+// séparateur orphelin. Pure, idempotente.
+export function formatTeammatesLine(teammateNames: string[]): string | null {
+  if (teammateNames.length === 0) return null
+  return `avec ${frenchListFormatter.format(teammateNames)}`
+}

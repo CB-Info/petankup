@@ -1,15 +1,33 @@
 <script setup lang="ts">
 // Une entrée du journal de bord (Couche 1) : un tournoi terminé du palmarès
 // d'un joueur, en carte compacte — boule médaille (medalTone du rang final,
-// rang en chiffre dedans), nom + date · équipe, badge de rang ordinal et
-// ligne V/D/différentiel. Le différentiel et le libellé ordinal sont des
-// calculs d'AFFICHAGE depuis le résultat stocké — aucun recalcul métier.
+// rang en chiffre dedans), nom + date · équipe + coéquipiers, badge de rang
+// ordinal et ligne V/D/différentiel. Le différentiel, le libellé ordinal et
+// la ligne « avec … » sont des calculs d'AFFICHAGE depuis le résultat
+// stocké — aucun recalcul métier.
+//
+// `teammateNames` : noms déjà résolus par la page (pseudo live ou snapshot,
+// cf. getTeammateDisplayName) — texte simple, jamais de lien : la carte
+// entière peut être un lien vers le tournoi, pas de cible imbriquée.
+// `interactive` : la page enveloppe la carte d'un lien — on affiche alors
+// un chevron en bout de carte (affordance tactile statique, mobile-first).
 import type { UserTournamentResult } from '../types'
 import { formatDate } from '../utils/format'
+import { formatTeammatesLine } from '../utils/team-player-display'
 
-const props = defineProps<{
-  result: UserTournamentResult
-}>()
+const props = withDefaults(
+  defineProps<{
+    result: UserTournamentResult
+    teammateNames?: string[]
+    interactive?: boolean
+  }>(),
+  {
+    teammateNames: () => [],
+    interactive: false,
+  },
+)
+
+const teammatesLine = computed(() => formatTeammatesLine(props.teammateNames))
 
 // Suffixe ordinal FR en exposant, comme la maquette (1ᵉʳ, 2ᵉ, 3ᵉ…).
 function rankLabel(rank: number): string {
@@ -47,6 +65,12 @@ const pointDifferentialClass = computed(() =>
       <p class="mt-0.5 truncate font-sans text-xs text-(--pk-muted)">
         {{ formatDate(result.tournamentDate) }} · {{ result.teamName }}
       </p>
+      <p
+        v-if="teammatesLine"
+        class="mt-0.5 truncate font-sans text-xs text-(--pk-muted)"
+      >
+        {{ teammatesLine }}
+      </p>
     </div>
 
     <div class="flex shrink-0 flex-col items-end gap-1">
@@ -67,5 +91,11 @@ const pointDifferentialClass = computed(() =>
         }}</span>
       </p>
     </div>
+
+    <UIcon
+      v-if="interactive"
+      name="i-lucide-chevron-right"
+      class="size-4 shrink-0 text-(--pk-muted)"
+    />
   </article>
 </template>

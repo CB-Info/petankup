@@ -10,10 +10,16 @@
 //
 // Header (mode interne) déclaré via useAppHeader, rendu une fois par le layout.
 
+import type { UserTournamentResult } from "../../types";
+
 const route = useRoute();
 const tournamentStore = useTournamentStore();
-const { currentProfileBundle, lastLoadProfileBundleError } =
-  storeToRefs(tournamentStore);
+const {
+  currentProfileBundle,
+  lastLoadProfileBundleError,
+  profileById,
+  currentProfile,
+} = storeToRefs(tournamentStore);
 const user = useSupabaseUser();
 
 const userId = computed(() => route.params.userId as string);
@@ -46,7 +52,12 @@ watch(
   { immediate: true },
 );
 
-const isSelfProfile = computed(() => userId.value === user.value?.sub);
+// user.sub d'abord, currentProfile en secours : useSupabaseUser n'est pas
+// hydraté dans la fenêtre post-magic-link (même fallback que l'accueil) —
+// sans lui, son propre journal s'afficherait d'abord sans liens puis
+// basculerait sous le doigt.
+const myUserId = computed(() => user.value?.sub ?? currentProfile.value?.id);
+const isSelfProfile = computed(() => userId.value === myUserId.value);
 
 // Accès dérivés non-null-safe : permettent à vue-tsc de narrower dans le
 // template (v-if="profile") sans assertions, et fournissent stats/results à
@@ -54,6 +65,15 @@ const isSelfProfile = computed(() => userId.value === user.value?.sub);
 const profile = computed(() => currentProfileBundle.value?.profile ?? null);
 const stats = computed(() => currentProfileBundle.value?.stats ?? null);
 const results = computed(() => currentProfileBundle.value?.results ?? []);
+
+// Noms affichés des coéquipiers d'une entrée (présentation pure) : pseudo
+// live si le profil est résolu (pré-hydraté par loadUserProfile), sinon
+// snapshot — même pattern que teamPlayersNames sur la page tournoi.
+function teammateNamesFor(result: UserTournamentResult): string[] {
+  return result.teammates.map((teammate) =>
+    getTeammateDisplayName(teammate, profileById.value),
+  );
+}
 
 // Config header. watchEffect pour suivre le pseudo (arrive après le mount).
 const { set: setHeader } = useAppHeader();
@@ -163,9 +183,32 @@ useHead({
         >
           Aucun tournoi joué pour l'instant.
         </p>
+        <!-- Sur MON profil : chaque entrée est un lien vers son tournoi
+             (visibilité garantie : j'y étais owner ou membre, inamovible).
+             Sur le profil d'autrui : cartes statiques — le journal peut
+             lister des tournois privés que le visiteur ne peut pas ouvrir,
+             et un lien mort est pire que pas de lien. -->
         <ul v-else class="space-y-2.75">
           <li v-for="result in results" :key="result.tournamentId">
-            <ProfileJournalEntry :result="result" />
+            <!-- Pas d'aria-label : le nom accessible dérive du contenu de la
+                 carte (rang, tournoi, date, bilan), comme les cartes-liens
+                 de l'accueil. -->
+            <NuxtLink
+              v-if="isSelfProfile"
+              :to="`/tournaments/${result.tournamentId}`"
+              class="block rounded-(--pk-r-card) transition-opacity hover:opacity-90 active:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              <ProfileJournalEntry
+                :result="result"
+                :teammate-names="teammateNamesFor(result)"
+                interactive
+              />
+            </NuxtLink>
+            <ProfileJournalEntry
+              v-else
+              :result="result"
+              :teammate-names="teammateNamesFor(result)"
+            />
           </li>
         </ul>
       </section>
