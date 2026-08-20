@@ -1,7 +1,8 @@
 # Pétanque Tournament Manager
 
-Application web privée mobile-first pour gérer des tournois de pétanque
-entre amis. Persistance Supabase, auth magic link et Google OAuth.
+Application web mobile-first de gestion de parties et de tournois de
+pétanque, destinée au grand public (joueurs d'abord, clubs à terme).
+Persistance Supabase, auth magic link et Google OAuth.
 
 Pour la vision produit, le périmètre fonctionnel et les règles métier,
 voir `references/cahier_des_charges.md`. Le présent CLAUDE.md reste la
@@ -322,13 +323,19 @@ supportées en fallback mais à éviter.
 
 - Trois statuts de tournoi : Brouillon (`draft`), En cours
   (`in_progress`), Terminé (`completed`).
-- Cycle de vie strict : Brouillon → En cours (au démarrage) → Terminé
-  (à la complétion). Pas de retour arrière. Un tournoi Terminé est
-  **définitivement immuable** (scores, équipes, visibilité,
-  suppression) — verrou DB à finaliser.
+- Cycle de vie : Brouillon → En cours (au démarrage) → Terminé (à la
+  complétion). Un tournoi Terminé est **gelé en base** — verrou livré
+  (migration `20260819190000_tournament_freeze`) : scores, équipes,
+  joueurs et métadonnées immuables. Deux exceptions : le changement de
+  **visibilité** et la **suppression** par l'owner (cohérence des stats
+  garantie). **Réouverture** Terminé → En cours possible **en base
+  uniquement** (aucune UI à ce jour, choix assumé) : les stats
+  matérialisées sont retirées à la réouverture et recalculées à la
+  re-complétion. Jamais de retour en Brouillon.
 - Deux visibilités : `private` (par défaut : owner + membres invités)
   ou `public` (visible de tous les utilisateurs authentifiés).
-  Modifiable tant que le tournoi n'est pas terminé.
+  Modifiable à tout moment, y compris sur un tournoi terminé
+  (exception au gel).
 - Les memberships (joueurs invités sur un tournoi privé) sont gérés
   par invitation par pseudo.
 
@@ -450,8 +457,9 @@ PAS pour la concision ni pour la performance d'écriture.
   explicites
 - ❌ Créer ou modifier un fichier dans `references/` (dossier read-only)
 - ❌ Ajouter un `Co-Authored-By` dans un message de commit
-- ❌ Modifier un tournoi `terminé` — invariant produit ; le verrou côté
-  base est en cours de finalisation
+- ❌ Contourner le gel d'un tournoi `terminé` — invariant produit,
+  verrou en place côté base (seules exceptions : visibilité,
+  suppression, réouverture vers `en cours`)
 
 ## Conventions Git
 
@@ -471,7 +479,6 @@ PAS pour la concision ni pour la performance d'écriture.
 
 ## Hors scope MVP (refuser proactivement si suggéré)
 
-- Réouverture d'un tournoi terminé
 - Multi-format de tournoi (élimination directe, poules + finales,
   double-élimination)
 - Système d'amis et visibilité fine des profils (V2+)
