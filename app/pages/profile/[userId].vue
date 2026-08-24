@@ -75,6 +75,20 @@ function teammateNamesFor(result: UserTournamentResult): string[] {
   );
 }
 
+// Mémorise l'origine AVANT la navigation vers le tournoi, pour que sa
+// flèche retour ramène ici (et survive à un F5, cf. useTournamentOrigin).
+// Ignoré si le clic ouvre un nouvel onglet (modificateur ou bouton non
+// principal) : sessionStorage n'y est pas partagé, écrire ne ferait que
+// polluer l'onglet courant d'une origine jamais consommée.
+const { rememberProfileOrigin } = useTournamentOrigin();
+
+function rememberJournalOrigin(event: MouseEvent, tournamentId: string): void {
+  const opensOutsideThisTab =
+    event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0;
+  if (opensOutsideThisTab) return;
+  rememberProfileOrigin(tournamentId, `/profile/${userId.value}`);
+}
+
 // Config header. watchEffect pour suivre le pseudo (arrive après le mount).
 const { set: setHeader } = useAppHeader();
 watchEffect(() => {
@@ -197,6 +211,7 @@ useHead({
               v-if="isSelfProfile"
               :to="`/tournaments/${result.tournamentId}`"
               class="block rounded-(--pk-r-card) transition-opacity hover:opacity-90 active:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              @click="rememberJournalOrigin($event, result.tournamentId)"
             >
               <ProfileJournalEntry
                 :result="result"

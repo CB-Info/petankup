@@ -54,12 +54,35 @@ const isLoadingDetail = ref(true);
 // l'écriture des données de A, la page ignore le flip de A.
 let loadDetailRequestId = 0;
 
+// Flèche retour contextuelle : « Profil » si on est arrivé depuis une
+// entrée du journal (origine mémorisée par la page profil dans
+// sessionStorage), sinon « Accueil ». Toute origine absente, invalide ou
+// d'un autre tournoi retombe sur Accueil — jamais de flèche cassée.
+const DEFAULT_BACK_LINK = { label: "Accueil", to: "/" };
+const { readProfileOrigin, clearOrigin } = useTournamentOrigin();
+const headerBackLink = ref(DEFAULT_BACK_LINK);
+
+// L'entrée est consommée à la sortie SPA de la page : une visite ultérieure
+// du même tournoi depuis l'accueil retrouve « Accueil ». Un F5 ne déclenche
+// PAS onUnmounted → le retour contextuel survit au rechargement (exigence
+// du correctif).
+onUnmounted(() => {
+  clearOrigin(tournamentId.value);
+});
+
 // watch(tournamentId, immediate: true) : couvre le mount initial ET
 // la réutilisation de composant Nuxt sur changement de paramètre de
 // route (sans cela, onMounted ne refire pas et l'état reste bloqué).
 watch(
   tournamentId,
-  async (id) => {
+  async (id, previousId) => {
+    if (previousId !== undefined) clearOrigin(previousId);
+    const profileOrigin = readProfileOrigin(id);
+    headerBackLink.value =
+      profileOrigin !== null
+        ? { label: "Profil", to: profileOrigin }
+        : DEFAULT_BACK_LINK;
+
     const requestId = ++loadDetailRequestId;
     isLoadingDetail.value = true;
     try {
@@ -457,7 +480,7 @@ watchEffect(() => {
   }
   setHeader({
     mode: "interne",
-    back: { label: "Accueil", to: "/" },
+    back: headerBackLink.value,
     kicker: `● ${statusLabel.value}`,
     title: tournament.name,
     subtitle: headerSubtitle.value,
