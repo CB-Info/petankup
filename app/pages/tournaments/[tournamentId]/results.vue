@@ -150,9 +150,7 @@ useHead(() => ({
   <div
     class="min-h-screen [background:var(--pk-grad-podium)] text-(--pk-cream)"
   >
-    <div
-      class="mx-auto max-w-2xl px-4.5 pt-[env(safe-area-inset-top)] pb-10"
-    >
+    <div class="mx-auto max-w-2xl px-4.5 pt-[env(safe-area-inset-top)] pb-10">
       <p
         v-if="isLoadingDetail"
         class="py-16 text-center font-sans text-sm text-(--pk-on-navy-2)"
@@ -201,7 +199,7 @@ useHead(() => ({
 
       <div v-else>
         <NuxtLink
-          :to="`/tournaments/${tournamentId}`"
+          :to="`/tournaments/${tournamentId}?tab=classement`"
           class="inline-flex items-center gap-1.75 pt-4 font-sans text-sm font-bold text-(--pk-on-navy-2)"
         >
           <UIcon name="i-lucide-arrow-left" class="size-4.5" />
@@ -209,7 +207,10 @@ useHead(() => ({
         </NuxtLink>
 
         <!-- Bloc champion -->
-        <div v-if="championEntry" class="flex flex-col items-center text-center">
+        <div
+          v-if="championEntry"
+          class="flex flex-col items-center text-center"
+        >
           <p
             class="mt-6 font-disp text-[11px] font-extrabold tracking-[0.14em] uppercase text-secondary"
           >
@@ -261,10 +262,7 @@ useHead(() => ({
         </div>
 
         <!-- Cartes 2e / 3e (0, 1 ou 2 cartes selon le nombre d'équipes) -->
-        <div
-          v-if="runnersUp.length > 0"
-          class="mt-7 grid grid-cols-2 gap-2.75"
-        >
+        <div v-if="runnersUp.length > 0" class="mt-7 grid grid-cols-2 gap-2.75">
           <div
             v-for="entry in runnersUp"
             :key="entry.team.id"

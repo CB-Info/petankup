@@ -31,5 +31,3 @@ export const teamSchema = z.object({
       { message: 'Un même invité ne peut pas être dans deux slots' },
     ),
 })
-
-export type TeamFormState = z.infer<typeof teamSchema>

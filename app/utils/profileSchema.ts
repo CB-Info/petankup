@@ -14,5 +14,3 @@ export const profileSchema = z.object({
     .min(1, 'Le pseudo est requis')
     .max(50, 'Le pseudo ne peut pas dépasser 50 caractères'),
 })
-
-export type ProfileFormState = z.infer<typeof profileSchema>

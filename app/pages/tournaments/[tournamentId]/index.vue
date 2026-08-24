@@ -7,6 +7,7 @@
 // activeTab est un ref local, le header le met à jour via onTabChange.
 import type { Match, Team, TournamentStatus } from "../../../types";
 import type { HeaderAction } from "~/composables/useAppHeader";
+import type { CarteEquipePlayer } from "~/components/CarteEquipe.vue";
 
 const route = useRoute();
 const tournamentStore = useTournamentStore();
@@ -53,12 +54,39 @@ const isLoadingDetail = ref(true);
 // l'écriture des données de A, la page ignore le flip de A.
 let loadDetailRequestId = 0;
 
+// Flèche retour contextuelle : « Profil » si on est arrivé depuis une
+// entrée du journal (origine mémorisée par la page profil dans
+// sessionStorage), sinon « Accueil ». Toute origine absente, invalide ou
+// d'un autre tournoi retombe sur Accueil — jamais de flèche cassée.
+const DEFAULT_BACK_LINK = { label: "Accueil", to: "/" };
+const { readProfileOrigin, clearOrigin } = useTournamentOrigin();
+const headerBackLink = ref(DEFAULT_BACK_LINK);
+
+// L'entrée est consommée quand on quitte le CONTEXTE du tournoi (accueil,
+// profil…) — PAS quand on descend vers une sous-page du même tournoi (les
+// résultats sont une route sœur : y aller démonte cette page, mais
+// l'aller-retour podium doit préserver la flèche). D'où une garde sur la
+// DESTINATION plutôt qu'onUnmounted. Un F5 ne déclenche aucune garde de
+// navigation → le retour contextuel survit au rechargement.
+onBeforeRouteLeave((to) => {
+  if (!pathBelongsToTournament(to.path, tournamentId.value)) {
+    clearOrigin(tournamentId.value);
+  }
+});
+
 // watch(tournamentId, immediate: true) : couvre le mount initial ET
 // la réutilisation de composant Nuxt sur changement de paramètre de
 // route (sans cela, onMounted ne refire pas et l'état reste bloqué).
 watch(
   tournamentId,
-  async (id) => {
+  async (id, previousId) => {
+    if (previousId !== undefined) clearOrigin(previousId);
+    const profileOrigin = readProfileOrigin(id);
+    headerBackLink.value =
+      profileOrigin !== null
+        ? { label: "Profil", to: profileOrigin }
+        : DEFAULT_BACK_LINK;
+
     const requestId = ++loadDetailRequestId;
     isLoadingDetail.value = true;
     try {
@@ -192,12 +220,15 @@ function getTeamById(teamId: string): Team | null {
   return teamsById.value[teamId] ?? null;
 }
 
-// Noms affichés des joueurs d'une équipe (présentation pure) : pseudo live
-// si le profil est résolu, sinon snapshot — via l'util partagée.
-function teamPlayersNames(team: Team): string[] {
-  return team.players.map((player) =>
-    getPlayerDisplayName(player, profileById.value),
-  );
+// Joueurs d'une équipe pour la carte (présentation pure) : nom résolu
+// (pseudo live si le profil est hydraté, sinon snapshot — via l'util
+// partagée) + userId pour que la carte lie les joueurs à compte vers leur
+// profil (les joueurs libres restent du texte).
+function teamCardPlayers(team: Team): CarteEquipePlayer[] {
+  return team.players.map((player) => ({
+    displayName: getPlayerDisplayName(player, profileById.value),
+    userId: player.userId,
+  }));
 }
 
 type RoundGroup = { roundNumber: number; matches: Match[] };
@@ -225,6 +256,13 @@ const tournamentIsCompleted = computed(
   () => tournamentStatus.value === "completed",
 );
 
+// Source de vérité unique du droit de saisir un score (même pattern que
+// canManageMembers) : consommé par la garde d'ouverture de la modale ET
+// par la prop can-score des scoreboards.
+const canScore = computed(
+  () => isOwner.value && !tournamentIsCompleted.value,
+);
+
 const hasEnoughTeamsToStart = computed(() => teams.value.length >= 2);
 
 const isGeneratingMatches = ref(false);
@@ -248,7 +286,7 @@ const scoreModalOpen = ref(false);
 const matchBeingScored = ref<Match | null>(null);
 
 function openScoreModal(match: Match) {
-  if (tournamentIsCompleted.value) return;
+  if (!canScore.value) return;
   matchBeingScored.value = match;
   scoreModalOpen.value = true;
 }
@@ -446,7 +484,7 @@ watchEffect(() => {
   }
   setHeader({
     mode: "interne",
-    back: { label: "Accueil", to: "/" },
+    back: headerBackLink.value,
     kicker: `● ${statusLabel.value}`,
     title: tournament.name,
     subtitle: headerSubtitle.value,
@@ -524,7 +562,7 @@ useHead(() => ({
           <li v-for="team in teams" :key="team.id">
             <CarteEquipe
               :name="team.name"
-              :players="teamPlayersNames(team)"
+              :players="teamCardPlayers(team)"
               :show-actions="isOwner"
               :actions-disabled="tournamentIsLocked"
               @edit="openEditForm(team)"
@@ -621,7 +659,7 @@ useHead(() => ({
                   :score-a="match.scoreA"
                   :score-b="match.scoreB"
                   :winner-side="matchWinnerSide(match)"
-                  :can-score="isOwner && !tournamentIsCompleted"
+                  :can-score="canScore"
                   @score="openScoreModal(match)"
                 />
               </li>
