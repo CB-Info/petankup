@@ -22,6 +22,19 @@ function storageKeyFor(tournamentId: string): string {
   return `${STORAGE_KEY_PREFIX}${tournamentId}`;
 }
 
+// Une navigation vers /tournaments/<id> ou une de ses sous-pages (ex. les
+// résultats) reste DANS le contexte du tournoi : l'origine doit y survivre.
+// La borne `base + '/'` évite le faux positif `/tournaments/<id>x…`. Pure.
+export function pathBelongsToTournament(
+  path: string,
+  tournamentId: string,
+): boolean {
+  const tournamentBasePath = `/tournaments/${tournamentId}`;
+  return (
+    path === tournamentBasePath || path.startsWith(`${tournamentBasePath}/`)
+  );
+}
+
 export function useTournamentOrigin() {
   // sessionStorage peut lever (navigation privée, quotas, contextes
   // restreints) : chaque accès est enveloppé, l'échec est silencieux et

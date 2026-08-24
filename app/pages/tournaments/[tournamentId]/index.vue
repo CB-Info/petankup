@@ -62,12 +62,16 @@ const DEFAULT_BACK_LINK = { label: "Accueil", to: "/" };
 const { readProfileOrigin, clearOrigin } = useTournamentOrigin();
 const headerBackLink = ref(DEFAULT_BACK_LINK);
 
-// L'entrée est consommée à la sortie SPA de la page : une visite ultérieure
-// du même tournoi depuis l'accueil retrouve « Accueil ». Un F5 ne déclenche
-// PAS onUnmounted → le retour contextuel survit au rechargement (exigence
-// du correctif).
-onUnmounted(() => {
-  clearOrigin(tournamentId.value);
+// L'entrée est consommée quand on quitte le CONTEXTE du tournoi (accueil,
+// profil…) — PAS quand on descend vers une sous-page du même tournoi (les
+// résultats sont une route sœur : y aller démonte cette page, mais
+// l'aller-retour podium doit préserver la flèche). D'où une garde sur la
+// DESTINATION plutôt qu'onUnmounted. Un F5 ne déclenche aucune garde de
+// navigation → le retour contextuel survit au rechargement.
+onBeforeRouteLeave((to) => {
+  if (!pathBelongsToTournament(to.path, tournamentId.value)) {
+    clearOrigin(tournamentId.value);
+  }
 });
 
 // watch(tournamentId, immediate: true) : couvre le mount initial ET

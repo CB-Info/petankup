@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { useTournamentOrigin } from '../../app/composables/useTournamentOrigin'
+import {
+  pathBelongsToTournament,
+  useTournamentOrigin,
+} from '../../app/composables/useTournamentOrigin'
 
 const TOURNAMENT_A = 'aaaaaaaa-aaaa-4aaa-8aaa-000000000001'
 const TOURNAMENT_B = 'bbbbbbbb-bbbb-4bbb-8bbb-000000000002'
@@ -73,5 +76,32 @@ describe('useTournamentOrigin', () => {
     expect(() => rememberProfileOrigin(TOURNAMENT_A, PROFILE_PATH)).not.toThrow()
     expect(readProfileOrigin(TOURNAMENT_A)).toBeNull()
     expect(() => clearOrigin(TOURNAMENT_A)).not.toThrow()
+  })
+})
+
+describe('pathBelongsToTournament', () => {
+  it('reconnaît la page du tournoi elle-même', () => {
+    expect(pathBelongsToTournament(`/tournaments/${TOURNAMENT_A}`, TOURNAMENT_A)).toBe(true)
+  })
+
+  it('reconnaît une sous-page du tournoi (résultats)', () => {
+    expect(
+      pathBelongsToTournament(`/tournaments/${TOURNAMENT_A}/results`, TOURNAMENT_A),
+    ).toBe(true)
+  })
+
+  it('rejette un autre tournoi', () => {
+    expect(pathBelongsToTournament(`/tournaments/${TOURNAMENT_B}`, TOURNAMENT_A)).toBe(false)
+  })
+
+  it('rejette un faux préfixe (id prolongé)', () => {
+    expect(
+      pathBelongsToTournament(`/tournaments/${TOURNAMENT_A}x/results`, TOURNAMENT_A),
+    ).toBe(false)
+  })
+
+  it('rejette les routes hors tournoi', () => {
+    expect(pathBelongsToTournament('/', TOURNAMENT_A)).toBe(false)
+    expect(pathBelongsToTournament(PROFILE_PATH, TOURNAMENT_A)).toBe(false)
   })
 })
