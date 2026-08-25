@@ -42,22 +42,34 @@ async function loadProfile(id: string): Promise<void> {
   }
 }
 
-// immediate : couvre le mount ET la réutilisation du composant Nuxt sur
-// changement de param de route (clic sur un coéquipier d'un autre profil).
-watch(
-  userId,
-  (id) => {
-    void loadProfile(id);
-  },
-  { immediate: true },
-);
-
 // user.sub d'abord, currentProfile en secours : useSupabaseUser n'est pas
 // hydraté dans la fenêtre post-magic-link (même fallback que l'accueil) —
 // sans lui, son propre journal s'afficherait d'abord sans liens puis
 // basculerait sous le doigt.
-const myUserId = computed(() => user.value?.sub ?? currentProfile.value?.id);
+const myUserId = computed(
+  () => user.value?.sub ?? currentProfile.value?.id ?? null,
+);
 const isSelfProfile = computed(() => userId.value === myUserId.value);
+
+// Chargement gated par l'identité du viewer (shouldReloadProfile) : à froid
+// (F5, lien direct), l'identité n'est pas encore résolue au montage —
+// appeler le store trop tôt sortirait silencieusement (sa garde) et la page
+// afficherait « Profil introuvable » pour un simple état d'attente. On ne
+// charge que sur transition réelle : premier passage identifié, résolution
+// de l'identité, changement de profil ou de compte — jamais deux fois pour
+// la même paire. isLoadingProfile (init true) reste affiché tant qu'aucun
+// chargement réel n'a tranché ; sans identité, la redirection /login du
+// module fournit l'état terminal. immediate : couvre le mount ET la
+// réutilisation du composant sur changement de param de route.
+watch(
+  [userId, myUserId],
+  (current, previous) => {
+    if (shouldReloadProfile(current, previous)) {
+      void loadProfile(current[0]);
+    }
+  },
+  { immediate: true },
+);
 
 // Accès dérivés non-null-safe : permettent à vue-tsc de narrower dans le
 // template (v-if="profile") sans assertions, et fournissent stats/results à
