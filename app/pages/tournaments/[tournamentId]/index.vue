@@ -46,6 +46,8 @@ function organizerName(ownerId: string): string | null {
 
 const tournamentId = computed(() => route.params.tournamentId as string);
 
+const tournamentIdIsValid = computed(() => isUuid(tournamentId.value));
+
 const isLoadingDetail = ref(true);
 
 // Token local pour invalider le flip de isLoadingDetail si une nouvelle
@@ -81,6 +83,14 @@ watch(
   tournamentId,
   async (id, previousId) => {
     if (previousId !== undefined) clearOrigin(previousId);
+    // Id malformé : « Tournoi introuvable » immédiat, sans requête ni toast
+    // (le cast uuid échouerait côté base — erreur technique présentée à
+    // tort comme une panne, pour un id qui ne peut rien désigner). La
+    // branche introuvable du template couvre déjà ce cas (id mismatch).
+    if (!tournamentIdIsValid.value) {
+      isLoadingDetail.value = false;
+      return;
+    }
     const profileOrigin = readProfileOrigin(id);
     headerBackLink.value =
       profileOrigin !== null

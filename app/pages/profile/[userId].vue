@@ -24,6 +24,8 @@ const user = useSupabaseUser();
 
 const userId = computed(() => route.params.userId as string);
 
+const profileIdIsValid = computed(() => isUuid(userId.value));
+
 const isLoadingProfile = ref(true);
 
 // Token local : seul le dernier load déclenché a le droit de remettre
@@ -64,6 +66,13 @@ const isSelfProfile = computed(() => userId.value === myUserId.value);
 watch(
   [userId, myUserId],
   (current, previous) => {
+    // Garde amont, distincte du prédicat de timing : un id qui n'a pas la
+    // forme d'un UUID ne peut désigner personne — introuvable immédiat,
+    // sans requête (cf. profileIsNotFound côté template).
+    if (!profileIdIsValid.value) {
+      isLoadingProfile.value = false;
+      return;
+    }
     if (shouldReloadProfile(current, previous)) {
       void loadProfile(current[0]);
     }
@@ -77,6 +86,18 @@ watch(
 const profile = computed(() => currentProfileBundle.value?.profile ?? null);
 const stats = computed(() => currentProfileBundle.value?.stats ?? null);
 const results = computed(() => currentProfileBundle.value?.results ?? []);
+
+// « Introuvable » recouvre deux causes, distinctes de l'état d'erreur :
+// un id malformé (tranché sans appel), ou un chargement effectif revenu
+// sans profil. Jamais pendant un chargement en cours, jamais sur une vraie
+// panne (qui garde son écran d'erreur et son bouton Réessayer).
+const profileIsNotFound = computed(
+  () =>
+    !profileIdIsValid.value ||
+    (!isLoadingProfile.value &&
+      lastLoadProfileBundleError.value === null &&
+      profile.value === null),
+);
 
 // Noms affichés des coéquipiers d'une entrée (présentation pure) : pseudo
 // live si le profil est résolu (pré-hydraté par loadUserProfile), sinon
@@ -123,8 +144,30 @@ useHead({
 
 <template>
   <div>
+    <!-- Introuvable en tête de chaîne : couvre l'id malformé (tranché sans
+         requête, même avec un bundle ou une erreur périmés d'une visite
+         précédente) ET le profil réellement absent après chargement.
+         profileIsNotFound est false pendant un chargement en cours — pas
+         d'« introuvable » fugace pendant la résolution d'identité. -->
+    <div
+      v-if="profileIsNotFound"
+      class="flex flex-col items-center gap-3 py-16 text-center"
+    >
+      <h2 class="font-disp text-[19px] font-extrabold text-(--pk-ink)">
+        Profil introuvable
+      </h2>
+      <UButton
+        to="/"
+        variant="ghost"
+        color="neutral"
+        icon="i-lucide-arrow-left"
+      >
+        Retour à l'accueil
+      </UButton>
+    </div>
+
     <p
-      v-if="isLoadingProfile"
+      v-else-if="isLoadingProfile"
       class="py-16 text-center font-sans text-sm text-(--pk-subtle)"
     >
       Chargement du profil…
@@ -147,23 +190,6 @@ useHead({
         @click="loadProfile(userId)"
       >
         Réessayer
-      </UButton>
-    </div>
-
-    <div
-      v-else-if="profile === null"
-      class="flex flex-col items-center gap-3 py-16 text-center"
-    >
-      <h2 class="font-disp text-[19px] font-extrabold text-(--pk-ink)">
-        Profil introuvable
-      </h2>
-      <UButton
-        to="/"
-        variant="ghost"
-        color="neutral"
-        icon="i-lucide-arrow-left"
-      >
-        Retour à l'accueil
       </UButton>
     </div>
 

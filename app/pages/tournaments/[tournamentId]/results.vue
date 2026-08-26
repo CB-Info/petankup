@@ -27,6 +27,12 @@ let loadDetailRequestId = 0;
 watch(
   tournamentId,
   async (id) => {
+    // Id malformé : « Tournoi introuvable » immédiat, sans requête ni toast
+    // — même garde que la page détail (cf. utils/uuid).
+    if (!isUuid(id)) {
+      isLoadingDetail.value = false;
+      return;
+    }
     // Court-circuit : si on arrive depuis la page détail du même
     // tournoi, le store a déjà currentTournament + teams + matches
     // pour cet id. Pas de reload, pas de flash "Chargement…".
