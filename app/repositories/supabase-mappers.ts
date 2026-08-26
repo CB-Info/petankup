@@ -214,6 +214,10 @@ export type RawUserProfileBundleJson = {
     final_rank: number
     is_winner: boolean
     is_podium: boolean
+    // Optionnel : absent si l'app est déployée avant la migration DB qui
+    // l'ajoute (décalage de déploiement). Le mapper retombe alors sur false
+    // — fail-closed : carte statique, jamais de lien mort.
+    viewer_can_open?: boolean
     teammates: Array<{ user_id: string | null, display_name: string }>
   }>
 }
@@ -262,6 +266,7 @@ function mapUserTournamentResultJsonToDomain(
     finalRank: raw.final_rank,
     isWinner: raw.is_winner,
     isPodium: raw.is_podium,
+    viewerCanOpen: raw.viewer_can_open ?? false,
     teammates: raw.teammates.map(mapTeammateJsonToDomain),
   }
 }

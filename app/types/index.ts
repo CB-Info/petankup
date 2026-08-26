@@ -143,6 +143,10 @@ export interface UserTournamentResult {
   finalRank: number;
   isWinner: boolean;
   isPodium: boolean;
+  // Dérivé par la base RELATIVEMENT AU VISITEUR courant (helper de
+  // visibilité partagé) : le tournoi de cette entrée lui est-il ouvrable ?
+  // Jamais la visibilité brute du tournoi — aucune information nouvelle.
+  viewerCanOpen: boolean;
   teammates: Teammate[];
 }
 

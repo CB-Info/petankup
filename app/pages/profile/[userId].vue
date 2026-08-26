@@ -235,18 +235,20 @@ useHead({
         >
           Aucun tournoi joué pour l'instant.
         </p>
-        <!-- Sur MON profil : chaque entrée est un lien vers son tournoi
-             (visibilité garantie : j'y étais owner ou membre, inamovible).
-             Sur le profil d'autrui : cartes statiques — le journal peut
-             lister des tournois privés que le visiteur ne peut pas ouvrir,
-             et un lien mort est pire que pas de lien. -->
+        <!-- Une entrée est un lien SSI la base dit que le visiteur courant
+             peut ouvrir ce tournoi (viewerCanOpen, dérivé par le RPC via le
+             helper de visibilité — la base décide, l'interface obéit).
+             Entrée non ouvrable : carte statique, sans aucun indicateur
+             (signaler « privé » confirmerait l'existence d'un tournoi
+             inaccessible). Sur son propre profil, tout est ouvrable
+             (garantie H1.d) — aucune régression. -->
         <ul v-else class="space-y-2.75">
           <li v-for="result in results" :key="result.tournamentId">
             <!-- Pas d'aria-label : le nom accessible dérive du contenu de la
                  carte (rang, tournoi, date, bilan), comme les cartes-liens
                  de l'accueil. -->
             <NuxtLink
-              v-if="isSelfProfile"
+              v-if="result.viewerCanOpen"
               :to="`/tournaments/${result.tournamentId}`"
               class="block rounded-(--pk-r-card) transition-opacity hover:opacity-90 active:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
               @click="rememberJournalOrigin($event, result.tournamentId)"
