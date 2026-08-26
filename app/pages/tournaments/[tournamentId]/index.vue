@@ -273,6 +273,15 @@ const canScore = computed(
   () => isOwner.value && !tournamentIsCompleted.value,
 );
 
+// Une source par droit : l'AFFICHAGE des actions d'équipe (masquées si le
+// droit n'existe plus — non-owner, ou tournoi terminé) est distinct de leur
+// état BLOQUÉ (désactivées dès le démarrage, tournamentIsLocked). Sur un
+// tournoi en cours, le droit existe mais l'état bloque : visibles et
+// désactivées, comme avant.
+const showsTeamActions = computed(
+  () => isOwner.value && !tournamentIsCompleted.value,
+);
+
 const hasEnoughTeamsToStart = computed(() => teams.value.length >= 2);
 
 const isGeneratingMatches = ref(false);
@@ -573,7 +582,7 @@ useHead(() => ({
             <CarteEquipe
               :name="team.name"
               :players="teamCardPlayers(team)"
-              :show-actions="isOwner"
+              :show-actions="showsTeamActions"
               :actions-disabled="tournamentIsLocked"
               @edit="openEditForm(team)"
               @delete="askDeleteConfirmation(team)"
@@ -585,11 +594,15 @@ useHead(() => ({
           v-if="tournamentIsLocked"
           class="font-sans text-xs text-(--pk-muted)"
         >
-          Le tournoi a démarré, les équipes ne peuvent plus être modifiées.
+          {{
+            tournamentIsCompleted
+              ? "Le tournoi est terminé, les équipes ne peuvent plus être modifiées."
+              : "Le tournoi a démarré, les équipes ne peuvent plus être modifiées."
+          }}
         </p>
 
         <UButton
-          v-if="isOwner"
+          v-if="showsTeamActions"
           color="primary"
           variant="dashed"
           icon="i-lucide-plus"
