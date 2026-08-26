@@ -482,6 +482,7 @@ describe('mapUserProfileBundleJsonToDomain', () => {
           final_rank: 1,
           is_winner: true,
           is_podium: true,
+          viewer_can_open: true,
           teammates: [{ user_id: INVITEE_USER_ID, display_name: 'Bob' }],
         },
       ],
@@ -525,10 +526,20 @@ describe('mapUserProfileBundleJsonToDomain', () => {
           finalRank: 1,
           isWinner: true,
           isPodium: true,
+          viewerCanOpen: true,
           teammates: [{ userId: INVITEE_USER_ID, displayName: 'Bob' }],
         },
       ],
     })
+  })
+
+  it('defaults viewerCanOpen to false when the RPC omits viewer_can_open (deploy skew)', () => {
+    const raw = makeRawBundle()
+    delete raw.results[0]?.viewer_can_open
+
+    const bundle = mapUserProfileBundleJsonToDomain(raw)
+
+    expect(bundle.results[0]?.viewerCanOpen).toBe(false)
   })
 
   it('preserves the order of results (no sorting in the mapper)', () => {
