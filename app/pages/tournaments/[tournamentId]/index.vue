@@ -124,6 +124,16 @@ const tournamentIsLocked = computed(() => {
   return status === "in_progress" || status === "completed";
 });
 
+// Droit d'AGIR sur les équipes (ouvrir création/édition/suppression) :
+// source unique consommée par les trois openers, alignée sur ce que
+// `actions-disabled` exprime. Distinct de showsTeamActions (règle
+// d'AFFICHAGE — masquées seulement sur terminé) : en cours, les actions
+// sont visibles mais désactivées, et le droit d'agir n'existe plus — la
+// garde ferme aussi ce chemin (defense in depth, pattern canScore).
+const canEditTeams = computed(
+  () => isOwner.value && !tournamentIsLocked.value,
+);
+
 const STATUS_LABELS: Record<TournamentStatus, string> = {
   draft: "Brouillon",
   in_progress: "En cours",
@@ -197,16 +207,19 @@ const deleteModalOpen = ref(false);
 const teamPendingDeletion = ref<Team | null>(null);
 
 function openCreateForm() {
+  if (!canEditTeams.value) return;
   editingTeam.value = null;
   formModalOpen.value = true;
 }
 
 function openEditForm(team: Team) {
+  if (!canEditTeams.value) return;
   editingTeam.value = team;
   formModalOpen.value = true;
 }
 
 function askDeleteConfirmation(team: Team) {
+  if (!canEditTeams.value) return;
   teamPendingDeletion.value = team;
   deleteModalOpen.value = true;
 }
@@ -269,9 +282,7 @@ const tournamentIsCompleted = computed(
 // Source de vérité unique du droit de saisir un score (même pattern que
 // canManageMembers) : consommé par la garde d'ouverture de la modale ET
 // par la prop can-score des scoreboards.
-const canScore = computed(
-  () => isOwner.value && !tournamentIsCompleted.value,
-);
+const canScore = computed(() => isOwner.value && !tournamentIsCompleted.value);
 
 // Une source par droit : l'AFFICHAGE des actions d'équipe (masquées si le
 // droit n'existe plus — non-owner, ou tournoi terminé) est distinct de leur
@@ -526,9 +537,7 @@ useHead(() => ({
 <template>
   <div>
     <div v-if="isLoadingDetail" class="py-12 text-center">
-      <p class="font-sans text-sm text-(--pk-subtle)">
-        Chargement du tournoi…
-      </p>
+      <p class="font-sans text-sm text-(--pk-subtle)">Chargement du tournoi…</p>
     </div>
 
     <!-- Garde finale : on n'affiche le contenu que si le tournoi en
@@ -567,9 +576,7 @@ useHead(() => ({
           v-if="teams.length === 0"
           class="space-y-1 rounded-(--pk-r-card) border border-dashed border-(--pk-line) bg-(--pk-card) p-6 text-center"
         >
-          <h3
-            class="font-disp text-[16.5px] font-extrabold text-(--pk-ink)"
-          >
+          <h3 class="font-disp text-[16.5px] font-extrabold text-(--pk-ink)">
             Aucune équipe pour l'instant
           </h3>
           <p class="font-sans text-sm text-(--pk-subtle)">
@@ -642,9 +649,7 @@ useHead(() => ({
              Équipes — ici, uniquement les messages informatifs. -->
         <div
           v-if="
-            tournamentStatus === 'draft' &&
-            isOwner &&
-            !hasEnoughTeamsToStart
+            tournamentStatus === 'draft' && isOwner && !hasEnoughTeamsToStart
           "
           class="rounded-(--pk-r-card) border border-dashed border-(--pk-line) bg-(--pk-card) p-6 text-center"
         >
@@ -716,10 +721,7 @@ useHead(() => ({
             />
           </div>
 
-          <div
-            v-if="tournamentStatus === 'in_progress'"
-            class="space-y-2 pt-2"
-          >
+          <div v-if="tournamentStatus === 'in_progress'" class="space-y-2 pt-2">
             <UButton
               v-if="canCompleteTournament && isOwner"
               color="navy"
