@@ -39,7 +39,7 @@ begin;
 -- ----------------------------------------------------------------------------
 
 grant select, insert, update, delete
-  on public.tournaments, public.teams, public.matches,
+  on public.tournaments, public.teams, public.tournament_matches,
      public.team_players, public.tournament_members, public.profiles
   to authenticated;
 
@@ -141,7 +141,7 @@ insert into public.team_players (team_id, tournament_id, user_id, display_name) 
   ('a1111111-1111-4111-8111-000000000001', 'f1000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000001', 'freeze-owner'),
   ('b1111111-1111-4111-8111-000000000001', 'f1000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000002', 'freeze-player');
 
-insert into public.matches (tournament_id, team_a_id, team_b_id, score_a, score_b, winner_id, status, round_number) values
+insert into public.tournament_matches (tournament_id, team_a_id, team_b_id, score_a, score_b, winner_id, status, round_number) values
   ('f1000000-0000-4000-8000-000000000001', 'a1111111-1111-4111-8111-000000000001', 'b1111111-1111-4111-8111-000000000001', 13, 7, 'a1111111-1111-4111-8111-000000000001', 'completed', 1),
   ('f1000000-0000-4000-8000-000000000002', 'a1111111-1111-4111-8111-000000000002', 'b1111111-1111-4111-8111-000000000002', null, null, null, 'pending', 1);
 
@@ -171,12 +171,12 @@ select set_config(
 set local role authenticated;
 
 select pg_temp.assert_row_count(
-  $sql$ update public.matches set score_a = 13, score_b = 5
+  $sql$ update public.tournament_matches set score_a = 13, score_b = 5
          where tournament_id = 'f1000000-0000-4000-8000-000000000001' $sql$,
   0, 'cas 1a: UPDATE score sous gel = no-op');
 
 select pg_temp.assert_blocked(
-  $sql$ insert into public.matches (tournament_id, team_a_id, team_b_id, status, round_number)
+  $sql$ insert into public.tournament_matches (tournament_id, team_a_id, team_b_id, status, round_number)
         values ('f1000000-0000-4000-8000-000000000001',
                 'a1111111-1111-4111-8111-000000000001',
                 'b1111111-1111-4111-8111-000000000001',
@@ -187,7 +187,7 @@ reset role;
 
 -- Non-mutation vérifiée en postgres (bypass RLS) : le score est intact.
 select pg_temp.assert_eq_int(
-  (select score_b from public.matches
+  (select score_b from public.tournament_matches
     where tournament_id = 'f1000000-0000-4000-8000-000000000001'),
   7, 'cas 1a: score intact après le no-op');
 
@@ -283,7 +283,7 @@ select pg_temp.assert_eq_int(
 set local role authenticated;
 
 select pg_temp.assert_row_count(
-  $sql$ update public.matches set score_b = 9
+  $sql$ update public.tournament_matches set score_b = 9
          where tournament_id = 'f1000000-0000-4000-8000-000000000001' $sql$,
   1, 'cas 5: correction du score permise après réouverture');
 
@@ -334,7 +334,7 @@ select pg_temp.assert_eq_int(
 set local role authenticated;
 
 select pg_temp.assert_row_count(
-  $sql$ update public.matches
+  $sql$ update public.tournament_matches
            set score_a = 13, score_b = 5, status = 'completed',
                winner_id = 'a1111111-1111-4111-8111-000000000002'
          where tournament_id = 'f1000000-0000-4000-8000-000000000002' $sql$,

@@ -117,7 +117,7 @@ insert into public.team_players (team_id, tournament_id, user_id, display_name) 
   ('cccccccc-cccc-4ccc-8ccc-000000000001', 'f0000000-0000-4000-8000-000000000001', 'e0000000-0000-4000-8000-000000000003', 'C'),
   ('dddddddd-dddd-4ddd-8ddd-000000000001', 'f0000000-0000-4000-8000-000000000001', 'e0000000-0000-4000-8000-000000000004', 'D');
 
-insert into public.matches (tournament_id, team_a_id, team_b_id, score_a, score_b, winner_id, status, round_number) values
+insert into public.tournament_matches (tournament_id, team_a_id, team_b_id, score_a, score_b, winner_id, status, round_number) values
   ('f0000000-0000-4000-8000-000000000001', 'aaaaaaaa-aaaa-4aaa-8aaa-000000000001', 'bbbbbbbb-bbbb-4bbb-8bbb-000000000001', 13, 7, 'aaaaaaaa-aaaa-4aaa-8aaa-000000000001', 'completed', 1),
   ('f0000000-0000-4000-8000-000000000001', 'aaaaaaaa-aaaa-4aaa-8aaa-000000000001', 'cccccccc-cccc-4ccc-8ccc-000000000001', 13, 7, 'aaaaaaaa-aaaa-4aaa-8aaa-000000000001', 'completed', 2),
   ('f0000000-0000-4000-8000-000000000001', 'aaaaaaaa-aaaa-4aaa-8aaa-000000000001', 'dddddddd-dddd-4ddd-8ddd-000000000001', 13, 7, 'aaaaaaaa-aaaa-4aaa-8aaa-000000000001', 'completed', 3),
@@ -151,7 +151,7 @@ insert into public.team_players (team_id, tournament_id, user_id, display_name) 
   ('cccccccc-cccc-4ccc-8ccc-000000000002', 'f0000000-0000-4000-8000-000000000002', 'e0000000-0000-4000-8000-000000000003', 'C'),
   ('dddddddd-dddd-4ddd-8ddd-000000000002', 'f0000000-0000-4000-8000-000000000002', 'e0000000-0000-4000-8000-000000000004', 'D');
 
-insert into public.matches (tournament_id, team_a_id, team_b_id, score_a, score_b, winner_id, status, round_number) values
+insert into public.tournament_matches (tournament_id, team_a_id, team_b_id, score_a, score_b, winner_id, status, round_number) values
   ('f0000000-0000-4000-8000-000000000002', 'aaaaaaaa-aaaa-4aaa-8aaa-000000000002', 'cccccccc-cccc-4ccc-8ccc-000000000002', 13, 7, 'aaaaaaaa-aaaa-4aaa-8aaa-000000000002', 'completed', 1),
   ('f0000000-0000-4000-8000-000000000002', 'aaaaaaaa-aaaa-4aaa-8aaa-000000000002', 'bbbbbbbb-bbbb-4bbb-8bbb-000000000002', 13, 7, 'aaaaaaaa-aaaa-4aaa-8aaa-000000000002', 'completed', 2),
   ('f0000000-0000-4000-8000-000000000002', 'dddddddd-dddd-4ddd-8ddd-000000000002', 'aaaaaaaa-aaaa-4aaa-8aaa-000000000002', 13, 7, 'dddddddd-dddd-4ddd-8ddd-000000000002', 'completed', 3),
@@ -183,7 +183,7 @@ insert into public.team_players (team_id, tournament_id, user_id, display_name) 
   ('bbbbbbbb-bbbb-4bbb-8bbb-000000000003', 'f0000000-0000-4000-8000-000000000003', 'e0000000-0000-4000-8000-000000000002', 'B'),
   ('cccccccc-cccc-4ccc-8ccc-000000000003', 'f0000000-0000-4000-8000-000000000003', 'e0000000-0000-4000-8000-000000000003', 'C');
 
-insert into public.matches (tournament_id, team_a_id, team_b_id, score_a, score_b, winner_id, status, round_number) values
+insert into public.tournament_matches (tournament_id, team_a_id, team_b_id, score_a, score_b, winner_id, status, round_number) values
   ('f0000000-0000-4000-8000-000000000003', 'aaaaaaaa-aaaa-4aaa-8aaa-000000000003', 'bbbbbbbb-bbbb-4bbb-8bbb-000000000003', 13, 7, 'aaaaaaaa-aaaa-4aaa-8aaa-000000000003', 'completed', 1),
   ('f0000000-0000-4000-8000-000000000003', 'bbbbbbbb-bbbb-4bbb-8bbb-000000000003', 'cccccccc-cccc-4ccc-8ccc-000000000003', 13, 7, 'bbbbbbbb-bbbb-4bbb-8bbb-000000000003', 'completed', 2),
   ('f0000000-0000-4000-8000-000000000003', 'cccccccc-cccc-4ccc-8ccc-000000000003', 'aaaaaaaa-aaaa-4aaa-8aaa-000000000003', 13, 7, 'cccccccc-cccc-4ccc-8ccc-000000000003', 'completed', 3);
@@ -210,7 +210,7 @@ insert into public.team_players (team_id, tournament_id, user_id, display_name) 
   ('bbbbbbbb-bbbb-4bbb-8bbb-000000000004', 'f0000000-0000-4000-8000-000000000004', 'e0000000-0000-4000-8000-000000000002', 'B'),
   ('cccccccc-cccc-4ccc-8ccc-000000000004', 'f0000000-0000-4000-8000-000000000004', 'e0000000-0000-4000-8000-000000000003', 'C');
 
-insert into public.matches (tournament_id, team_a_id, team_b_id, score_a, score_b, winner_id, status, round_number) values
+insert into public.tournament_matches (tournament_id, team_a_id, team_b_id, score_a, score_b, winner_id, status, round_number) values
   ('f0000000-0000-4000-8000-000000000004', 'aaaaaaaa-aaaa-4aaa-8aaa-000000000004', 'bbbbbbbb-bbbb-4bbb-8bbb-000000000004', 13, 7, 'aaaaaaaa-aaaa-4aaa-8aaa-000000000004', 'completed', 1),
   ('f0000000-0000-4000-8000-000000000004', 'bbbbbbbb-bbbb-4bbb-8bbb-000000000004', 'cccccccc-cccc-4ccc-8ccc-000000000004', 13, 7, 'bbbbbbbb-bbbb-4bbb-8bbb-000000000004', 'completed', 2),
   ('f0000000-0000-4000-8000-000000000004', 'cccccccc-cccc-4ccc-8ccc-000000000004', 'aaaaaaaa-aaaa-4aaa-8aaa-000000000004', 13, 7, 'cccccccc-cccc-4ccc-8ccc-000000000004', 'completed', 3);
@@ -237,7 +237,7 @@ insert into public.team_players (team_id, tournament_id, user_id, display_name) 
   ('bbbbbbbb-bbbb-4bbb-8bbb-000000000005', 'f0000000-0000-4000-8000-000000000005', 'e0000000-0000-4000-8000-000000000002', 'B'),
   ('cccccccc-cccc-4ccc-8ccc-000000000005', 'f0000000-0000-4000-8000-000000000005', 'e0000000-0000-4000-8000-000000000003', 'C');
 
-insert into public.matches (tournament_id, team_a_id, team_b_id, score_a, score_b, winner_id, status, round_number) values
+insert into public.tournament_matches (tournament_id, team_a_id, team_b_id, score_a, score_b, winner_id, status, round_number) values
   ('f0000000-0000-4000-8000-000000000005', 'aaaaaaaa-aaaa-4aaa-8aaa-000000000005', 'bbbbbbbb-bbbb-4bbb-8bbb-000000000005', 13, 7, 'aaaaaaaa-aaaa-4aaa-8aaa-000000000005', 'completed', 1),
   ('f0000000-0000-4000-8000-000000000005', 'bbbbbbbb-bbbb-4bbb-8bbb-000000000005', 'cccccccc-cccc-4ccc-8ccc-000000000005', 13, 7, 'bbbbbbbb-bbbb-4bbb-8bbb-000000000005', 'completed', 2),
   ('f0000000-0000-4000-8000-000000000005', 'cccccccc-cccc-4ccc-8ccc-000000000005', 'aaaaaaaa-aaaa-4aaa-8aaa-000000000005', 13, 7, 'cccccccc-cccc-4ccc-8ccc-000000000005', 'completed', 3);
@@ -267,7 +267,7 @@ insert into public.team_players (team_id, tournament_id, user_id, display_name) 
   ('cccccccc-cccc-4ccc-8ccc-000000000006', 'f0000000-0000-4000-8000-000000000006', 'e0000000-0000-4000-8000-000000000003', 'C'),
   ('dddddddd-dddd-4ddd-8ddd-000000000006', 'f0000000-0000-4000-8000-000000000006', 'e0000000-0000-4000-8000-000000000004', 'D');
 
-insert into public.matches (tournament_id, team_a_id, team_b_id, score_a, score_b, winner_id, status, round_number) values
+insert into public.tournament_matches (tournament_id, team_a_id, team_b_id, score_a, score_b, winner_id, status, round_number) values
   ('f0000000-0000-4000-8000-000000000006', 'aaaaaaaa-aaaa-4aaa-8aaa-000000000006', 'bbbbbbbb-bbbb-4bbb-8bbb-000000000006', 13, 7, 'aaaaaaaa-aaaa-4aaa-8aaa-000000000006', 'completed', 1),
   ('f0000000-0000-4000-8000-000000000006', 'bbbbbbbb-bbbb-4bbb-8bbb-000000000006', 'cccccccc-cccc-4ccc-8ccc-000000000006', 13, 7, 'bbbbbbbb-bbbb-4bbb-8bbb-000000000006', 'completed', 2),
   ('f0000000-0000-4000-8000-000000000006', 'cccccccc-cccc-4ccc-8ccc-000000000006', 'aaaaaaaa-aaaa-4aaa-8aaa-000000000006', 13, 7, 'cccccccc-cccc-4ccc-8ccc-000000000006', 'completed', 3),

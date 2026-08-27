@@ -5,7 +5,7 @@ import {
   tieBreak,
   validateScore,
 } from '../../app/utils/tournament'
-import type { Match, Ranking, Team } from '../../app/types'
+import type { TournamentMatch, Ranking, Team } from '../../app/types'
 
 const NOW = '2026-01-01T00:00:00.000Z'
 
@@ -37,7 +37,7 @@ function makeCompletedMatch(
   scoreB: number,
   roundNumber = 1,
   tournamentId = 't1',
-): Match {
+): TournamentMatch {
   return {
     id: crypto.randomUUID(),
     tournamentId,
@@ -210,7 +210,7 @@ describe('computeRanking', () => {
 
   it('ignores pending matches', () => {
     const teams = ['a', 'b'].map(id => makeTeam(id))
-    const pending: Match = {
+    const pending: TournamentMatch = {
       id: 'm1',
       tournamentId: 't1',
       teamAId: 'a',
@@ -287,7 +287,7 @@ describe('tieBreak', () => {
   it('ignores pending direct matches', () => {
     const a = makeRanking({ teamId: 'a', wins: 1, pointsFor: 20 })
     const b = makeRanking({ teamId: 'b', wins: 1, pointsFor: 20 })
-    const pending: Match = {
+    const pending: TournamentMatch = {
       id: 'm1',
       tournamentId: 't1',
       teamAId: 'a',

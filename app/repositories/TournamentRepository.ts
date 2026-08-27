@@ -1,4 +1,4 @@
-import type { Match, Profile, Team, Tournament, TournamentMember, UserProfileBundle } from '../types'
+import type { TournamentMatch, Profile, Team, Tournament, TournamentMember, UserProfileBundle } from '../types'
 
 // Contrat de persistance pour le domaine pétanque. Toutes les méthodes
 // sont asynchrones — l'implémentation actuelle (SupabaseRepository) fait
@@ -45,9 +45,9 @@ export interface TournamentRepository {
   ): Promise<Team>
   deleteTeam(id: string): Promise<void>
 
-  getMatchesByTournament(tournamentId: string): Promise<Match[]>
-  createMatches(matches: Match[]): Promise<void>
-  updateMatch(match: Match): Promise<void>
+  getMatchesByTournament(tournamentId: string): Promise<TournamentMatch[]>
+  createMatches(matches: TournamentMatch[]): Promise<void>
+  updateMatch(match: TournamentMatch): Promise<void>
 
   getMembersByTournament(tournamentId: string): Promise<TournamentMember[]>
   getMyMemberships(userId: string): Promise<TournamentMember[]>

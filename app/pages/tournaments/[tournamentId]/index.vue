@@ -5,7 +5,7 @@
 // Header (mode interne, onglets + actions owner) déclaré via useAppHeader et
 // rendu une fois par le layout. L'onglet actif reste piloté par la page :
 // activeTab est un ref local, le header le met à jour via onTabChange.
-import type { Match, Team, TournamentStatus } from "../../../types";
+import type { TournamentMatch, Team, TournamentStatus } from "../../../types";
 import type { HeaderAction } from "~/composables/useAppHeader";
 import type { CarteEquipePlayer } from "~/components/CarteEquipe.vue";
 
@@ -254,12 +254,12 @@ function teamCardPlayers(team: Team): CarteEquipePlayer[] {
   }));
 }
 
-type RoundGroup = { roundNumber: number; matches: Match[] };
+type RoundGroup = { roundNumber: number; matches: TournamentMatch[] };
 
 // Les matchs sont stockés à plat avec un champ `roundNumber` ; on les regroupe
 // pour l'affichage par manche, en triant par numéro de manche croissant.
 const matchesByRound = computed<RoundGroup[]>(() => {
-  const groupedMatches = new Map<number, Match[]>();
+  const groupedMatches = new Map<number, TournamentMatch[]>();
   for (const match of matches.value) {
     const existingMatchesInRound = groupedMatches.get(match.roundNumber) ?? [];
     existingMatchesInRound.push(match);
@@ -313,9 +313,9 @@ async function startTournament() {
 }
 
 const scoreModalOpen = ref(false);
-const matchBeingScored = ref<Match | null>(null);
+const matchBeingScored = ref<TournamentMatch | null>(null);
 
-function openScoreModal(match: Match) {
+function openScoreModal(match: TournamentMatch) {
   if (!canScore.value) return;
   matchBeingScored.value = match;
   scoreModalOpen.value = true;
@@ -330,7 +330,7 @@ const matchBeingScoredTeamB = computed(() =>
 
 // Côté gagnant d'un match pour ScoreboardEquipe (présentation pure :
 // simple traduction du winnerId stocké vers 'A'/'B', aucun calcul).
-function matchWinnerSide(match: Match): "A" | "B" | null {
+function matchWinnerSide(match: TournamentMatch): "A" | "B" | null {
   if (match.winnerId === null) return null;
   return match.winnerId === match.teamAId ? "A" : "B";
 }

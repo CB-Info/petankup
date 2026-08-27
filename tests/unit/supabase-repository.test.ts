@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '../../app/types/database.types'
-import type { Match, Tournament, TournamentMember, UserProfileBundle } from '../../app/types'
+import type { TournamentMatch, Tournament, TournamentMember, UserProfileBundle } from '../../app/types'
 import { InviteMemberError, ProfileError } from '../../app/types'
 import { SupabaseRepository } from '../../app/repositories/SupabaseRepository'
 
@@ -181,7 +181,7 @@ function makeMatchRow() {
   }
 }
 
-function makeMatchDomain(): Match {
+function makeMatchDomain(): TournamentMatch {
   return {
     id: MATCH_ID,
     tournamentId: TOURNAMENT_ID,
@@ -473,7 +473,7 @@ describe('SupabaseRepository — getMatchesByTournament', () => {
 
     const matches = await repo.getMatchesByTournament(TOURNAMENT_ID)
 
-    expect(from).toHaveBeenCalledWith('matches')
+    expect(from).toHaveBeenCalledWith('tournament_matches')
     expect(chain.select).toHaveBeenCalledWith('*')
     expect(chain.eq).toHaveBeenCalledWith('tournament_id', TOURNAMENT_ID)
     expect(matches).toHaveLength(1)
@@ -495,7 +495,7 @@ describe('SupabaseRepository — updateMatch', () => {
 
     await repo.updateMatch(makeMatchDomain())
 
-    expect(from).toHaveBeenCalledWith('matches')
+    expect(from).toHaveBeenCalledWith('tournament_matches')
     expect(chain.update).toHaveBeenCalledWith(
       expect.objectContaining({
         score_a: null,
@@ -525,11 +525,11 @@ describe('SupabaseRepository — createMatches (batch)', () => {
     const chain = makeChainWithResult({ data: null, error: null })
     const { repo, from } = makeRepoWithChain(chain)
     const firstMatch = makeMatchDomain()
-    const secondMatch: Match = { ...firstMatch, id: 'other', roundNumber: 2 }
+    const secondMatch: TournamentMatch = { ...firstMatch, id: 'other', roundNumber: 2 }
 
     await repo.createMatches([firstMatch, secondMatch])
 
-    expect(from).toHaveBeenCalledWith('matches')
+    expect(from).toHaveBeenCalledWith('tournament_matches')
     const insertArg = chain.insert.mock.calls[0]![0] as Array<{ id: string, round_number: number }>
     expect(insertArg).toHaveLength(2)
     expect(insertArg[0]!.id).toBe(MATCH_ID)

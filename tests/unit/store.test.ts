@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { flushPromises } from '@vue/test-utils'
 import type { TournamentRepository } from '../../app/repositories/TournamentRepository'
-import type { Match, Team, TeamPlayer, Tournament, TournamentMember } from '../../app/types'
+import type { TournamentMatch, Team, TeamPlayer, Tournament, TournamentMember } from '../../app/types'
 import { InviteMemberError } from '../../app/types'
 
 const STUB_USER_ID = '99999999-9999-4999-8999-999999999999'
@@ -135,7 +135,7 @@ function makeTournament(overrides: Partial<Tournament> = {}): Tournament {
 function createMockRepository(): TournamentRepository {
   let tournaments: Tournament[] = []
   let teams: Team[] = []
-  let matches: Match[] = []
+  let matches: TournamentMatch[] = []
   let tournamentMembers: TournamentMember[] = []
 
   function upsertById<T extends { id: string }>(items: T[], itemToUpsert: T): T[] {

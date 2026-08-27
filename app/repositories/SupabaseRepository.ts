@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '../types/database.types'
 import type {
   InviteMemberErrorCode,
-  Match,
+  TournamentMatch,
   Profile,
   Team,
   Tournament,
@@ -183,25 +183,25 @@ export class SupabaseRepository implements TournamentRepository {
 
   // --- Matches ---
 
-  async getMatchesByTournament(tournamentId: string): Promise<Match[]> {
+  async getMatchesByTournament(tournamentId: string): Promise<TournamentMatch[]> {
     const { data, error } = await this.client
-      .from('matches')
+      .from('tournament_matches')
       .select('*')
       .eq('tournament_id', tournamentId)
     if (error !== null) throw new Error(error.message)
     return (data ?? []).map(mapMatchRowToDomain)
   }
 
-  async createMatches(matches: Match[]): Promise<void> {
+  async createMatches(matches: TournamentMatch[]): Promise<void> {
     const { error } = await this.client
-      .from('matches')
+      .from('tournament_matches')
       .insert(matches.map(mapMatchDomainToInsert))
     if (error !== null) throw new Error(error.message)
   }
 
-  async updateMatch(match: Match): Promise<void> {
+  async updateMatch(match: TournamentMatch): Promise<void> {
     const { error } = await this.client
-      .from('matches')
+      .from('tournament_matches')
       .update(mapMatchDomainToUpdate(match))
       .eq('id', match.id)
     if (error !== null) throw new Error(error.message)

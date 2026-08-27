@@ -3,13 +3,13 @@
 // affiche un toast via useErrorToast (voir composables/useErrorToast).
 // La validation métier (entiers, ≥13, pas d'égalité) reste affichée
 // inline via errorMessage : c'est une erreur utilisateur, pas système.
-import type { Match, ScoreValidationResult, Team } from "../types";
+import type { TournamentMatch, ScoreValidationResult, Team } from "../types";
 
 type TeamSide = "A" | "B";
 
 const props = defineProps<{
   open: boolean;
-  match: Match | null;
+  match: TournamentMatch | null;
   teamA: Team | null;
   teamB: Team | null;
 }>();
@@ -144,7 +144,7 @@ function close() {
     <template #content>
       <div class="flex h-full flex-col overflow-y-auto bg-default">
         <!-- TODO: compléter le kicker en « MANCHE N · MATCH N » quand le
-             numéro de match dans la manche sera ajouté au modèle Match
+             numéro de match dans la manche sera ajouté au modèle TournamentMatch
              (chantier séparé). Omission volontaire : donnée indisponible. -->
         <AppHeader
           :kicker="`Manche ${match?.roundNumber ?? ''}`"

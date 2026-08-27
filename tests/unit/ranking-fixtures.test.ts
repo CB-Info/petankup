@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { computeRanking } from '../../app/utils/tournament'
-import type { Match, Team } from '../../app/types'
+import type { TournamentMatch, Team } from '../../app/types'
 import {
   rankingVectors,
   type RankingVector,
@@ -34,7 +34,7 @@ function makeCompletedMatch(
   scoreA: number,
   scoreB: number,
   roundNumber: number,
-): Match {
+): TournamentMatch {
   return {
     id: `${teamAId}-${teamBId}-r${roundNumber}`,
     tournamentId: TOURNAMENT_ID,

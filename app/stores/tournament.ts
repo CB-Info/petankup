@@ -4,7 +4,7 @@ import { createRepository } from '../repositories'
 import type { TournamentRepository } from '../repositories'
 import type { Database } from '../types/database.types'
 import type {
-  Match,
+  TournamentMatch,
   Profile,
   Ranking,
   ScoreValidationResult,
@@ -50,7 +50,7 @@ export const useTournamentStore = defineStore('tournament', () => {
   const tournaments = ref<Tournament[]>([])
   const currentTournament = ref<Tournament | null>(null)
   const teams = ref<Team[]>([])
-  const matches = ref<Match[]>([])
+  const matches = ref<TournamentMatch[]>([])
   const ranking = ref<Ranking[]>([])
 
   // Memberships où l'utilisateur courant est invité (user_id ===
@@ -478,7 +478,7 @@ export const useTournamentStore = defineStore('tournament', () => {
     }
 
     const matchToUpdate = matches.value[matchIndex]!
-    const updatedMatch: Match = {
+    const updatedMatch: TournamentMatch = {
       ...matchToUpdate,
       scoreA,
       scoreB,

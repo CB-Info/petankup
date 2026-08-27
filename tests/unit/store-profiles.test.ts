@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { flushPromises } from '@vue/test-utils'
 import type { TournamentRepository } from '../../app/repositories/TournamentRepository'
 import type {
-  Match,
+  TournamentMatch,
   Profile,
   Team,
   Tournament,
@@ -613,9 +613,9 @@ describe('useTournamentStore — non-regression with tournaments loading', () =>
   })
 })
 
-// Les imports type Match et Team sont déclarés pour aligner le boilerplate
+// Les imports type TournamentMatch et Team sont déclarés pour aligner le boilerplate
 // sur store.test.ts (createMockRepository typage), même si les tests
 // profile ne créent pas d'équipes/matchs. Le bundle Vitest ne les
 // élimine pas automatiquement parce qu'ils peuvent être référencés
 // indirectement via TournamentRepository.
-export type { Match, Team }
+export type { TournamentMatch, Team }
