@@ -42,7 +42,7 @@ export interface Team {
   updatedAt: string;
 }
 
-export interface Match {
+export interface TournamentMatch {
   id: string;
   tournamentId: string;
   teamAId: string;

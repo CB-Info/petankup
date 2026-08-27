@@ -14,77 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      matches: {
-        Row: {
-          created_at: string
-          id: string
-          round_number: number
-          score_a: number | null
-          score_b: number | null
-          status: Database["public"]["Enums"]["match_status"]
-          team_a_id: string
-          team_b_id: string
-          tournament_id: string
-          updated_at: string
-          winner_id: string | null
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          round_number: number
-          score_a?: number | null
-          score_b?: number | null
-          status?: Database["public"]["Enums"]["match_status"]
-          team_a_id: string
-          team_b_id: string
-          tournament_id: string
-          updated_at?: string
-          winner_id?: string | null
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          round_number?: number
-          score_a?: number | null
-          score_b?: number | null
-          status?: Database["public"]["Enums"]["match_status"]
-          team_a_id?: string
-          team_b_id?: string
-          tournament_id?: string
-          updated_at?: string
-          winner_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "matches_team_a_same_tournament_fkey"
-            columns: ["team_a_id", "tournament_id"]
-            isOneToOne: false
-            referencedRelation: "teams"
-            referencedColumns: ["id", "tournament_id"]
-          },
-          {
-            foreignKeyName: "matches_team_b_same_tournament_fkey"
-            columns: ["team_b_id", "tournament_id"]
-            isOneToOne: false
-            referencedRelation: "teams"
-            referencedColumns: ["id", "tournament_id"]
-          },
-          {
-            foreignKeyName: "matches_tournament_id_fkey"
-            columns: ["tournament_id"]
-            isOneToOne: false
-            referencedRelation: "tournaments"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "matches_winner_id_fkey"
-            columns: ["winner_id"]
-            isOneToOne: false
-            referencedRelation: "teams"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       profiles: {
         Row: {
           created_at: string
@@ -172,6 +101,77 @@ export type Database = {
             columns: ["tournament_id"]
             isOneToOne: false
             referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tournament_matches: {
+        Row: {
+          created_at: string
+          id: string
+          round_number: number
+          score_a: number | null
+          score_b: number | null
+          status: Database["public"]["Enums"]["match_status"]
+          team_a_id: string
+          team_b_id: string
+          tournament_id: string
+          updated_at: string
+          winner_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          round_number: number
+          score_a?: number | null
+          score_b?: number | null
+          status?: Database["public"]["Enums"]["match_status"]
+          team_a_id: string
+          team_b_id: string
+          tournament_id: string
+          updated_at?: string
+          winner_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          round_number?: number
+          score_a?: number | null
+          score_b?: number | null
+          status?: Database["public"]["Enums"]["match_status"]
+          team_a_id?: string
+          team_b_id?: string
+          tournament_id?: string
+          updated_at?: string
+          winner_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tournament_matches_team_a_same_tournament_fkey"
+            columns: ["team_a_id", "tournament_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id", "tournament_id"]
+          },
+          {
+            foreignKeyName: "tournament_matches_team_b_same_tournament_fkey"
+            columns: ["team_b_id", "tournament_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id", "tournament_id"]
+          },
+          {
+            foreignKeyName: "tournament_matches_tournament_id_fkey"
+            columns: ["tournament_id"]
+            isOneToOne: false
+            referencedRelation: "tournaments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tournament_matches_winner_id_fkey"
+            columns: ["winner_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
             referencedColumns: ["id"]
           },
         ]

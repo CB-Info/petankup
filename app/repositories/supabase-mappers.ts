@@ -1,5 +1,5 @@
 import type { Database } from '../types/database.types'
-import type { Match, Profile, Team, TeamPlayer, Teammate, Tournament, TournamentMember, UserProfileBundle, UserStats, UserTournamentResult } from '../types'
+import type { TournamentMatch, Profile, Team, TeamPlayer, Teammate, Tournament, TournamentMember, UserProfileBundle, UserStats, UserTournamentResult } from '../types'
 
 // Traductions pures entre les rows Supabase (snake_case, nullables stricts)
 // et les types domaine (camelCase, optionnels via `?`). Aucune logique
@@ -14,9 +14,9 @@ type TeamPlayerRow = Database['public']['Tables']['team_players']['Row']
 // (pas de TeamInsert : teams n'est plus écrit en direct, cf. RPCs.)
 // teams est toujours lu avec ses joueurs embarqués (select '*, team_players(*)').
 type TeamRowWithPlayers = TeamRow & { team_players: TeamPlayerRow[] }
-type MatchRow = Database['public']['Tables']['matches']['Row']
-type MatchInsert = Database['public']['Tables']['matches']['Insert']
-type MatchUpdate = Database['public']['Tables']['matches']['Update']
+type MatchRow = Database['public']['Tables']['tournament_matches']['Row']
+type MatchInsert = Database['public']['Tables']['tournament_matches']['Insert']
+type MatchUpdate = Database['public']['Tables']['tournament_matches']['Update']
 type TournamentMemberRow = Database['public']['Tables']['tournament_members']['Row']
 type ProfileRow = Database['public']['Tables']['profiles']['Row']
 
@@ -101,9 +101,9 @@ export function mapTeamRowToDomain(row: TeamRowWithPlayers): Team {
   }
 }
 
-// --- Match ---
+// --- TournamentMatch ---
 
-export function mapMatchRowToDomain(row: MatchRow): Match {
+export function mapMatchRowToDomain(row: MatchRow): TournamentMatch {
   return {
     id: row.id,
     tournamentId: row.tournament_id,
@@ -119,7 +119,7 @@ export function mapMatchRowToDomain(row: MatchRow): Match {
   }
 }
 
-export function mapMatchDomainToInsert(match: Match): MatchInsert {
+export function mapMatchDomainToInsert(match: TournamentMatch): MatchInsert {
   return {
     id: match.id,
     tournament_id: match.tournamentId,
@@ -136,7 +136,7 @@ export function mapMatchDomainToInsert(match: Match): MatchInsert {
 // Domain → Update : uniquement les colonnes mutables d'un match (le score et
 // son issue). id sert de clé (eq) ; tournament_id / team_a_id / team_b_id /
 // round_number sont fixés à la création ; timestamps gérés par trigger.
-export function mapMatchDomainToUpdate(match: Match): MatchUpdate {
+export function mapMatchDomainToUpdate(match: TournamentMatch): MatchUpdate {
   return {
     score_a: match.scoreA,
     score_b: match.scoreB,

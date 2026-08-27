@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Database } from '../../app/types/database.types'
-import type { Match, Profile, Team, TeamPlayer, Teammate, Tournament, TournamentMember, UserProfileBundle } from '../../app/types'
+import type { TournamentMatch, Profile, Team, TeamPlayer, Teammate, Tournament, TournamentMember, UserProfileBundle } from '../../app/types'
 import {
   mapMatchDomainToInsert,
   mapMatchDomainToUpdate,
@@ -20,7 +20,7 @@ type TournamentRow = Database['public']['Tables']['tournaments']['Row']
 type TeamRow = Database['public']['Tables']['teams']['Row']
 type TeamPlayerRow = Database['public']['Tables']['team_players']['Row']
 type TeamRowWithPlayers = TeamRow & { team_players: TeamPlayerRow[] }
-type MatchRow = Database['public']['Tables']['matches']['Row']
+type MatchRow = Database['public']['Tables']['tournament_matches']['Row']
 type TournamentMemberRow
   = Database['public']['Tables']['tournament_members']['Row']
 type ProfileRow = Database['public']['Tables']['profiles']['Row']
@@ -280,7 +280,7 @@ describe('mapTeamRowToDomain', () => {
 })
 
 describe('mapMatchRowToDomain', () => {
-  it('translates a completed match row to a Match', () => {
+  it('translates a completed match row to a TournamentMatch', () => {
     const row: MatchRow = {
       id: MATCH_ID,
       tournament_id: TOURNAMENT_ID,
@@ -295,7 +295,7 @@ describe('mapMatchRowToDomain', () => {
       updated_at: NOW,
     }
 
-    expect(mapMatchRowToDomain(row)).toEqual<Match>({
+    expect(mapMatchRowToDomain(row)).toEqual<TournamentMatch>({
       id: MATCH_ID,
       tournamentId: TOURNAMENT_ID,
       teamAId: TEAM_A_ID,
@@ -334,8 +334,8 @@ describe('mapMatchRowToDomain', () => {
 })
 
 describe('mapMatchDomainToInsert', () => {
-  it('translates a domain Match to an Insert payload (roundNumber → round_number)', () => {
-    const match: Match = {
+  it('translates a domain TournamentMatch to an Insert payload (roundNumber → round_number)', () => {
+    const match: TournamentMatch = {
       id: MATCH_ID,
       tournamentId: TOURNAMENT_ID,
       teamAId: TEAM_A_ID,
@@ -366,7 +366,7 @@ describe('mapMatchDomainToInsert', () => {
   })
 
   it('preserves null for pending match scores and winner', () => {
-    const match: Match = {
+    const match: TournamentMatch = {
       id: MATCH_ID,
       tournamentId: TOURNAMENT_ID,
       teamAId: TEAM_A_ID,
@@ -701,7 +701,7 @@ describe('mapTournamentDomainToUpdate', () => {
 })
 
 describe('mapMatchDomainToUpdate', () => {
-  const match: Match = {
+  const match: TournamentMatch = {
     id: MATCH_ID,
     tournamentId: TOURNAMENT_ID,
     teamAId: TEAM_A_ID,

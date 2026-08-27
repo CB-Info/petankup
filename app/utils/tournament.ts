@@ -1,4 +1,4 @@
-import type { Match, Ranking, Team, ScoreValidationResult } from "../types";
+import type { TournamentMatch, Ranking, Team, ScoreValidationResult } from "../types";
 
 const BYE_MARKER = "__bye__";
 
@@ -11,7 +11,7 @@ export function generateRoundRobinMatches(
   teams: Team[],
   tournamentId: string,
   now: string,
-): Match[] {
+): TournamentMatch[] {
   if (teams.length < 2) return [];
 
   const teamIdsInCircle: string[] = teams.map((team) => team.id);
@@ -24,7 +24,7 @@ export function generateRoundRobinMatches(
   const matchesPerRound = totalSlots / 2;
   const totalRounds = totalSlots - 1;
 
-  const generatedMatches: Match[] = [];
+  const generatedMatches: TournamentMatch[] = [];
 
   for (let roundNumber = 1; roundNumber <= totalRounds; roundNumber++) {
     for (let pairIndex = 0; pairIndex < matchesPerRound; pairIndex++) {
@@ -50,7 +50,7 @@ function buildPendingMatch(
   roundNumber: number,
   tournamentId: string,
   now: string,
-): Match {
+): TournamentMatch {
   return {
     id: crypto.randomUUID(),
     tournamentId,
@@ -76,7 +76,7 @@ function rotateAllExceptFirst(items: string[]): void {
   items.splice(1, items.length - 1, ...movableItems);
 }
 
-export function computeRanking(teams: Team[], matches: Match[]): Ranking[] {
+export function computeRanking(teams: Team[], matches: TournamentMatch[]): Ranking[] {
   if (teams.length === 0) return [];
 
   const completedMatches = matches.filter(
@@ -101,7 +101,7 @@ export function computeRanking(teams: Team[], matches: Match[]): Ranking[] {
 function buildRankingForTeam(
   team: Team,
   tournamentId: string,
-  completedMatches: Match[],
+  completedMatches: TournamentMatch[],
 ): Ranking {
   let wins = 0;
   let losses = 0;
@@ -145,7 +145,7 @@ function buildRankingForTeam(
 export function tieBreak(
   rankingA: Ranking,
   rankingB: Ranking,
-  matches: Match[],
+  matches: TournamentMatch[],
 ): number {
   if (rankingA.wins !== rankingB.wins) {
     return rankingB.wins - rankingA.wins;
@@ -171,8 +171,8 @@ export function tieBreak(
 function findCompletedMatchBetween(
   firstTeamId: string,
   secondTeamId: string,
-  matches: Match[],
-): Match | undefined {
+  matches: TournamentMatch[],
+): TournamentMatch | undefined {
   return matches.find((match) => {
     if (match.status !== "completed") return false;
     const aVsB =
