@@ -19,14 +19,14 @@ const {
   publicTournaments,
   hasFetchedTournaments,
   lastLoadTournamentsError,
-  profileById,
-  currentProfile,
 } = storeToRefs(tournamentStore);
+const profileStore = useProfileStore();
+const { profileById, currentProfile } = storeToRefs(profileStore);
 const { showError } = useErrorToast();
 
 // Initiale de la pastille profil du header. Le pseudo est déjà hydraté par
-// l'orchestration d'auth du store (loadTournamentsForCurrentSession →
-// loadCurrentProfile, sur tout point d'entrée) — aucun fetch supplémentaire
+// l'orchestration d'auth du store tournoi (loadTournamentsForCurrentSession →
+// loadCurrentProfile du store profil, sur tout point d'entrée) — aucun fetch supplémentaire
 // ici. Pastille vide (valeur neutre) le temps du chargement.
 const profileInitial = computed(() =>
   (currentProfile.value?.displayName ?? "").charAt(0).toUpperCase(),
@@ -131,7 +131,7 @@ const ownerIdsToHydrate = computed(() => {
 watch(
   ownerIdsToHydrate,
   (ownerIds) => {
-    if (ownerIds.length > 0) void tournamentStore.loadProfilesByIds(ownerIds);
+    if (ownerIds.length > 0) void profileStore.loadProfilesByIds(ownerIds);
   },
   { immediate: true },
 );

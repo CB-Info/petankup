@@ -13,12 +13,18 @@ import type {
 } from '../../app/types'
 import { InviteMemberError } from '../../app/types'
 
-// Tests de l'action loadUserProfile du store tournament (Phase J).
+// Tests de l'action loadUserProfile du store profile (extrait du store
+// tournament, Phase J).
 //
 // Setup aligné sur tests/unit/store-profiles.test.ts : stubs hoisted pour
 // useSupabaseUser / useSupabaseSession / useSupabaseClient, mock du module
 // `repositories` pour injecter un repo in-memory. Le bundle profil vit dans
 // son propre fichier (cohérent avec la séparation Phase C.2).
+//
+// Chaque test instancie AUSSI le store tournoi, comme toute page en prod :
+// son watcher d'auth porte l'orchestration d'identité, et
+// loadTournamentsForCurrentSession est le seul moyen de faire bouger
+// l'identité résolue (stubs non réactifs). Assertions sur le store profile.
 
 const STUB_USER_ID = '99999999-9999-4999-8999-999999999999'
 const OTHER_USER_ID = '88888888-8888-4888-8888-888888888888'
@@ -76,6 +82,7 @@ vi.mock('../../app/repositories', () => ({
 }))
 
 import { useTournamentStore } from '../../app/stores/tournament'
+import { useProfileStore } from '../../app/stores/profile'
 
 type BundleMockRepository = TournamentRepository & {
   __getUserProfileSpy: ReturnType<typeof vi.fn>
@@ -203,7 +210,7 @@ beforeEach(() => {
   setActivePinia(createPinia())
 })
 
-describe('useTournamentStore — loadUserProfile', () => {
+describe('useProfileStore — loadUserProfile', () => {
   it('is a no-op when there is no authenticated viewer', async () => {
     stubUserRef.value = null
     stubSessionRef.value = null
@@ -212,7 +219,8 @@ describe('useTournamentStore — loadUserProfile', () => {
     const repo = createMockRepository()
     mockRepositoryRef.current = repo
 
-    const store = useTournamentStore()
+    useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
 
     await store.loadUserProfile(OTHER_USER_ID)
@@ -227,7 +235,8 @@ describe('useTournamentStore — loadUserProfile', () => {
     const repo = createMockRepository({ getUserProfile: async () => bundle })
     mockRepositoryRef.current = repo
 
-    const store = useTournamentStore()
+    useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
 
     await store.loadUserProfile(OTHER_USER_ID)
@@ -246,7 +255,8 @@ describe('useTournamentStore — loadUserProfile', () => {
       },
     })
 
-    const store = useTournamentStore()
+    useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
 
     await expect(store.loadUserProfile(OTHER_USER_ID)).resolves.toBeUndefined()
@@ -270,7 +280,8 @@ describe('useTournamentStore — loadUserProfile', () => {
       },
     })
 
-    const store = useTournamentStore()
+    useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
 
     await store.loadUserProfile(OTHER_USER_ID)
@@ -295,7 +306,8 @@ describe('useTournamentStore — loadUserProfile', () => {
         }),
     })
 
-    const store = useTournamentStore()
+    useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
 
     const inflightA = store.loadUserProfile(OTHER_USER_ID)
@@ -328,7 +340,8 @@ describe('useTournamentStore — loadUserProfile', () => {
         }),
     })
 
-    const store = useTournamentStore()
+    const tournamentStore = useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
 
     const inflight = store.loadUserProfile(OTHER_USER_ID)
@@ -336,7 +349,7 @@ describe('useTournamentStore — loadUserProfile', () => {
 
     // Bump l'identité du viewer via resolvedUserId (ref Vue réactive).
     stubClaimsSub.value = THIRD_USER_ID
-    await store.loadTournamentsForCurrentSession()
+    await tournamentStore.loadTournamentsForCurrentSession()
 
     resolveRepo(makeBundle())
     await inflight
@@ -360,7 +373,8 @@ describe('useTournamentStore — loadUserProfile', () => {
     const repo = createMockRepository({ getUserProfile: async () => bundle })
     mockRepositoryRef.current = repo
 
-    const store = useTournamentStore()
+    useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
     repo.__getProfilesByIdsSpy.mockClear()
 
@@ -378,7 +392,8 @@ describe('useTournamentStore — loadUserProfile', () => {
     const repo = createMockRepository({ getUserProfile: async () => bundle })
     mockRepositoryRef.current = repo
 
-    const store = useTournamentStore()
+    useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
     repo.__getProfilesByIdsSpy.mockClear()
 
@@ -394,7 +409,8 @@ describe('useTournamentStore — loadUserProfile', () => {
     })
     mockRepositoryRef.current = repo
 
-    const store = useTournamentStore()
+    useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
     repo.__getProfilesByIdsSpy.mockClear()
 
@@ -414,7 +430,8 @@ describe('useTournamentStore — loadUserProfile', () => {
       getProfilesByIds: () => new Promise<Profile[]>(() => {}),
     })
 
-    const store = useTournamentStore()
+    useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
 
     await expect(store.loadUserProfile(OTHER_USER_ID)).resolves.toBeUndefined()
@@ -423,7 +440,7 @@ describe('useTournamentStore — loadUserProfile', () => {
   })
 })
 
-describe('useTournamentStore — profile bundle reset on logout', () => {
+describe('useProfileStore — profile bundle reset on logout', () => {
   // Note : comme dans store-profiles.test.ts, la transition login → logout
   // repose sur la réactivité de session.value (POJO non réactif dans les
   // stubs), donc le watcher ne re-fire pas sur mutation post-mount. On
@@ -438,7 +455,8 @@ describe('useTournamentStore — profile bundle reset on logout', () => {
       getUserProfile: async () => makeBundle(),
     })
 
-    const store = useTournamentStore()
+    useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
 
     expect(store.currentProfileBundle).toBeNull()

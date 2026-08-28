@@ -17,8 +17,9 @@ const {
   matches,
   ranking,
   isOwnerOfCurrentTournament,
-  profileById,
 } = storeToRefs(tournamentStore);
+const profileStore = useProfileStore();
+const { profileById } = storeToRefs(profileStore);
 const { showError } = useErrorToast();
 
 // Alias local lisible : tout l'ownership conditionne des actions admin
@@ -32,7 +33,7 @@ watch(
   currentTournament,
   (tournament) => {
     if (tournament && !isOwner.value) {
-      void tournamentStore.loadProfilesByIds([tournament.ownerId]);
+      void profileStore.loadProfilesByIds([tournament.ownerId]);
     }
   },
   { immediate: true },
