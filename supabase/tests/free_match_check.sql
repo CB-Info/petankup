@@ -36,11 +36,14 @@
 -- la suppression de U1 (cas 13) précède celles de U2 et U3 pour pouvoir
 -- vérifier « les statistiques des autres participants sont inchangées ») :
 --   1  nominal 2c2 mixte (U1 + libre / U2 + libre), 13-7, privé → stats.
---   2  camps déséquilibrés 2c3 → succès (S9).
---   3  bornes : camp vide, camp à 4 → invalid_side_count.
+--   2  équilibre des camps (S9 révisée) : 2c3 et 1c2 → unbalanced_sides ;
+--      3c3 accepté (M2, triplette).
+--   3  bornes : camp vide, 4c1, 4c4 → invalid_side_count (l'effectif se
+--      vérifie avant l'équilibre : un 4c4 échoue pour effectif).
 --   4  même compte dans les deux camps → duplicate_player.
 --   5  créateur non participant → not_participant.
---   6  scores : 13-13, 12-5, 20-0 rejetés ; 13-12, 13-0, 5-13 acceptés ;
+--   6  scores : 13-13, 12-5, 20-0 rejetés ; 13-12, 13-0, 5-13 acceptés
+--      (trois tête-à-tête, 1c1) ;
 --      CHECK en filet (insert direct en postgres) ; date future rejetée.
 --   7  immuabilité : UPDATE / INSERT directs → 42501 ; stats directes → 42501.
 --   8  suppression : U2 → 0 ligne ; U4 → 0 ligne ; U1 → 1 ligne, stats.
@@ -248,11 +251,28 @@ select pg_temp.assert_eq_int((select count(*) from public.user_free_match_stats)
   'cas 1: aucune ligne de stats pour les joueurs libres');
 
 -- ----------------------------------------------------------------------------
--- Cas 2 — camps déséquilibrés 2c3 (S9) : U1 + libre contre U2 + U3 + libre,
--- 13-11.
+-- Cas 2 — équilibre des camps (S9 révisée) : 2c3 et 1c2 refusés pour
+-- déséquilibre ; 3c3 accepté (triplette) : U1 + Marcel + Paulette contre
+-- U2 + U3 + Gérard, 13-11.
 -- ----------------------------------------------------------------------------
 
 select pg_temp.act_as('c1000000-0000-4000-8000-000000000001');
+
+select pg_temp.assert_blocked(
+  $sql$ select public.create_free_match(null, null, 13, 11, jsonb_build_array(
+          jsonb_build_object('side', 'A', 'user_id', 'c1000000-0000-4000-8000-000000000001'),
+          jsonb_build_object('side', 'A', 'user_id', null, 'display_name', 'Marcel'),
+          jsonb_build_object('side', 'B', 'user_id', 'c1000000-0000-4000-8000-000000000002'),
+          jsonb_build_object('side', 'B', 'user_id', 'c1000000-0000-4000-8000-000000000003'),
+          jsonb_build_object('side', 'B', 'user_id', null, 'display_name', 'Gérard'))) $sql$,
+  'P0001', 'unbalanced_sides', 'cas 2a: 2c3 refusé pour déséquilibre');
+
+select pg_temp.assert_blocked(
+  $sql$ select public.create_free_match(null, null, 13, 11, jsonb_build_array(
+          jsonb_build_object('side', 'A', 'user_id', 'c1000000-0000-4000-8000-000000000001'),
+          jsonb_build_object('side', 'B', 'user_id', 'c1000000-0000-4000-8000-000000000002'),
+          jsonb_build_object('side', 'B', 'user_id', null, 'display_name', 'Gérard'))) $sql$,
+  'P0001', 'unbalanced_sides', 'cas 2b: 1c2 refusé pour déséquilibre');
 
 insert into pg_temp.created_matches (label, id)
 select 'M2', public.create_free_match(
@@ -260,6 +280,7 @@ select 'M2', public.create_free_match(
   jsonb_build_array(
     jsonb_build_object('side', 'A', 'user_id', 'c1000000-0000-4000-8000-000000000001'),
     jsonb_build_object('side', 'A', 'user_id', null, 'display_name', 'Marcel'),
+    jsonb_build_object('side', 'A', 'user_id', null, 'display_name', 'Paulette'),
     jsonb_build_object('side', 'B', 'user_id', 'c1000000-0000-4000-8000-000000000002'),
     jsonb_build_object('side', 'B', 'user_id', 'c1000000-0000-4000-8000-000000000003'),
     jsonb_build_object('side', 'B', 'user_id', null, 'display_name', 'Gérard')
@@ -269,13 +290,17 @@ reset role;
 
 select pg_temp.assert_eq_int(
   (select count(*) from public.free_matches where id = pg_temp.match_id('M2') and visibility = 'private'),
-  1, 'cas 2: 2c3 accepté, visibilité null → private');
+  1, 'cas 2c: 3c3 accepté, visibilité null → private');
+select pg_temp.assert_eq_int(
+  (select count(*) from public.free_match_players where match_id = pg_temp.match_id('M2')),
+  6, 'cas 2c: triplette, 6 participants');
 select pg_temp.assert_free_stats('c1000000-0000-4000-8000-000000000001', 2, 2, 0, 26, 18, 'cas 2: stats U1');
 select pg_temp.assert_free_stats('c1000000-0000-4000-8000-000000000002', 2, 0, 2, 18, 26, 'cas 2: stats U2');
 select pg_temp.assert_free_stats('c1000000-0000-4000-8000-000000000003', 1, 0, 1, 11, 13, 'cas 2: stats U3');
 
 -- ----------------------------------------------------------------------------
--- Cas 3 — bornes par camp : camp B vide ; camp A à 4.
+-- Cas 3 — bornes par camp : camp B vide ; 4c1 ; 4c4. L'effectif se vérifie
+-- avant l'équilibre : un 4c4 échoue pour effectif, pas pour déséquilibre.
 -- ----------------------------------------------------------------------------
 
 select pg_temp.act_as('c1000000-0000-4000-8000-000000000001');
@@ -292,17 +317,31 @@ select pg_temp.assert_blocked(
           jsonb_build_object('side', 'A', 'user_id', null, 'display_name', 'b'),
           jsonb_build_object('side', 'A', 'user_id', null, 'display_name', 'c'),
           jsonb_build_object('side', 'B', 'user_id', 'c1000000-0000-4000-8000-000000000002'))) $sql$,
-  'P0001', 'invalid_side_count', 'cas 3b: camp A à 4');
+  'P0001', 'invalid_side_count', 'cas 3b: 4c1 refusé pour effectif');
+
+select pg_temp.assert_blocked(
+  $sql$ select public.create_free_match(null, 'private', 13, 7, jsonb_build_array(
+          jsonb_build_object('side', 'A', 'user_id', 'c1000000-0000-4000-8000-000000000001'),
+          jsonb_build_object('side', 'A', 'user_id', null, 'display_name', 'a'),
+          jsonb_build_object('side', 'A', 'user_id', null, 'display_name', 'b'),
+          jsonb_build_object('side', 'A', 'user_id', null, 'display_name', 'c'),
+          jsonb_build_object('side', 'B', 'user_id', 'c1000000-0000-4000-8000-000000000002'),
+          jsonb_build_object('side', 'B', 'user_id', null, 'display_name', 'd'),
+          jsonb_build_object('side', 'B', 'user_id', null, 'display_name', 'e'),
+          jsonb_build_object('side', 'B', 'user_id', null, 'display_name', 'f'))) $sql$,
+  'P0001', 'invalid_side_count', 'cas 3c: 4c4 refusé pour effectif, pas pour déséquilibre');
 
 -- ----------------------------------------------------------------------------
 -- Cas 4 — le même compte dans les deux camps.
 -- ----------------------------------------------------------------------------
 
+-- Payload équilibré (2c2) : l'équilibre des camps se vérifie avant le doublon.
 select pg_temp.assert_blocked(
   $sql$ select public.create_free_match(null, 'private', 13, 7, jsonb_build_array(
           jsonb_build_object('side', 'A', 'user_id', 'c1000000-0000-4000-8000-000000000001'),
           jsonb_build_object('side', 'A', 'user_id', 'c1000000-0000-4000-8000-000000000002'),
-          jsonb_build_object('side', 'B', 'user_id', 'c1000000-0000-4000-8000-000000000002'))) $sql$,
+          jsonb_build_object('side', 'B', 'user_id', 'c1000000-0000-4000-8000-000000000002'),
+          jsonb_build_object('side', 'B', 'user_id', null, 'display_name', 'Gérard'))) $sql$,
   'P0001', 'duplicate_player', 'cas 4: U2 des deux côtés');
 
 -- ----------------------------------------------------------------------------
@@ -385,6 +424,9 @@ select pg_temp.assert_eq_int(
   (select count(*) from public.free_matches
     where id in (pg_temp.match_id('M3'), pg_temp.match_id('M4'), pg_temp.match_id('M5'))),
   3, 'cas 6f: 13-12 (hier), 13-0 et 5-13 acceptés');
+select pg_temp.assert_eq_int(
+  (select count(*) from public.free_match_players where match_id = pg_temp.match_id('M3')),
+  2, 'cas 6f: tête-à-tête (1c1) accepté');
 select pg_temp.assert_free_stats('c1000000-0000-4000-8000-000000000001', 5, 4, 1, 57, 43, 'cas 6: stats U1');
 select pg_temp.assert_free_stats('c1000000-0000-4000-8000-000000000002', 5, 1, 4, 43, 57, 'cas 6: stats U2 (miroir)');
 
@@ -482,7 +524,7 @@ select pg_temp.assert_eq_int(
   1, 'cas 9a: match privé visible par un participant (U2)');
 select pg_temp.assert_eq_int(
   (select count(*) from public.free_match_players where match_id = pg_temp.match_id('M2')),
-  5, 'cas 9b: participants du match privé visibles par U2');
+  6, 'cas 9b: participants du match privé visibles par U2');
 
 reset role;
 select pg_temp.act_as('c1000000-0000-4000-8000-000000000003');
