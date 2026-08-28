@@ -39,7 +39,9 @@ const openModel = computed({
 })
 
 const tournamentStore = useTournamentStore()
-const { currentTournamentMembers, profileById } = storeToRefs(tournamentStore)
+const { currentTournamentMembers } = storeToRefs(tournamentStore)
+const profileStore = useProfileStore()
+const { profileById } = storeToRefs(profileStore)
 const { showError } = useErrorToast()
 const toast = useToast()
 
@@ -71,7 +73,7 @@ watch(
   (members) => {
     const memberUserIds = members.map(member => member.userId)
     if (memberUserIds.length > 0) {
-      void tournamentStore.loadProfilesByIds(memberUserIds)
+      void profileStore.loadProfilesByIds(memberUserIds)
     }
   },
   { immediate: true },

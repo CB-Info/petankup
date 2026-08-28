@@ -9,10 +9,11 @@
 // L'action early-return si l'identité n'est pas encore résolue (fenêtre
 // refresh / magic link) AVANT de passer hasFetchedCurrentProfile à true —
 // la page resterait alors coincée sur "Chargement…". Le chargement
-// initial est garanti par l'orchestration d'auth du store
-// (loadTournamentsForCurrentSession → void loadCurrentProfile()), qui
-// tourne sur n'importe quel point d'entrée, /account compris. La page se
-// contente d'observer hasFetchedCurrentProfile / currentProfile. Le seul
+// initial est garanti par l'orchestration d'auth du store tournoi
+// (loadTournamentsForCurrentSession → void profileStore.loadCurrentProfile()),
+// qui tourne sur n'importe quel point d'entrée qui instancie ce store —
+// /account compris, c'est pourquoi la page l'instancie sans le lire. La page
+// se contente d'observer hasFetchedCurrentProfile / currentProfile. Le seul
 // loadCurrentProfile() déclenché ici est le bouton "Réessayer" de l'état
 // d'erreur — sûr, car atteindre cet état implique l'identité résolue.
 //
@@ -27,9 +28,11 @@
 // plus de header legacy ni d'icône logout, donc /account en est l'unique point.
 import { ProfileError, type ProfileErrorCode } from "../types";
 
-const tournamentStore = useTournamentStore();
+// Instancié pour l'orchestration d'auth (cf. commentaire d'en-tête).
+useTournamentStore();
+const profileStore = useProfileStore();
 const { currentProfile, hasFetchedCurrentProfile } =
-  storeToRefs(tournamentStore);
+  storeToRefs(profileStore);
 const { showError } = useErrorToast();
 const toast = useToast();
 const client = useSupabaseClient();
@@ -101,7 +104,7 @@ async function onSubmit() {
   isSubmitting.value = true;
   displayNameError.value = null;
   try {
-    await tournamentStore.updateMyProfile(state.displayName.trim());
+    await profileStore.updateMyProfile(state.displayName.trim());
     toast.add({
       title: "Pseudo mis à jour",
       color: "success",
@@ -136,7 +139,7 @@ async function retryLoadProfile() {
   if (isRetrying.value) return;
   isRetrying.value = true;
   try {
-    await tournamentStore.loadCurrentProfile();
+    await profileStore.loadCurrentProfile();
   } finally {
     isRetrying.value = false;
   }

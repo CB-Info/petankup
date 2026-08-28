@@ -13,13 +13,17 @@
 import type { UserTournamentResult } from "../../types";
 
 const route = useRoute();
-const tournamentStore = useTournamentStore();
+// Le store tournoi est instancié ici sans être lu : son watcher d'auth
+// porte l'orchestration (identité → loadCurrentProfile) qui hydrate
+// currentProfile — le repli d'identité de cette page en dépend à froid.
+useTournamentStore();
+const profileStore = useProfileStore();
 const {
   currentProfileBundle,
   lastLoadProfileBundleError,
   profileById,
   currentProfile,
-} = storeToRefs(tournamentStore);
+} = storeToRefs(profileStore);
 const user = useSupabaseUser();
 
 const userId = computed(() => route.params.userId as string);
@@ -36,7 +40,7 @@ async function loadProfile(id: string): Promise<void> {
   const requestId = ++loadProfileRequestId;
   isLoadingProfile.value = true;
   try {
-    await tournamentStore.loadUserProfile(id);
+    await profileStore.loadUserProfile(id);
   } finally {
     if (requestId === loadProfileRequestId) {
       isLoadingProfile.value = false;

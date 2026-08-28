@@ -11,12 +11,18 @@ import type {
 } from '../../app/types'
 import { InviteMemberError } from '../../app/types'
 
-// Tests des actions profile du store tournament (Phase C.2).
+// Tests des actions du store profile (extrait du store tournament, Phase C.2).
 //
 // Setup aligné sur tests/unit/store.test.ts : stubs hoisted pour
 // useSupabaseUser / useSupabaseSession / useSupabaseClient, mock du
 // module `repositories` pour injecter un repo in-memory. La couverture
 // profile vit ici (séparée car store.test.ts fait déjà 1200+ lignes).
+//
+// Chaque test instancie AUSSI le store tournoi, comme toute page en prod :
+// son watcher d'auth porte l'orchestration (identité → void
+// loadCurrentProfile()) et loadTournamentsForCurrentSession est le seul
+// moyen de faire bouger l'identité résolue (les stubs Supabase sont des
+// POJO non réactifs). Les assertions portent sur le store profile.
 
 const STUB_USER_ID = '99999999-9999-4999-8999-999999999999'
 const OTHER_USER_ID = '88888888-8888-4888-8888-888888888888'
@@ -74,6 +80,7 @@ vi.mock('../../app/repositories', () => ({
 }))
 
 import { useTournamentStore } from '../../app/stores/tournament'
+import { useProfileStore } from '../../app/stores/profile'
 
 type ProfileMockRepository = TournamentRepository & {
   __profiles: Profile[]
@@ -182,7 +189,7 @@ beforeEach(() => {
   setActivePinia(createPinia())
 })
 
-describe('useTournamentStore — loadCurrentProfile', () => {
+describe('useProfileStore — loadCurrentProfile', () => {
   it('is a no-op when there is no authenticated user', async () => {
     stubUserRef.value = null
     stubSessionRef.value = null
@@ -191,7 +198,8 @@ describe('useTournamentStore — loadCurrentProfile', () => {
     const repo = createMockRepository({ initialProfiles: [makeProfile()] })
     mockRepositoryRef.current = repo
 
-    const store = useTournamentStore()
+    useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
 
     await store.loadCurrentProfile()
@@ -205,7 +213,8 @@ describe('useTournamentStore — loadCurrentProfile', () => {
     const profile = makeProfile()
     mockRepositoryRef.current = createMockRepository({ initialProfiles: [profile] })
 
-    const store = useTournamentStore()
+    useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
 
     await store.loadCurrentProfile()
@@ -219,7 +228,8 @@ describe('useTournamentStore — loadCurrentProfile', () => {
   it('records a typed "Profil introuvable." error when the repo returns undefined', async () => {
     mockRepositoryRef.current = createMockRepository({ initialProfiles: [] })
 
-    const store = useTournamentStore()
+    useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
 
     await store.loadCurrentProfile()
@@ -240,7 +250,8 @@ describe('useTournamentStore — loadCurrentProfile', () => {
       },
     })
 
-    const store = useTournamentStore()
+    useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
 
     await expect(store.loadCurrentProfile()).resolves.toBeUndefined()
@@ -279,7 +290,8 @@ describe('useTournamentStore — loadCurrentProfile', () => {
         }),
     })
 
-    const store = useTournamentStore()
+    const tournamentStore = useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
     expect(pendingCalls).toHaveLength(1)
     expect(pendingCalls[0]!.userId).toBe(STUB_USER_ID)
@@ -288,7 +300,7 @@ describe('useTournamentStore — loadCurrentProfile', () => {
     // resolvedUserId passe à OTHER_USER_ID, et un 2e
     // loadCurrentProfile est armé en fire-and-forget (pending #2).
     stubClaimsSub.value = OTHER_USER_ID
-    await store.loadTournamentsForCurrentSession()
+    await tournamentStore.loadTournamentsForCurrentSession()
     expect(pendingCalls).toHaveLength(2)
 
     // Résoudre tardivement le 1er appel avec un profil legacy.
@@ -321,12 +333,13 @@ describe('useTournamentStore — loadCurrentProfile', () => {
         }),
     })
 
-    const store = useTournamentStore()
+    const tournamentStore = useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
     expect(pendingCalls).toHaveLength(1)
 
     stubClaimsSub.value = OTHER_USER_ID
-    await store.loadTournamentsForCurrentSession()
+    await tournamentStore.loadTournamentsForCurrentSession()
     expect(pendingCalls).toHaveLength(2)
 
     // Rejette tardivement le 1er — l'erreur ne doit pas atterrir
@@ -339,12 +352,13 @@ describe('useTournamentStore — loadCurrentProfile', () => {
   })
 })
 
-describe('useTournamentStore — loadProfilesByIds', () => {
+describe('useProfileStore — loadProfilesByIds', () => {
   it('is a no-op when ids is empty', async () => {
     const repo = createMockRepository({ initialProfiles: [makeProfile()] })
     mockRepositoryRef.current = repo
 
-    const store = useTournamentStore()
+    useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
 
     await store.loadProfilesByIds([])
@@ -356,7 +370,8 @@ describe('useTournamentStore — loadProfilesByIds', () => {
     const repo = createMockRepository({ initialProfiles: [profile] })
     mockRepositoryRef.current = repo
 
-    const store = useTournamentStore()
+    useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
 
     await store.loadCurrentProfile()
@@ -375,7 +390,8 @@ describe('useTournamentStore — loadProfilesByIds', () => {
     })
     mockRepositoryRef.current = repo
 
-    const store = useTournamentStore()
+    useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
 
     await store.loadProfilesByIds([OTHER_USER_ID, OTHER_USER_ID, THIRD_USER_ID])
@@ -393,7 +409,8 @@ describe('useTournamentStore — loadProfilesByIds', () => {
     })
     mockRepositoryRef.current = repo
 
-    const store = useTournamentStore()
+    useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
 
     // Pré-charger OTHER_USER_ID dans le cache via une 1ère fetch.
@@ -413,7 +430,8 @@ describe('useTournamentStore — loadProfilesByIds', () => {
       initialProfiles: [bob, carol],
     })
 
-    const store = useTournamentStore()
+    useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
 
     await store.loadProfilesByIds([OTHER_USER_ID, THIRD_USER_ID])
@@ -429,7 +447,8 @@ describe('useTournamentStore — loadProfilesByIds', () => {
       },
     })
 
-    const store = useTournamentStore()
+    useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
 
     await expect(store.loadProfilesByIds([OTHER_USER_ID])).resolves.toBeUndefined()
@@ -453,7 +472,8 @@ describe('useTournamentStore — loadProfilesByIds', () => {
         }),
     })
 
-    const store = useTournamentStore()
+    const tournamentStore = useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
 
     const inflight = store.loadProfilesByIds([OTHER_USER_ID])
@@ -461,7 +481,7 @@ describe('useTournamentStore — loadProfilesByIds', () => {
     await Promise.resolve()
 
     stubClaimsSub.value = THIRD_USER_ID
-    await store.loadTournamentsForCurrentSession()
+    await tournamentStore.loadTournamentsForCurrentSession()
 
     resolveRepo([makeProfile({ id: OTHER_USER_ID, displayName: 'Bob' })])
     await inflight
@@ -470,12 +490,13 @@ describe('useTournamentStore — loadProfilesByIds', () => {
   })
 })
 
-describe('useTournamentStore — updateMyProfile', () => {
+describe('useProfileStore — updateMyProfile', () => {
   it('updates currentProfile and profileById with the server row on success', async () => {
     const before = makeProfile()
     mockRepositoryRef.current = createMockRepository({ initialProfiles: [before] })
 
-    const store = useTournamentStore()
+    useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
     await store.loadCurrentProfile()
 
@@ -493,7 +514,8 @@ describe('useTournamentStore — updateMyProfile', () => {
     stubClaimsSub.value = null
 
     mockRepositoryRef.current = createMockRepository()
-    const store = useTournamentStore()
+    useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
 
     await expect(store.updateMyProfile('X')).rejects.toThrow(
@@ -509,14 +531,15 @@ describe('useTournamentStore — updateMyProfile', () => {
       },
     })
 
-    const store = useTournamentStore()
+    useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
 
     await expect(store.updateMyProfile('X')).rejects.toBe(repoError)
   })
 })
 
-describe('useTournamentStore — reset on logout', () => {
+describe('useProfileStore — reset on logout', () => {
   // Note : la transition login → logout repose sur la réactivité de
   // session.value, qui passe par useSupabaseSession() — un POJO
   // non réactif dans nos stubs. Le watcher d'auth ne re-fire pas sur
@@ -535,7 +558,8 @@ describe('useTournamentStore — reset on logout', () => {
       initialProfiles: [makeProfile()],
     })
 
-    const store = useTournamentStore()
+    useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
 
     expect(store.currentProfile).toBeNull()
@@ -545,7 +569,7 @@ describe('useTournamentStore — reset on logout', () => {
   })
 })
 
-describe('useTournamentStore — non-regression with tournaments loading', () => {
+describe('useProfileStore — non-regression with tournaments loading', () => {
   function makeTournament(overrides: Partial<Tournament> = {}): Tournament {
     return {
       id: crypto.randomUUID(),
@@ -573,7 +597,8 @@ describe('useTournamentStore — non-regression with tournaments loading', () =>
       getMyMemberships: async () => [],
     })
 
-    const store = useTournamentStore()
+    const tournamentStore = useTournamentStore()
+    const store = useProfileStore()
     // Le watcher immediate déclenche loadTournamentsForCurrentSession,
     // qui lance void loadCurrentProfile() en fire-and-forget puis
     // await loadTournaments(). On laisse les deux résoudre.
@@ -582,9 +607,9 @@ describe('useTournamentStore — non-regression with tournaments loading', () =>
     // résoudre dans une microtask postérieure.
     await flushPromises()
 
-    expect(store.tournaments).toEqual([tournament])
-    expect(store.hasFetchedTournaments).toBe(true)
-    expect(store.lastLoadTournamentsError).toBeNull()
+    expect(tournamentStore.tournaments).toEqual([tournament])
+    expect(tournamentStore.hasFetchedTournaments).toBe(true)
+    expect(tournamentStore.lastLoadTournamentsError).toBeNull()
     expect(store.lastLoadCurrentProfileError).toBe(profileError)
   })
 
@@ -599,17 +624,18 @@ describe('useTournamentStore — non-regression with tournaments loading', () =>
       getMyMemberships: async () => [],
     })
 
-    const store = useTournamentStore()
+    const tournamentStore = useTournamentStore()
+    const store = useProfileStore()
     await flushPromises()
     await flushPromises()
 
-    expect(store.tournaments).toEqual([tournament])
+    expect(tournamentStore.tournaments).toEqual([tournament])
 
     // Un nouvel appel explicite (équivalent du bouton "Réessayer")
     // ne doit pas être bloqué par l'état d'erreur profile.
-    await store.loadTournamentsForCurrentSession()
+    await tournamentStore.loadTournamentsForCurrentSession()
 
-    expect(store.lastLoadTournamentsError).toBeNull()
+    expect(tournamentStore.lastLoadTournamentsError).toBeNull()
   })
 })
 

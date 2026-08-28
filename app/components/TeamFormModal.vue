@@ -17,8 +17,10 @@ const emit = defineEmits<{
 }>()
 
 const tournamentStore = useTournamentStore()
-const { teams, currentTournament, currentTournamentMembers, profileById }
+const { teams, currentTournament, currentTournamentMembers }
   = storeToRefs(tournamentStore)
+const profileStore = useProfileStore()
+const { profileById } = storeToRefs(profileStore)
 const { showError } = useErrorToast()
 
 const MAX_PLAYERS_PER_TEAM = 3
@@ -72,7 +74,7 @@ function hydrateMemberProfiles() {
     tournament.ownerId,
     ...currentTournamentMembers.value.map(member => member.userId),
   ]
-  void tournamentStore.loadProfilesByIds(ids)
+  void profileStore.loadProfilesByIds(ids)
 }
 
 watch(
