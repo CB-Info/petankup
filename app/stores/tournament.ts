@@ -33,24 +33,20 @@ type AddTeamInput = {
 }
 
 export const useTournamentStore = defineStore('tournament', () => {
-  // Le client Supabase typé et l'utilisateur courant viennent du module
-  // @nuxtjs/supabase. Le client est injecté dans la factory pour garder
-  // le repository testable. L'utilisateur sert à peupler ownerId à la
-  // création d'un tournoi (RLS DB).
+  // Le client Supabase typé vient du module @nuxtjs/supabase ; il est
+  // injecté dans la factory pour garder le repository testable.
   const client = useSupabaseClient<Database>()
-  const user = useSupabaseUser()
   // useSupabaseSession() est hydratée déterministiquement par le plugin
-  // du module @nuxtjs/supabase au boot, contrairement à useSupabaseUser
-  // dont l'hydratation rate parfois la transition initiale post-/confirm
-  // (cf. CLAUDE.md). On l'utilise comme déclencheur principal du watcher
-  // de fetch et comme indicateur de logout.
+  // du module @nuxtjs/supabase au boot (cf. CLAUDE.md). Elle ne sert plus
+  // ici qu'au reset du logout ; l'identité vit dans le store identity.
   const session = useSupabaseSession()
   const repository: TournamentRepository = createRepository(client)
 
   // L'identité de session et le domaine profil vivent dans leurs propres
-  // stores ; ce store ne porte plus que le domaine tournoi. Instanciés ICI,
-  // avant le watcher d'auth (immediate) qui les référence synchroniquement.
-  // Dépendance à sens unique : rien ne dépend en retour de ce store.
+  // stores ; ce store ne porte plus que le domaine tournoi. L'identité est
+  // résolue par le store identity (amorcé par app/plugins/identity.client.ts),
+  // jamais ici. Dépendance à sens unique : rien ne dépend en retour de ce
+  // store.
   const identityStore = useIdentityStore()
   const profileStore = useProfileStore()
 
@@ -210,10 +206,9 @@ export const useTournamentStore = defineStore('tournament', () => {
   // Primitive de fetch : charge `tournaments` ET `myMemberships` en
   // parallèle (le 2e fetch alimente sharedTournaments + l'exclusion sur
   // publicTournaments) et marque hasFetchedTournaments. NE résout PAS
-  // l'identité — c'est loadTournamentsForCurrentSession qui orchestre
-  // identité+fetch et reste l'unique entrée pour la home (watcher,
-  // bouton "Réessayer"). Conservée publique pour les tests qui
-  // vérifient le contrat repo→store sans toucher à l'auth.
+  // l'identité (store identity) — l'entrée pour la home reste
+  // loadTournamentsForCurrentSession (gardes d'idempotence et de dédup).
+  // Conservée publique pour les tests qui vérifient le contrat repo→store.
   //
   // Garde anti-écriture tardive : on capture currentUserId au début et
   // on re-vérifie après les awaits. Si l'utilisateur a changé entre
@@ -453,9 +448,11 @@ export const useTournamentStore = defineStore('tournament', () => {
     visibility: TournamentVisibility,
   ): Promise<void> {
     return withLoading(async () => {
+      // La liste n'est chargée que par l'accueil : depuis la page tournoi
+      // (lien profond), le tournoi courant fait foi.
       const tournament = tournaments.value.find(
         existing => existing.id === tournamentId,
-      )
+      ) ?? (currentTournament.value?.id === tournamentId ? currentTournament.value : undefined)
       if (tournament === undefined) {
         throw new Error('Tournoi introuvable')
       }
@@ -468,57 +465,47 @@ export const useTournamentStore = defineStore('tournament', () => {
     })
   }
 
-  // Token monotone qui invalide les résolutions d'identité tardives :
-  // si la session change pendant un await getClaims(), la réponse de
-  // l'ancienne session ne doit ni écrire resolvedUserId ni déclencher
-  // un fetch. Même pattern que lastLoadTournamentRequestId.
-  let lastAuthContextRequestId = 0
+  // Chargement de la liste pour l'identité courante. Appelée par l'accueil
+  // (watcher gaté sur identity.currentUserId) et par son bouton
+  // « Réessayer ». L'identité est résolue ailleurs (store identity, amorcé
+  // par le plugin) : sans identité, no-op — la page reste en chargement
+  // jusqu'à ce que le watcher de page rappelle. Les erreurs sont stockées
+  // dans lastLoadTournamentsError, pas re-thrown : le caller observe le ref.
+  //
+  // Deux gardes contre les requêtes en double :
+  //  - en vol : une seconde demande pour le même user pendant le RTT
+  //    (remontage rapide, Réessayer) reçoit la promesse déjà en cours ;
+  //  - déjà chargé : pas de refetch tant que hasFetchedTournaments tient
+  //    pour ce user (remis à false au logout ; un changement de compte
+  //    passe toujours par là).
+  let loadedForUserId: string | null = null
+  let pendingTournamentsLoad: { userId: string, promise: Promise<void> } | null = null
 
-  // Action publique utilisée par le watcher de session ET par le
-  // bouton "Réessayer" de la home. Résout l'identité (user.value?.sub
-  // d'abord, fallback getClaims), puis appelle loadTournaments(). Les
-  // erreurs sont stockées dans lastLoadTournamentsError, pas
-  // re-thrown : le caller (UI ou watcher) observe le ref pour décider
-  // d'un retry.
   async function loadTournamentsForCurrentSession(): Promise<void> {
-    const requestId = ++lastAuthContextRequestId
-    if (session.value === null) return
-
-    let sub: string | null = user.value?.sub ?? null
-    if (sub === null) {
-      try {
-        sub = await identityStore.resolveUserIdFromClaims()
-      }
-      catch (error) {
-        if (requestId !== lastAuthContextRequestId) return
-        lastLoadTournamentsError.value = error
-        return
-      }
+    const sub = identityStore.currentUserId
+    if (sub === null) return
+    if (pendingTournamentsLoad !== null && pendingTournamentsLoad.userId === sub) {
+      return pendingTournamentsLoad.promise
     }
-    if (requestId !== lastAuthContextRequestId) return
-    if (sub === null) {
-      lastLoadTournamentsError.value = new Error(
-        'Identité utilisateur introuvable dans la session.',
-      )
-      return
-    }
+    if (loadedForUserId === sub && hasFetchedTournaments.value) return
 
-    // Idempotence : pas de refetch si déjà chargé pour ce sub.
-    if (identityStore.resolvedUserId === sub && hasFetchedTournaments.value) return
+    const promise = fetchTournamentsFor(sub).finally(() => {
+      // Ne libère le slot que s'il est encore le sien : une demande pour
+      // un autre user (changement de compte en plein vol) l'a peut-être
+      // déjà remplacé.
+      if (pendingTournamentsLoad?.promise === promise) {
+        pendingTournamentsLoad = null
+      }
+    })
+    pendingTournamentsLoad = { userId: sub, promise }
+    return promise
+  }
 
-    identityStore.setResolvedUserId(sub)
-
-    // Fire-and-forget : profil chargé en parallèle des tournois.
-    // L'identité est résolue à ce stade (resolvedUserId vient d'être
-    // hydraté), loadCurrentProfile n'est pas un no-op. Le `void` est
-    // explicite : la promesse ne reject jamais (try/catch interne
-    // sur loadCurrentProfile), pas de .catch() nécessaire. Critique :
-    // PAS d'await, sinon une lenteur ou un échec profile bloquerait
-    // le chargement des tournois.
-    void profileStore.loadCurrentProfile()
-
+  // Requête de loadTournamentsForCurrentSession pour un user donné.
+  async function fetchTournamentsFor(sub: string): Promise<void> {
     try {
       await loadTournaments()
+      loadedForUserId = sub
     }
     catch {
       // Erreur déjà stockée dans lastLoadTournamentsError par
@@ -590,30 +577,22 @@ export const useTournamentStore = defineStore('tournament', () => {
     })
   }
 
-  // Watcher composé sur [session, user.sub]. Couvre :
-  //  - le boot avec session hydratée (immediate fire) ;
-  //  - le flow magic-link où useSupabaseUser tarde à s'hydrater
-  //    post-/confirm (CLAUDE.md) — la session, elle, est fiable, et
-  //    le fallback getClaims() de loadTournamentsForCurrentSession
-  //    fournit le sub si user.value est encore null ;
-  //  - le changement de compte (logout A → null → login B → fetch B).
-  // Sur logout : reset synchrone + bump du token pour invalider toute
-  // résolution d'identité encore en vol.
-  // (l'identité et le profil se réinitialisent dans leurs propres stores).
+  // Reset au logout (session null) : listes, membres, flags et erreur ne
+  // survivent pas à une session. L'identité et le profil se réinitialisent
+  // dans leurs propres stores ; le chargement, lui, n'est plus déclenché
+  // ici mais par l'accueil, gaté sur l'identité. immediate : couvre le boot
+  // sans session.
   watch(
-    [() => session.value, () => user.value?.sub],
-    ([currentSession]) => {
+    () => session.value,
+    (currentSession) => {
       if (currentSession === null) {
-        ++lastAuthContextRequestId
         tournaments.value = []
         myMemberships.value = []
         currentTournamentMembers.value = []
         currentTournamentMembersTournamentId.value = null
         hasFetchedTournaments.value = false
         lastLoadTournamentsError.value = null
-        return
       }
-      void loadTournamentsForCurrentSession()
     },
     { immediate: true },
   )

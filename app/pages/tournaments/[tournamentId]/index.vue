@@ -26,13 +26,15 @@ const { showError } = useErrorToast();
 // dans le template, on ne le manipule jamais ailleurs.
 const isOwner = isOwnerOfCurrentTournament;
 
-// Hydratation best-effort du profil de l'organisateur, uniquement quand
-// je ne suis pas l'owner (inutile d'afficher "Organisé par moi"). Le
-// `void` est fire-and-forget ; loadProfilesByIds ne throw jamais.
+// Hydratation best-effort du profil de l'organisateur — pour la ligne
+// "Organisé par" (non-owner) ET pour le pseudo live de l'owner sur ses
+// propres cartes d'équipe (getPlayerDisplayName lit profileById ; le profil
+// courant n'est plus chargé implicitement sur cette page). loadProfilesByIds
+// dédupe via le cache ; le `void` est fire-and-forget, il ne throw jamais.
 watch(
   currentTournament,
   (tournament) => {
-    if (tournament && !isOwner.value) {
+    if (tournament) {
       void profileStore.loadProfilesByIds([tournament.ownerId]);
     }
   },

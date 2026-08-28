@@ -80,6 +80,7 @@ vi.mock('../../app/repositories', () => ({
 // Import APRÈS le `vi.mock` pour la lisibilité (vitest hisse les deux
 // de toute façon, donc l'ordre textuel est sans effet sur l'exécution).
 import { useTournamentStore } from '../../app/stores/tournament'
+import { useIdentityStore } from '../../app/stores/identity'
 
 const NOW = '2026-01-01T00:00:00.000Z'
 const UUID_V4_REGEX
@@ -724,7 +725,9 @@ describe('useTournamentStore — tournament_members partitioning', () => {
     const membershipsSpy = vi.spyOn(mockRepositoryRef.current!, 'getMyMemberships')
 
     const store = useTournamentStore()
-    await flushPromises()
+    // Le chargement n'est plus déclenché par l'instanciation du store : on
+    // le demande, comme l'accueil (gaté sur l'identité, ici déjà résolue).
+    await store.loadTournamentsForCurrentSession()
 
     expect(tournamentsSpy).toHaveBeenCalledTimes(1)
     expect(membershipsSpy).toHaveBeenCalledTimes(1)
@@ -739,7 +742,9 @@ describe('useTournamentStore — tournament_members partitioning', () => {
     )
 
     const store = useTournamentStore()
-    await flushPromises()
+    // Le chargement n'est plus déclenché par l'instanciation du store : on
+    // le demande, comme l'accueil (gaté sur l'identité, ici déjà résolue).
+    await store.loadTournamentsForCurrentSession()
 
     expect(store.lastLoadTournamentsError).not.toBeNull()
     expect((store.lastLoadTournamentsError as Error).message).toBe(
@@ -770,7 +775,9 @@ describe('useTournamentStore — tournament_members partitioning', () => {
     ])
 
     const store = useTournamentStore()
-    await flushPromises()
+    // Le chargement n'est plus déclenché par l'instanciation du store : on
+    // le demande, comme l'accueil (gaté sur l'identité, ici déjà résolue).
+    await store.loadTournamentsForCurrentSession()
 
     expect(store.sharedTournaments).toHaveLength(1)
     expect(store.sharedTournaments[0]!.id).toBe(sharedTournament.id)
@@ -782,7 +789,9 @@ describe('useTournamentStore — tournament_members partitioning', () => {
     )
 
     const store = useTournamentStore()
-    await flushPromises()
+    // Le chargement n'est plus déclenché par l'instanciation du store : on
+    // le demande, comme l'accueil (gaté sur l'identité, ici déjà résolue).
+    await store.loadTournamentsForCurrentSession()
 
     expect(store.sharedTournaments).toHaveLength(0)
   })
@@ -802,7 +811,9 @@ describe('useTournamentStore — tournament_members partitioning', () => {
     )
 
     const store = useTournamentStore()
-    await flushPromises()
+    // Le chargement n'est plus déclenché par l'instanciation du store : on
+    // le demande, comme l'accueil (gaté sur l'identité, ici déjà résolue).
+    await store.loadTournamentsForCurrentSession()
 
     expect(store.sharedTournaments).toHaveLength(0)
   })
@@ -822,7 +833,9 @@ describe('useTournamentStore — tournament_members partitioning', () => {
     ])
 
     const store = useTournamentStore()
-    await flushPromises()
+    // Le chargement n'est plus déclenché par l'instanciation du store : on
+    // le demande, comme l'accueil (gaté sur l'identité, ici déjà résolue).
+    await store.loadTournamentsForCurrentSession()
 
     expect(store.sharedTournaments).toHaveLength(1)
     expect(store.publicTournaments).toHaveLength(0)
@@ -843,7 +856,9 @@ describe('useTournamentStore — tournament_members partitioning', () => {
     ])
 
     const store = useTournamentStore()
-    await flushPromises()
+    // Le chargement n'est plus déclenché par l'instanciation du store : on
+    // le demande, comme l'accueil (gaté sur l'identité, ici déjà résolue).
+    await store.loadTournamentsForCurrentSession()
 
     expect(store.myTournaments).toHaveLength(1)
     expect(store.myTournaments[0]!.id).toBe(ownPublic.id)
@@ -1130,173 +1145,91 @@ describe('useTournamentStore — invite/remove members', () => {
   })
 })
 
-describe('useTournamentStore — auth context (session/sub watcher)', () => {
-  it('loads tournaments via session watcher even when user.value is null at mount (magic-link scenario)', async () => {
-    // Simule l'arrivée sur / juste après un magic-link : la session est
-    // hydratée, useSupabaseUser ne l'est pas encore (cf. CLAUDE.md).
-    // Le store doit retomber sur getClaims() pour résoudre le sub et
-    // déclencher le fetch — sans intervention de la home.
+describe('useTournamentStore — loadTournamentsForCurrentSession', () => {
+  // La résolution d'identité vit dans le store identity (cf.
+  // tests/unit/store-identity.test.ts) ; ici on ne teste que le contrat du
+  // chargement gaté : no-op sans identité, une seule requête par user
+  // (dédup en vol + idempotence), refetch après changement de compte.
+  it('is a no-op without identity, then loads exactly once for the resolved user (in-flight dedup + idempotence)', async () => {
+    // Session présente mais identité irrésoluble (user null, claims sans sub).
     stubUserRef.value = null
-    stubSessionRef.value = { access_token: 'magic-link-token' }
-    stubClaimsSub.value = STUB_USER_ID
-
+    stubClaimsSub.value = null
     await mockRepositoryRef.current!.createTournament(
-      makeTournament({ name: 'Mine private', ownerId: STUB_USER_ID }),
-    )
-
-    const store = useTournamentStore()
-    await flushPromises()
-
-    expect(supabaseClientStub.auth.getClaims).toHaveBeenCalledTimes(1)
-    expect(store.tournaments).toHaveLength(1)
-    expect(store.hasFetchedTournaments).toBe(true)
-    expect(store.lastLoadTournamentsError).toBeNull()
-    expect(store.myTournaments).toHaveLength(1)
-    expect(store.myTournaments[0]!.name).toBe('Mine private')
-  })
-
-  it('prefers user.value.sub over getClaims when both are available (hot path)', async () => {
-    // Cas nominal après navigation : useSupabaseUser est hydraté. On
-    // ne doit pas appeler getClaims(), c'est un coût inutile sur le
-    // chemin chaud.
-    stubUserRef.value = { sub: STUB_USER_ID }
-    stubSessionRef.value = { access_token: 'stub-token' }
-    stubClaimsSub.value = STUB_USER_ID
-
-    const store = useTournamentStore()
-    await flushPromises()
-
-    expect(supabaseClientStub.auth.getClaims).not.toHaveBeenCalled()
-    expect(store.hasFetchedTournaments).toBe(true)
-  })
-
-  it('refetches tournaments after the sub changes (account switch via retry)', async () => {
-    // Phase 1 : user A connecté, fetch initial via le watcher immediate.
-    const USER_A = STUB_USER_ID
-    const USER_B = '11111111-1111-4111-8111-111111111111'
-    stubUserRef.value = { sub: USER_A }
-    await mockRepositoryRef.current!.createTournament(
-      makeTournament({ name: 'Tournoi de A', ownerId: USER_A }),
+      makeTournament({ name: 'Mine', ownerId: STUB_USER_ID }),
     )
     const repoSpy = vi.spyOn(mockRepositoryRef.current!, 'getAllTournaments')
 
+    const identityStore = useIdentityStore()
     const store = useTournamentStore()
     await flushPromises()
+    expect(identityStore.currentUserId).toBeNull()
+
+    await store.loadTournamentsForCurrentSession()
+    expect(repoSpy).not.toHaveBeenCalled()
+    expect(store.hasFetchedTournaments).toBe(false)
+
+    // L'identité arrive (chemin chaud) : deux demandes concurrentes — une
+    // seule requête ; une troisième après coup — toujours une seule.
+    stubUserRef.value = { sub: STUB_USER_ID }
+    await identityStore.resolveForCurrentSession()
+    await Promise.all([
+      store.loadTournamentsForCurrentSession(),
+      store.loadTournamentsForCurrentSession(),
+    ])
+    await store.loadTournamentsForCurrentSession()
+
+    expect(repoSpy).toHaveBeenCalledTimes(1)
+    expect(store.hasFetchedTournaments).toBe(true)
+    expect(store.myTournaments).toHaveLength(1)
+  })
+
+  it('refetches tournaments after the resolved identity changes (account switch)', async () => {
+    const USER_B = '11111111-1111-4111-8111-111111111111'
+    await mockRepositoryRef.current!.createTournament(
+      makeTournament({ name: 'Tournoi de A', ownerId: STUB_USER_ID }),
+    )
+    const repoSpy = vi.spyOn(mockRepositoryRef.current!, 'getAllTournaments')
+
+    const identityStore = useIdentityStore()
+    const store = useTournamentStore()
+    await store.loadTournamentsForCurrentSession()
     expect(repoSpy).toHaveBeenCalledTimes(1)
 
-    // Phase 2 : on bascule sur user B et on re-déclenche l'orchestration
-    // identité+fetch. Comme les stubs ne sont pas des Vue refs, le
-    // watcher composé ne refire pas tout seul ; on appelle l'action
-    // publique manuellement (chemin emprunté par le bouton "Réessayer"
-    // de la home, conceptuellement équivalent au refire watcher en prod).
+    // Bascule d'identité : les stubs sont des POJO non réactifs, seule
+    // resolveForCurrentSession écrit resolvedUserId (ref réactive).
     stubUserRef.value = { sub: USER_B }
     stubClaimsSub.value = USER_B
+    await identityStore.resolveForCurrentSession()
     await mockRepositoryRef.current!.createTournament(
       makeTournament({ name: 'Tournoi de B', ownerId: USER_B }),
     )
 
     await store.loadTournamentsForCurrentSession()
 
-    // Le re-fetch a bien eu lieu : la garde d'idempotence
-    // (resolvedUserId === sub && hasFetched) n'a pas court-circuité,
-    // car le sub a changé. Le store reflète le nouveau dataset repo
-    // (en prod c'est RLS DB qui filtre par owner ; ici le mock sert
-    // tout, la partition est testée par le bloc "visibility partition").
+    // La garde d'idempotence (loadedForUserId === sub) n'a pas court-circuité,
+    // car le sub a changé (en prod c'est RLS qui filtre ; le mock sert tout).
     expect(repoSpy).toHaveBeenCalledTimes(2)
     expect(store.tournaments.map(tournament => tournament.name).sort()).toEqual([
       'Tournoi de A',
       'Tournoi de B',
     ])
   })
+})
 
-  it('surfaces an error when getClaims fails', async () => {
-    stubUserRef.value = null
-    stubGetClaimsImpl.fn = async () => ({
-      data: null,
-      error: { message: 'Network error during getClaims' },
-    })
+describe('useTournamentStore — setTournamentVisibility without the list', () => {
+  it('falls back on the current tournament when the list is not loaded (deep link)', async () => {
+    const tournament = makeTournament({ name: 'Lien profond', visibility: 'private' })
+    await mockRepositoryRef.current!.createTournament(tournament)
 
     const store = useTournamentStore()
-    await flushPromises()
-
-    expect(store.lastLoadTournamentsError).not.toBeNull()
-    expect((store.lastLoadTournamentsError as Error).message).toBe(
-      'Network error during getClaims',
-    )
-    expect(store.hasFetchedTournaments).toBe(false)
+    // La page tournoi ne charge que le détail : la liste reste vide.
+    await store.loadTournament(tournament.id)
     expect(store.tournaments).toHaveLength(0)
-  })
 
-  it('surfaces an error when claims sub is missing', async () => {
-    // Cas où getClaims retourne data: null + error: null (le 3e cas
-    // de l'union, "pas de session connue côté client"). Le watcher
-    // doit tomber sur le branch "Identité utilisateur introuvable".
-    stubUserRef.value = null
-    stubClaimsSub.value = null
+    await store.setTournamentVisibility(tournament.id, 'public')
 
-    const store = useTournamentStore()
-    await flushPromises()
-
-    expect(store.lastLoadTournamentsError).not.toBeNull()
-    expect((store.lastLoadTournamentsError as Error).message).toBe(
-      'Identité utilisateur introuvable dans la session.',
-    )
-    expect(store.hasFetchedTournaments).toBe(false)
-    expect(store.tournaments).toHaveLength(0)
-  })
-
-  it('ignores a late getClaims response when a newer auth resolution started in the meantime (anti-race)', async () => {
-    // Scénario : le watcher fire post-mount avec user.value null,
-    // déclenche un getClaims() qui reste pendu ; un 2e appel survient
-    // (ex : retry, ou re-fire suite à un changement de session). Le
-    // 1er, en revenant, doit voir que le token a été bumpé et exit
-    // sans rien écrire. Sinon : risque d'écrire resolvedUserId d'une
-    // session obsolète et de fuiter des tournois entre comptes.
-    stubUserRef.value = null
-    const claimsResolvers: Array<(value: GetClaimsResult) => void> = []
-    stubGetClaimsImpl.fn = () =>
-      new Promise<GetClaimsResult>((resolve) => {
-        claimsResolvers.push(resolve)
-      })
-
-    await mockRepositoryRef.current!.createTournament(
-      makeTournament({ name: 'Tournoi cible', ownerId: STUB_USER_ID }),
-    )
-    const repoSpy = vi.spyOn(mockRepositoryRef.current!, 'getAllTournaments')
-
-    const store = useTournamentStore()
-    // Laisse le watcher immediate démarrer le 1er appel.
-    await Promise.resolve()
-    expect(claimsResolvers).toHaveLength(1)
-
-    // 2e appel concurrent. Bumpe le token interne du store.
-    const secondCall = store.loadTournamentsForCurrentSession()
-    await Promise.resolve()
-    expect(claimsResolvers).toHaveLength(2)
-
-    // Réponse "tardive" du 1er getClaims. Doit être ignorée.
-    claimsResolvers[0]!({
-      data: {
-        claims: { sub: STUB_USER_ID },
-        header: {},
-        signature: new Uint8Array(),
-      },
-      error: null,
-    })
-    await flushPromises()
-    expect(repoSpy).not.toHaveBeenCalled()
-
-    // Réponse du 2e getClaims. C'est lui qui doit déclencher le fetch.
-    claimsResolvers[1]!({
-      data: {
-        claims: { sub: STUB_USER_ID },
-        header: {},
-        signature: new Uint8Array(),
-      },
-      error: null,
-    })
-    await secondCall
-    expect(repoSpy).toHaveBeenCalledTimes(1)
-    expect(store.tournaments).toHaveLength(1)
+    expect(store.currentTournament?.visibility).toBe('public')
+    const persisted = await mockRepositoryRef.current!.getTournamentById(tournament.id)
+    expect(persisted?.visibility).toBe('public')
   })
 })

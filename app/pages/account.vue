@@ -5,17 +5,14 @@
 // on affiche un toast via useErrorToast. En succès, un toast de
 // confirmation (couleur success, cohérente avec le badge "Terminé").
 //
-// Chargement du profil : on N'appelle PAS loadCurrentProfile() au mount.
-// L'action early-return si l'identité n'est pas encore résolue (fenêtre
-// refresh / magic link) AVANT de passer hasFetchedCurrentProfile à true —
-// la page resterait alors coincée sur "Chargement…". Le chargement
-// initial est garanti par l'orchestration d'auth du store tournoi
-// (loadTournamentsForCurrentSession → void profileStore.loadCurrentProfile()),
-// qui tourne sur n'importe quel point d'entrée qui instancie ce store —
-// /account compris, c'est pourquoi la page l'instancie sans le lire. La page
-// se contente d'observer hasFetchedCurrentProfile / currentProfile. Le seul
-// loadCurrentProfile() déclenché ici est le bouton "Réessayer" de l'état
-// d'erreur — sûr, car atteindre cet état implique l'identité résolue.
+// Chargement du profil : demandé par la page, gaté sur l'identité (store
+// identity, résolu au boot par le plugin). Appeler loadCurrentProfile()
+// avant que l'identité soit connue serait un no-op silencieux (sa garde) et
+// la page resterait sur "Chargement…" : le watcher ci-dessous ne l'appelle
+// qu'une fois l'identité résolue. L'action est idempotente et déduplique en
+// vol : venir de l'accueil (profil déjà chargé) ne coûte aucune requête.
+// « Chargement… » tant que ni le profil ni l'échec d'identité n'ont tranché ;
+// identité indisponible → même branche « Profil indisponible » + Réessayer.
 //
 // Conflit d'unicité du pseudo : updateMyProfile peut throw une
 // ProfileError('display_name_taken') (mappée depuis le 23505 Postgres par
@@ -28,20 +25,28 @@
 // plus de header legacy ni d'icône logout, donc /account en est l'unique point.
 import { ProfileError, type ProfileErrorCode } from "../types";
 
-// Instancié pour l'orchestration d'auth (cf. commentaire d'en-tête).
-useTournamentStore();
 const profileStore = useProfileStore();
 const { currentProfile, hasFetchedCurrentProfile } =
   storeToRefs(profileStore);
+const identityStore = useIdentityStore();
+const { currentUserId, identityUnavailable } = storeToRefs(identityStore);
 const { showError } = useErrorToast();
 const toast = useToast();
 const client = useSupabaseClient();
-const user = useSupabaseUser();
+
+// Chargement gaté sur l'identité (cf. commentaire d'en-tête).
+watch(
+  currentUserId,
+  (userId) => {
+    if (userId !== null) void profileStore.loadCurrentProfile();
+  },
+  { immediate: true },
+);
 
 // Retour vers MON profil public (sens de navigation inversé : on arrive
 // ici depuis le profil). Fallback accueil si l'identité n'est pas résolue.
 const profileBackTo = computed(() =>
-  user.value?.sub ? `/profile/${user.value.sub}` : "/",
+  currentUserId.value ? `/profile/${currentUserId.value}` : "/",
 );
 
 // Config header. watchEffect pour suivre profileBackTo (résolu après hydratation).
@@ -139,6 +144,12 @@ async function retryLoadProfile() {
   if (isRetrying.value) return;
   isRetrying.value = true;
   try {
+    // Identité indisponible : relancer seulement la résolution — si elle
+    // aboutit, le watcher charge. Sinon c'est le profil qui a échoué.
+    if (currentUserId.value === null) {
+      await identityStore.resolveForCurrentSession();
+      return;
+    }
     await profileStore.loadCurrentProfile();
   } finally {
     isRetrying.value = false;
@@ -157,7 +168,7 @@ const FIELD_BASE_CLASS =
 <template>
   <div>
     <p
-      v-if="!hasFetchedCurrentProfile"
+      v-if="!hasFetchedCurrentProfile && !identityUnavailable"
       class="py-16 text-center font-sans text-sm text-(--pk-subtle)"
     >
       Chargement…

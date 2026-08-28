@@ -11,10 +11,9 @@ import { useIdentityStore } from './identity'
 //
 // L'identité vient du store identity, lue via son proxy à chaque usage —
 // les gardes anti-écriture tardive relisent currentUserId après chaque
-// await. Le chargement initial du profil courant reste déclenché par
-// l'orchestration d'auth du store tournoi (loadTournamentsForCurrentSession
-// → void loadCurrentProfile()), inchangée : ce store n'appelle rien de
-// lui-même au setup.
+// await. Le profil courant est chargé à la demande des pages qui l'affichent
+// (accueil, compte), gatées sur identity.currentUserId : ce store n'appelle
+// rien de lui-même au setup.
 export const useProfileStore = defineStore('profile', () => {
   const client = useSupabaseClient<Database>()
   const session = useSupabaseSession()
@@ -80,19 +79,46 @@ export const useProfileStore = defineStore('profile', () => {
 
   // Charge le profil du user authentifié. Fire-and-forget : capture
   // les erreurs en interne dans lastLoadCurrentProfileError, ne throw
-  // JAMAIS. Ne doit pas bloquer le chargement des tournois — c'est
-  // pourquoi loadTournamentsForCurrentSession l'invoque avec `void`
-  // (pas d'await) après hydratation de resolvedUserId.
+  // JAMAIS. Demandé par les pages qui affichent le profil courant (accueil,
+  // compte), gatées sur l'identité ; sans identité, no-op.
+  //
+  // Deux gardes contre les requêtes en double :
+  //  - en vol : une seconde demande pour le même user pendant le RTT
+  //    (navigation rapide accueil → compte, Réessayer) reçoit la promesse
+  //    déjà en cours ;
+  //  - déjà chargé : pas de refetch une fois le profil de CE user en place.
+  //    Un échec (réseau, profil absent) reste retentable : le bouton
+  //    « Réessayer » et un remontage relancent la requête.
+  let pendingCurrentProfileLoad: { userId: string, promise: Promise<void> } | null = null
+
+  async function loadCurrentProfile(): Promise<void> {
+    const userId = identityStore.currentUserId
+    if (userId === null) return
+    if (pendingCurrentProfileLoad !== null && pendingCurrentProfileLoad.userId === userId) {
+      return pendingCurrentProfileLoad.promise
+    }
+    if (currentProfile.value?.id === userId && hasFetchedCurrentProfile.value) return
+
+    const promise = fetchCurrentProfile(userId).finally(() => {
+      // Ne libère le slot que s'il est encore le sien : une demande pour un
+      // autre user (changement de compte en plein vol) l'a peut-être
+      // déjà remplacé.
+      if (pendingCurrentProfileLoad?.promise === promise) {
+        pendingCurrentProfileLoad = null
+      }
+    })
+    pendingCurrentProfileLoad = { userId, promise }
+    return promise
+  }
+
+  // Requête et écritures de loadCurrentProfile, pour un user donné.
   //
   // Garde anti-écriture tardive : userId capturé au départ. Si
   // l'identité change pendant le await (logout, switch de compte),
   // on abandonne TOUTES les écritures vers le state pour ne pas
   // polluer celui du nouveau user avec la réponse d'un ancien call.
   // Pattern aligné sur loadTournaments.
-  async function loadCurrentProfile(): Promise<void> {
-    const userId = identityStore.currentUserId
-    if (userId === null) return
-
+  async function fetchCurrentProfile(userId: string): Promise<void> {
     try {
       const profile = await repository.getProfileById(userId)
       if (identityStore.currentUserId !== userId) return
