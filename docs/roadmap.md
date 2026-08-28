@@ -35,7 +35,7 @@
 
 ## Horizon 1 — Fondations & vérité documentaire ✅ **TERMINÉ**
 
-- **H1.a — Gel des tournois terminés** ✅ Prédicat de gel unifié, conçu pour accueillir le second déclencheur (match libre complété) à l'Horizon 2 sans réécriture.
+- **H1.a — Gel des tournois terminés** ✅ Prédicat de gel unifié (tournoi terminé). Le match libre, immuable par construction, n'en aura pas besoin (conception §3.4).
 - **H1.b — Spec du match libre** ✅ → `docs/spec_match_individuel.md`.
 - **H1.c — Révision du cahier des charges + versionnage des docs produit** ✅
 - **H1.d — Navigation joueur** ✅ (+ correctifs A et B : chargement de profil, identifiants malformés, `viewer_can_open`).
@@ -46,7 +46,7 @@ _Objectif : on peut jouer sur Pétankup sans organiser un tournoi._
 
 1. **H2.a — Modèle de données**, selon `docs/spec_match_individuel.md`. ⚠️ Contrainte connue : les équipes sont structurellement liées à un tournoi (FK composites) — le match libre aura son propre modèle de participants, calqué sur le pattern `team_players`. **Démarrer par une session de conception**, pas par une migration.
 2. **H2.b — Parcours de création rapide** (« on est 4 au terrain, on note »).
-3. **H2.c — Extension des statistiques** : seconde source, distinguée de la source tournoi, combinable à l'affichage. Le prédicat de gel gagne son second déclencheur.
+3. **H2.c — Extension des statistiques** : seconde source, distinguée de la source tournoi, combinable à l'affichage. Le prédicat de gel reste inchangé : le match libre est immuable structurellement (conception §3.4).
 4. **H2.d — Journal enrichi** : matchs libres et tournois sur le profil.
 
 _À réexaminer au démarrage : le découpage du store (cf. dettes)._

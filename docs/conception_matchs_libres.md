@@ -30,6 +30,7 @@ Le match libre est un **objet distinct**, avec ses propres tables. Les matchs de
 | **S8**  | **Match sans aucun participant à compte : supprimé automatiquement.**                                              | Quand le dernier compte participant disparaît, le match ne sert plus à personne.                                     |
 | **S9**  | **Camps déséquilibrés autorisés** (2 contre 3, etc.).                                                              | Ça arrive au terrain ; l'interdire ajouterait une contrainte pour un gain douteux.                                   |
 | **S10** | **Une entrée de match libre est cliquable** dans le journal, comme un tournoi.                                     | Implique une page de détail et une règle d'accès — voir §3.3.                                                        |
+| **S11** | **La date de jeu n'est jamais future** (décision du 2026-08-28).                                                | Le champ sert à noter une partie déjà jouée (S4), pas à en planifier une ; une date future fausserait la chronologie du journal. Bornée à « aujourd'hui » en date de Paris (le serveur est en UTC). |
 
 **Rappel des décisions produit (spec H1.b)** : participants mixtes (comptes + joueurs libres) · tous formats, 1 à 3 par camp · statistiques séparées mais combinables · confiance totale (pas de confirmation de l'adversaire) · visibilité au choix du créateur · création par tout participant ayant un compte.
 
@@ -40,7 +41,8 @@ Le match libre est un **objet distinct**, avec ses propres tables. Les matchs de
 ### 3.1 Le match
 
 - Porte son **créateur** (seul habilité à supprimer), sa **date de jeu**, son **score par camp**, sa **visibilité**.
-- Le vainqueur est déterminé par le score. Mêmes règles qu'un match de tournoi : scores positifs, vainqueur à 13 minimum, pas d'égalité.
+- Le vainqueur est déterminé par le score. **Règle stricte** (décision du 2026-08-28) : le vainqueur marque **exactement 13**, le perdant **entre 0 et 12** — on joue toujours en 13, la non-égalité en découle. Plus stricte que la règle actuelle des tournois (« au moins 13 », qui laisse passer un 20-0) : défaut connu, à corriger côté tournoi dans un ticket séparé sur données existantes ; le match libre n'a aucune donnée et part avec la règle juste.
+- La **date de jeu** ne peut pas être future (S11), en date de Paris.
 - **Immuable après création** (S3) : aucune mise à jour autorisée, seulement la suppression.
 - Le créateur doit être **participant** du match (spec H1.b).
 
@@ -71,6 +73,7 @@ Le prédicat unifié `tournament_is_frozen` reste tel quel. ⚠️ Le commentair
 - **Matérialisation à la création** du match (il naît terminé), **dématérialisation à la suppression** — réutiliser la fonction commune extraite en H1.a plutôt que d'en écrire une seconde.
 - Le **total combiné** (tournois + matchs libres) est calculé **à la lecture**, jamais stocké.
 - Les joueurs libres n'ont pas de statistiques (pas de compte).
+- **Un compte supprimé n'a plus de statistiques** : le recalcul commun est un no-op pour un compte disparu (il purge ses lignes et sort) et ne ré-insère jamais rien pendant la cascade de suppression — sinon la cascade des tournois, qui recalcule le compte supprimé lui-même, violerait la clé étrangère vers `auth.users` et annulerait la suppression (bug latent corrigé en H2.a).
 
 ---
 
@@ -80,9 +83,13 @@ Le prédicat unifié `tournament_is_frozen` reste tel quel. ⚠️ Le commentair
 
 **R2 — Match orphelin de son créateur.** Si le créateur supprime son compte alors que d'autres participants à compte restent, le match survit (S7) mais plus personne ne peut le supprimer.
 
-**Décision : les deux sont assumés pour la V1** — modèle minimal, usage en cercle restreint où une erreur se règle par un message plutôt que par une fonctionnalité.
+**R3 — Enrôlement sans consentement.** Tout créateur peut lier n'importe quel compte comme participant (par identifiant), ce qui écrit dans le journal et les statistiques de cette personne sans qu'elle ait rien accepté — R1 et R2 ne couvrent que les erreurs du créateur lui-même. Côté tournoi, un joueur lié doit être organisateur ou membre invité ; le match libre n'a pas d'équivalent en V1.
+
+**Décision : les trois sont assumés pour la V1** — modèle minimal, usage en cercle restreint où une erreur se règle par un message plutôt que par une fonctionnalité.
 
 **Solution identifiée si le besoin se manifeste** — le **retrait individuel** : un participant ne supprime pas le match, il s'en retire (lien vers le compte effacé, pseudo conservé, statistiques recalculées). C'est exactement le mécanisme déjà décidé en S7 pour la suppression de compte, donc **purement additif** : aucun changement du modèle, un point d'entrée en plus. Il fermerait R1 et R2 d'un coup — R2 parce que chaque participant restant pourrait se retirer d'un match orphelin, jusqu'à déclencher S8.
+
+Pour R3, le remède prévu n'est pas le retrait individuel mais un **système d'invitation** : un joueur à compte ne sera lié qu'après avoir accepté, dans les tournois comme dans les matchs libres. Chantier transversal, hors H2.a. Le retrait individuel reste une solution intermédiaire si le besoin surgit avant.
 
 À re-trancher à l'Horizon 3 (ouverture publique), où la confiance entre inconnus ne pourra plus être présumée.
 

@@ -9,8 +9,9 @@
 -- la transaction avortée annule tout de toute façon.
 --
 -- Synchro manuelle : les scénarios couvrent les cas du ticket H1.a §4. Toute
--- évolution du gel (nouveau déclencheur Horizon 2, nouvelle colonne exemptée)
--- doit être répercutée ici À LA MAIN.
+-- évolution du gel (nouvelle colonne exemptée, etc.) doit être répercutée ici
+-- À LA MAIN. Le match libre (H2.a) est immuable par construction : il
+-- n'ajoute aucun déclencheur au prédicat.
 --
 -- Simulation d'identité :
 --   - request.jwt.claims (set_config transaction-local) alimente auth.uid()
