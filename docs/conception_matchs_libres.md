@@ -28,7 +28,7 @@ Le match libre est un **objet distinct**, avec ses propres tables. Les matchs de
 | **S6**  | **Seul le créateur peut supprimer.**                                                                               | Voir risque R1, assumé pour la V1.                                                                                   |
 | **S7**  | **Suppression de compte : le match survit**, pseudo conservé en texte, statistiques des autres inchangées.         | Même logique que les tournois aujourd'hui. Une partie jouée reste une partie jouée.                                  |
 | **S8**  | **Match sans aucun participant à compte : supprimé automatiquement.**                                              | Quand le dernier compte participant disparaît, le match ne sert plus à personne.                                     |
-| **S9**  | **Camps déséquilibrés autorisés** (2 contre 3, etc.).                                                              | Ça arrive au terrain ; l'interdire ajouterait une contrainte pour un gain douteux.                                   |
+| **S9**  | **Camps équilibrés.** Un match libre se joue en tête-à-tête, doublette ou triplette : les deux camps comptent le même nombre de joueurs (décision révisée le 2026-08-28 ; la version initiale autorisait 2 contre 3). | Une formation improvisée (2 contre 3) est refusée à la création, avec un code d'erreur dédié (`unbalanced_sides`), distinct de la règle d'effectif « 1 à 3 par camp » (`invalid_side_count`). |
 | **S10** | **Une entrée de match libre est cliquable** dans le journal, comme un tournoi.                                     | Implique une page de détail et une règle d'accès — voir §3.3.                                                        |
 | **S11** | **La date de jeu n'est jamais future** (décision du 2026-08-28).                                                | Le champ sert à noter une partie déjà jouée (S4), pas à en planifier une ; une date future fausserait la chronologie du journal. Bornée à « aujourd'hui » en date de Paris (le serveur est en UTC). |
 
@@ -48,7 +48,7 @@ Le match libre est un **objet distinct**, avec ses propres tables. Les matchs de
 
 ### 3.2 Les participants
 
-- Deux camps, **1 à 3 participants chacun**, **indépendamment l'un de l'autre** (S9 : un 2 contre 3 est valide).
+- Deux camps de **même effectif**, **1 à 3 participants chacun** (S9 révisée : tête-à-tête, doublette ou triplette — un 2 contre 3 est refusé).
 - Chaque participant porte un **camp**, un **lien vers un compte** (facultatif) et un **pseudo enregistré** (toujours présent).
 - Un même compte ne peut apparaître **qu'une fois** dans un match, tous camps confondus.
 - La perte du compte efface le lien mais **conserve le pseudo** (S7).
