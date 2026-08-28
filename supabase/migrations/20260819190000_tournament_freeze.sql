@@ -61,14 +61,14 @@
 --     suppression d'un tournoi completed cascade sans friction avec les
 --     guards de gel des tables enfants.
 --
--- Extension prévue (Horizon 2, matchs libres) : le prédicat gagnera un second
--- déclencheur (OR match autonome complété) sans réécriture des points
--- d'application.
+-- Horizon 2 (matchs libres) : le match libre est immuable structurellement
+-- (aucun chemin d'écriture, cf. docs/conception_matchs_libres.md §3.4) — le
+-- prédicat ne gagne PAS de second déclencheur (commentaire corrigé en H2.a).
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
 -- Bloc 1 : prédicat de gel — point d'application unique.
--- V1 : seul déclencheur = tournoi parent terminé.
+-- Déclencheur unique = tournoi parent terminé.
 -- ----------------------------------------------------------------------------
 
 create or replace function private.tournament_is_frozen(p_tournament_id uuid)
@@ -90,7 +90,8 @@ revoke all on function private.tournament_is_frozen(uuid) from public;
 grant execute on function private.tournament_is_frozen(uuid) to authenticated;
 
 comment on function private.tournament_is_frozen(uuid) is
-  'Gel V1 : tournoi parent terminé. Horizon 2 : OR match libre complété. '
+  'Gel : tournoi parent terminé. Le match libre (Horizon 2) est immuable '
+  'structurellement — aucun chemin d''écriture — donc pas de second déclencheur. '
   'Ne JAMAIS appeler depuis une policy de public.tournaments (récursion, '
   'cf. phase_b_1) — le gel de la ligne tournoi passe par trigger.';
 
