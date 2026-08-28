@@ -13,18 +13,11 @@
 import type { UserTournamentResult } from "../../types";
 
 const route = useRoute();
-// Le store tournoi est instancié ici sans être lu : son watcher d'auth
-// porte l'orchestration (identité → loadCurrentProfile) qui hydrate
-// currentProfile — le repli d'identité de cette page en dépend à froid.
-useTournamentStore();
 const profileStore = useProfileStore();
-const {
-  currentProfileBundle,
-  lastLoadProfileBundleError,
-  profileById,
-  currentProfile,
-} = storeToRefs(profileStore);
-const user = useSupabaseUser();
+const { currentProfileBundle, lastLoadProfileBundleError, profileById } =
+  storeToRefs(profileStore);
+const identityStore = useIdentityStore();
+const { currentUserId, identityUnavailable } = storeToRefs(identityStore);
 
 const userId = computed(() => route.params.userId as string);
 
@@ -48,13 +41,12 @@ async function loadProfile(id: string): Promise<void> {
   }
 }
 
-// user.sub d'abord, currentProfile en secours : useSupabaseUser n'est pas
-// hydraté dans la fenêtre post-magic-link (même fallback que l'accueil) —
-// sans lui, son propre journal s'afficherait d'abord sans liens puis
-// basculerait sous le doigt.
-const myUserId = computed(
-  () => user.value?.sub ?? currentProfile.value?.id ?? null,
-);
+// Identité du viewer = identité canonique du store identity (user.sub, ou
+// getClaims en repli dans la fenêtre post-magic-link) : une seule
+// transition null → id, connue avant tout chargement de profil — sans elle,
+// son propre journal s'afficherait d'abord sans liens puis basculerait
+// sous le doigt.
+const myUserId = currentUserId;
 const isSelfProfile = computed(() => userId.value === myUserId.value);
 
 // Chargement gated par l'identité du viewer (shouldReloadProfile) : à froid
@@ -64,9 +56,11 @@ const isSelfProfile = computed(() => userId.value === myUserId.value);
 // charge que sur transition réelle : premier passage identifié, résolution
 // de l'identité, changement de profil ou de compte — jamais deux fois pour
 // la même paire. isLoadingProfile (init true) reste affiché tant qu'aucun
-// chargement réel n'a tranché ; sans identité, la redirection /login du
-// module fournit l'état terminal. immediate : couvre le mount ET la
-// réutilisation du composant sur changement de param de route.
+// chargement réel n'a tranché ; sans session, la redirection /login du
+// module fournit l'état terminal ; avec session mais identité indisponible
+// (résolution en échec), c'est la branche d'erreur qui tranche (watcher plus
+// bas). immediate : couvre le mount ET la réutilisation du composant sur
+// changement de param de route.
 watch(
   [userId, myUserId],
   (current, previous) => {
@@ -84,6 +78,26 @@ watch(
   { immediate: true },
 );
 
+// Convergence sans identité : quand la résolution échoue sans identité
+// connue, le chargement n'aura pas lieu — on sort de l'état de chargement
+// pour laisser la branche d'erreur (Réessayer) s'afficher.
+watch(identityUnavailable, (unavailable) => {
+  if (unavailable) isLoadingProfile.value = false;
+});
+
+// Réessayer : identité indisponible → relancer seulement la résolution (si
+// elle aboutit, le watcher ci-dessus charge via shouldReloadProfile) ;
+// sinon c'est le bundle qui a échoué → le recharger. Jamais les deux.
+async function retryLoadProfile(): Promise<void> {
+  if (currentUserId.value === null) {
+    isLoadingProfile.value = true;
+    await identityStore.resolveForCurrentSession();
+    if (currentUserId.value === null) isLoadingProfile.value = false;
+    return;
+  }
+  await loadProfile(userId.value);
+}
+
 // Accès dérivés non-null-safe : permettent à vue-tsc de narrower dans le
 // template (v-if="profile") sans assertions, et fournissent stats/results à
 // leur état par défaut quand le bundle est absent.
@@ -94,12 +108,14 @@ const results = computed(() => currentProfileBundle.value?.results ?? []);
 // « Introuvable » recouvre deux causes, distinctes de l'état d'erreur :
 // un id malformé (tranché sans appel), ou un chargement effectif revenu
 // sans profil. Jamais pendant un chargement en cours, jamais sur une vraie
-// panne (qui garde son écran d'erreur et son bouton Réessayer).
+// panne — bundle en erreur ou identité indisponible — qui garde son écran
+// d'erreur et son bouton Réessayer.
 const profileIsNotFound = computed(
   () =>
     !profileIdIsValid.value ||
     (!isLoadingProfile.value &&
       lastLoadProfileBundleError.value === null &&
+      !identityUnavailable.value &&
       profile.value === null),
 );
 
@@ -178,7 +194,7 @@ useHead({
     </p>
 
     <div
-      v-else-if="lastLoadProfileBundleError"
+      v-else-if="lastLoadProfileBundleError || identityUnavailable"
       class="flex flex-col items-center gap-3 py-16 text-center"
     >
       <h2 class="font-disp text-[19px] font-extrabold text-(--pk-ink)">
@@ -191,7 +207,7 @@ useHead({
         color="primary"
         block
         class="mt-2 h-13 rounded-[13px] font-disp text-[15px] font-extrabold tracking-[0.02em] uppercase text-(--pk-cream)"
-        @click="loadProfile(userId)"
+        @click="retryLoadProfile"
       >
         Réessayer
       </UButton>

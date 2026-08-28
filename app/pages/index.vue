@@ -2,11 +2,10 @@
 // Pattern d'erreurs : les actions du store throw ; on attrape ici et on
 // affiche un toast via useErrorToast (voir composables/useErrorToast).
 //
-// Le déclenchement de loadTournaments() est piloté par le store via un
-// watch interne sur currentUserId — couvre boot, magic link et
-// changement de compte sans qu'on ait à le faire ici. La page n'a
-// qu'à observer hasFetchedTournaments / lastLoadTournamentsError et
-// fournir un retry manuel sur erreur.
+// L'identité est résolue au boot par le store identity (plugin). La page
+// tire ce qu'elle affiche — liste des tournois et profil courant — dès que
+// l'identité est connue (watcher ci-dessous), puis observe
+// hasFetchedTournaments / l'erreur affichée et fournit un retry manuel.
 //
 // Header (mode accueil) déclaré via useAppHeader et rendu une fois par le
 // layout. La déconnexion reste accessible via /account (pastille profil).
@@ -22,23 +21,46 @@ const {
 } = storeToRefs(tournamentStore);
 const profileStore = useProfileStore();
 const { profileById, currentProfile } = storeToRefs(profileStore);
+const identityStore = useIdentityStore();
+const { currentUserId, identityUnavailable, lastResolveError } =
+  storeToRefs(identityStore);
 const { showError } = useErrorToast();
 
-// Initiale de la pastille profil du header. Le pseudo est déjà hydraté par
-// l'orchestration d'auth du store tournoi (loadTournamentsForCurrentSession →
-// loadCurrentProfile du store profil, sur tout point d'entrée) — aucun fetch supplémentaire
-// ici. Pastille vide (valeur neutre) le temps du chargement.
+// Chargement gaté sur l'identité : liste des tournois + profil courant
+// (pastille du header). Les deux actions sont idempotentes et dédupliquent
+// leurs requêtes en vol ; `void` : fire-and-forget, elles ne throw pas.
+// immediate : couvre le boot (identité déjà connue ou non) et le changement
+// de compte.
+watch(
+  currentUserId,
+  (userId) => {
+    if (userId === null) return;
+    void tournamentStore.loadTournamentsForCurrentSession();
+    void profileStore.loadCurrentProfile();
+  },
+  { immediate: true },
+);
+
+// Erreur affichée par la branche d'erreur : échec du chargement des
+// tournois, ou identité indisponible (résolution en échec sans identité
+// connue — jamais une erreur d'identité par-dessus des données valides).
+const homeError = computed(
+  () =>
+    lastLoadTournamentsError.value ??
+    (identityUnavailable.value ? lastResolveError.value : null),
+);
+
+// Initiale de la pastille profil du header. Pastille vide (valeur neutre)
+// le temps du chargement du profil courant.
 const profileInitial = computed(() =>
   (currentProfile.value?.displayName ?? "").charAt(0).toUpperCase(),
 );
 
-const user = useSupabaseUser();
-
 // Pastille profil → MON profil public (sens de navigation inversé : le
-// compte s'atteint depuis le profil). user.sub d'abord (pattern repo),
-// currentProfile en secours au boot ; dernier recours : /account.
+// compte s'atteint depuis le profil). Identité canonique du store identity ;
+// dernier recours : /account.
 function goToMyProfile() {
-  const myUserId = user.value?.sub ?? currentProfile.value?.id;
+  const myUserId = currentUserId.value;
   void navigateTo(myUserId ? `/profile/${myUserId}` : "/account");
 }
 
@@ -62,9 +84,14 @@ async function retryLoadTournaments() {
   if (isRetrying.value) return;
   isRetrying.value = true;
   try {
-    // On rejoue l'orchestration identité+fetch : si l'erreur initiale
-    // venait de getClaims() (fallback magic-link), un retry direct sur
-    // loadTournaments partirait sans identité résolue.
+    // Identité indisponible (getClaims en échec) : on relance seulement la
+    // résolution — si elle aboutit, le watcher ci-dessus charge. Sinon
+    // l'identité est connue et c'est le chargement lui-même qui a échoué :
+    // on le relance. Jamais les deux, pour ne pas doubler les requêtes.
+    if (currentUserId.value === null) {
+      await identityStore.resolveForCurrentSession();
+      return;
+    }
     await tournamentStore.loadTournamentsForCurrentSession();
   } catch (error) {
     showError(error);
@@ -171,7 +198,7 @@ useHead({ title: "Pétankup — Gestion de tournois" });
 <template>
   <div>
     <div
-      v-if="lastLoadTournamentsError"
+      v-if="homeError"
       class="flex flex-col items-center gap-3 py-16 text-center"
     >
       <h2 class="font-disp text-[19px] font-extrabold text-(--pk-ink)">
