@@ -234,38 +234,67 @@ useHead({ title: "Pétankup — Gestion de tournois" });
         Aucun tournoi pour l'instant
       </p>
       <p class="font-sans text-sm text-(--pk-subtle)">
-        Créez votre premier tournoi de pétanque
+        Créez votre premier tournoi, ou notez une partie
       </p>
-      <UButton
-        to="/tournaments/new"
-        color="primary"
-        icon="i-lucide-plus"
-        block
-        class="mt-2 h-13 rounded-[13px] font-disp text-[15px] font-extrabold tracking-[0.02em] uppercase text-(--pk-cream)"
-        :ui="{ leadingIcon: 'size-4.5' }"
-      >
-        Créer un tournoi
-      </UButton>
+      <!-- Deux entrées de création, à hauteur tactile (h-13) : tournoi et
+           match libre. Mêmes boutons que sur l'accueil rempli. -->
+      <div class="mt-2 grid w-full grid-cols-2 gap-2.75">
+        <UButton
+          to="/tournaments/new"
+          color="primary"
+          icon="i-lucide-plus"
+          block
+          class="h-13 rounded-[13px] font-disp text-[13px] font-extrabold tracking-[0.02em] uppercase text-(--pk-cream)"
+          :ui="{ leadingIcon: 'size-4.5' }"
+        >
+          Nouveau tournoi
+        </UButton>
+        <UButton
+          to="/free-matches/new"
+          color="navy"
+          icon="i-lucide-swords"
+          block
+          class="h-13 rounded-[13px] font-disp text-[13px] font-extrabold tracking-[0.02em] uppercase"
+          :ui="{ leadingIcon: 'size-4.5' }"
+        >
+          Nouveau match
+        </UButton>
+      </div>
     </div>
 
     <div v-else class="space-y-6">
+      <!-- Deux entrées de création, à hauteur tactile (h-13) : tournoi et
+           match libre. Remplace le petit « Nouveau » de l'en-tête de section
+           (31 px, sous la cible tactile). -->
+      <div class="grid grid-cols-2 gap-2.75">
+        <UButton
+          to="/tournaments/new"
+          color="primary"
+          icon="i-lucide-plus"
+          block
+          class="h-13 rounded-[13px] font-disp text-[13px] font-extrabold tracking-[0.02em] uppercase text-(--pk-cream)"
+          :ui="{ leadingIcon: 'size-4.5' }"
+        >
+          Nouveau tournoi
+        </UButton>
+        <UButton
+          to="/free-matches/new"
+          color="navy"
+          icon="i-lucide-swords"
+          block
+          class="h-13 rounded-[13px] font-disp text-[13px] font-extrabold tracking-[0.02em] uppercase"
+          :ui="{ leadingIcon: 'size-4.5' }"
+        >
+          Nouveau match
+        </UButton>
+      </div>
+
       <section>
-        <div class="mb-3 flex items-center justify-between">
-          <h2
-            class="font-disp text-[11px] font-extrabold tracking-[0.14em] uppercase text-(--pk-subtle)"
-          >
-            Tous les tournois
-          </h2>
-          <UButton
-            to="/tournaments/new"
-            color="navy"
-            icon="i-lucide-plus"
-            class="h-7.75 gap-1.5 rounded-[10px] px-3.25 font-disp text-xs font-extrabold tracking-[0.04em] uppercase"
-            :ui="{ leadingIcon: 'size-3.75' }"
-          >
-            Nouveau
-          </UButton>
-        </div>
+        <h2
+          class="mb-3 font-disp text-[11px] font-extrabold tracking-[0.14em] uppercase text-(--pk-subtle)"
+        >
+          Tous les tournois
+        </h2>
         <ul v-if="!mineEmpty" class="space-y-2.75">
           <li
             v-for="tournament in sortedMyTournaments"

@@ -1,5 +1,21 @@
 import type { Database } from '../types/database.types'
-import type { TournamentMatch, Profile, Team, TeamPlayer, Teammate, Tournament, TournamentMember, UserProfileBundle, UserStats, UserTournamentResult } from '../types'
+import type {
+  AccountMatch,
+  CreateFreeMatchInput,
+  FreeMatch,
+  FreeMatchPlayer,
+  Profile,
+  Team,
+  TeamPlayer,
+  Teammate,
+  Tournament,
+  TournamentMatch,
+  TournamentMember,
+  UserProfileBundle,
+  UserStats,
+  UserTournamentResult,
+} from '../types'
+import { sortFreeMatchPlayers } from '../utils/free-match'
 
 // Traductions pures entre les rows Supabase (snake_case, nullables stricts)
 // et les types domaine (camelCase, optionnels via `?`). Aucune logique
@@ -19,6 +35,19 @@ type MatchInsert = Database['public']['Tables']['tournament_matches']['Insert']
 type MatchUpdate = Database['public']['Tables']['tournament_matches']['Update']
 type TournamentMemberRow = Database['public']['Tables']['tournament_members']['Row']
 type ProfileRow = Database['public']['Tables']['profiles']['Row']
+type FreeMatchRow = Database['public']['Tables']['free_matches']['Row']
+type FreeMatchPlayerRow = Database['public']['Tables']['free_match_players']['Row']
+// free_matches est toujours lu avec ses joueurs embarqués
+// (select '*, free_match_players(*)'), comme teams avec team_players.
+export type FreeMatchRowWithPlayers = FreeMatchRow & { free_match_players: FreeMatchPlayerRow[] }
+type AccountLookupRow = Database['public']['Functions']['find_account_by_display_name']['Returns'][number]
+type CreateFreeMatchRpcArgs = Database['public']['Functions']['create_free_match']['Args']
+// La RPC accepte p_played_on NULL (coalesce vers la date de Paris), mais le
+// générateur de types ignore la nullabilité des arguments de fonction et
+// déclare `string`. Le payload porte la vraie forme ; le repository recadre
+// au moment de l'appel (cast ciblé, documenté sur place).
+export type CreateFreeMatchRpcPayload
+  = Omit<CreateFreeMatchRpcArgs, 'p_played_on'> & { p_played_on: string | null }
 
 // --- Tournament ---
 
@@ -281,5 +310,63 @@ export function mapUserProfileBundleJsonToDomain(
     profile: raw.profile === null ? null : mapProfileRowToDomain(raw.profile),
     stats: raw.stats === null ? null : mapUserStatsJsonToDomain(raw.stats),
     results: (raw.results ?? []).map(mapUserTournamentResultJsonToDomain),
+  }
+}
+
+// --- FreeMatch ---
+// Pas de mapper Domain → Insert : l'écriture passe exclusivement par la RPC
+// create_free_match (match + joueurs atomiques, snapshot des pseudos côté
+// DB). La lecture se fait toujours avec l'embed free_match_players(*).
+
+export function mapFreeMatchPlayerRowToDomain(row: FreeMatchPlayerRow): FreeMatchPlayer {
+  return {
+    id: row.id,
+    matchId: row.match_id,
+    side: row.side,
+    userId: row.user_id,
+    displayNameSnapshot: row.display_name,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+// Les joueurs sont triés ici (ordre déterministe, cf. sortFreeMatchPlayers) :
+// la base ne conserve pas d'ordre de saisie, l'ordre fait partie de la
+// forme domaine.
+export function mapFreeMatchRowToDomain(row: FreeMatchRowWithPlayers): FreeMatch {
+  return {
+    id: row.id,
+    createdBy: row.created_by,
+    playedOn: row.played_on,
+    scoreA: row.score_a,
+    scoreB: row.score_b,
+    visibility: row.visibility,
+    players: sortFreeMatchPlayers(row.free_match_players.map(mapFreeMatchPlayerRowToDomain)),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+export function mapAccountMatchRowToDomain(row: AccountLookupRow): AccountMatch {
+  return {
+    userId: row.user_id,
+    displayName: row.display_name,
+  }
+}
+
+// Domain → arguments de la RPC create_free_match (snake_case côté DB).
+export function mapCreateFreeMatchInputToRpcPayload(
+  input: CreateFreeMatchInput,
+): CreateFreeMatchRpcPayload {
+  return {
+    p_played_on: input.playedOn,
+    p_visibility: input.visibility,
+    p_score_a: input.scoreA,
+    p_score_b: input.scoreB,
+    p_players: input.players.map(player => ({
+      side: player.side,
+      user_id: player.userId,
+      display_name: player.displayName,
+    })),
   }
 }

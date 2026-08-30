@@ -44,6 +44,11 @@ const props = withDefaults(
      * source de vérité de la valeur.
      */
     editable?: boolean;
+    /**
+     * Libellé du CTA de validation (mode saisie). Défaut = tournoi ; le match
+     * libre l'emploie pour « ENREGISTRER LE MATCH » (même bloc, même geste).
+     */
+    validateLabel?: string;
   }>(),
   {
     leadingSide: null,
@@ -54,6 +59,7 @@ const props = withDefaults(
     validateLoading: false,
     canScore: true,
     editable: false,
+    validateLabel: "VALIDER LE SCORE",
   },
 );
 
@@ -208,7 +214,7 @@ const isPlayed = computed(() => props.scoreA !== null && props.scoreB !== null);
       :ui="{ leadingIcon: 'size-4.5' }"
       @click="emit('validate')"
     >
-      VALIDER LE SCORE
+      {{ validateLabel }}
     </UButton>
   </div>
 

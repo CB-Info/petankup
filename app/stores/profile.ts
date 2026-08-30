@@ -3,7 +3,7 @@ import { ref, watch } from 'vue'
 import { createRepository } from '../repositories'
 import type { TournamentRepository } from '../repositories'
 import type { Database } from '../types/database.types'
-import type { Profile, UserProfileBundle } from '../types'
+import type { AccountMatch, Profile, UserProfileBundle } from '../types'
 import { useIdentityStore } from './identity'
 
 // Domaine profil : profil du user authentifié, cache des profils visibles,
@@ -201,6 +201,19 @@ export const useProfileStore = defineStore('profile', () => {
     return updated
   }
 
+  // Recherche le compte portant EXACTEMENT ce pseudo (RPC
+  // find_account_by_display_name : égalité sur lower(trim), 0 ou 1 compte).
+  // Retourne null si aucun compte ne le porte — cas nominal (joueur libre),
+  // pas une erreur. THROW sur erreur (réseau, RPC) : l'UI affiche un toast.
+  // Pas de cache ici : l'appelant (saisie d'un joueur de match libre)
+  // mémorise par slot. Le résultat n'est pas un Profile complet (pas de
+  // dates), profileById n'est donc pas alimenté.
+  async function findAccountByDisplayName(displayName: string): Promise<AccountMatch | null> {
+    identityStore.requireAuthenticatedUserId()
+    const account = await repository.findAccountByDisplayName(displayName)
+    return account ?? null
+  }
+
   // Compteur monotone pour invalider les réponses tardives de
   // loadUserProfile en cas de loads concurrents (navigation rapide entre
   // deux profils). Pattern identique à lastLoadTournamentRequestId.
@@ -291,6 +304,7 @@ export const useProfileStore = defineStore('profile', () => {
     loadCurrentProfile,
     loadProfilesByIds,
     updateMyProfile,
+    findAccountByDisplayName,
     loadUserProfile,
   }
 })
