@@ -10,10 +10,81 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.17"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
+      free_match_players: {
+        Row: {
+          created_at: string
+          display_name: string
+          id: string
+          match_id: string
+          side: Database["public"]["Enums"]["free_match_side"]
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          display_name: string
+          id?: string
+          match_id: string
+          side: Database["public"]["Enums"]["free_match_side"]
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          display_name?: string
+          id?: string
+          match_id?: string
+          side?: Database["public"]["Enums"]["free_match_side"]
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "free_match_players_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "free_matches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      free_matches: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          played_on: string
+          score_a: number
+          score_b: number
+          updated_at: string
+          visibility: Database["public"]["Enums"]["free_match_visibility"]
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          played_on?: string
+          score_a: number
+          score_b: number
+          updated_at?: string
+          visibility?: Database["public"]["Enums"]["free_match_visibility"]
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          played_on?: string
+          score_a?: number
+          score_b?: number
+          updated_at?: string
+          visibility?: Database["public"]["Enums"]["free_match_visibility"]
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -256,6 +327,36 @@ export type Database = {
         }
         Relationships: []
       }
+      user_free_match_stats: {
+        Row: {
+          last_updated: string
+          losses: number
+          matches_played: number
+          points_conceded: number
+          points_scored: number
+          user_id: string
+          wins: number
+        }
+        Insert: {
+          last_updated?: string
+          losses?: number
+          matches_played?: number
+          points_conceded?: number
+          points_scored?: number
+          user_id: string
+          wins?: number
+        }
+        Update: {
+          last_updated?: string
+          losses?: number
+          matches_played?: number
+          points_conceded?: number
+          points_scored?: number
+          user_id?: string
+          wins?: number
+        }
+        Relationships: []
+      }
       user_stats: {
         Row: {
           last_tournament_at: string | null
@@ -360,9 +461,26 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_free_match: {
+        Args: {
+          p_played_on: string
+          p_players: Json
+          p_score_a: number
+          p_score_b: number
+          p_visibility: Database["public"]["Enums"]["free_match_visibility"]
+        }
+        Returns: string
+      }
       create_team_with_players: {
         Args: { p_name: string; p_players: Json; p_tournament_id: string }
         Returns: string
+      }
+      find_account_by_display_name: {
+        Args: { p_display_name: string }
+        Returns: {
+          display_name: string
+          user_id: string
+        }[]
       }
       get_user_profile: { Args: { p_user_id: string }; Returns: Json }
       invite_tournament_member_by_display_name: {
@@ -396,6 +514,8 @@ export type Database = {
       }
     }
     Enums: {
+      free_match_side: "A" | "B"
+      free_match_visibility: "private" | "public"
       match_status: "pending" | "completed"
       tournament_format: "round_robin"
       tournament_status: "draft" | "in_progress" | "completed"
@@ -527,6 +647,8 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      free_match_side: ["A", "B"],
+      free_match_visibility: ["private", "public"],
       match_status: ["pending", "completed"],
       tournament_format: ["round_robin"],
       tournament_status: ["draft", "in_progress", "completed"],
