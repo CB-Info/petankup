@@ -55,10 +55,11 @@ _À réexaminer au démarrage : le découpage du store (cf. dettes)._
 
 Onboarding pour des utilisateurs qui ne se connaissent pas · confidentialité par défaut re-validée + conformité RGPD · modération minimale · robustesse, quotas et coûts · internationalisation. Peu de schéma, forte exposition — cet horizon aura sa **propre phase de cadrage** avant lancement.
 
-**Deux points à re-trancher ici :**
+**Trois points à re-trancher ici :**
 
 - Les statistiques de matchs libres sont **auto-déclarées** (pas de confirmation de l'adversaire — décision D4 de la spec). Acceptable en cercle restreint, à revoir à l'ouverture.
 - **Visibilité des profils** : un visiteur voit aujourd'hui les **noms** des tournois privés d'autrui dans leur journal, ainsi que les coéquipiers de parties auxquelles il n'a pas participé. Décision antérieure assumée, à re-trancher pour un public d'inconnus.
+- **Recherche de compte par pseudo exact** (`find_account_by_display_name`, prérequis de H2.b) : un utilisateur authentifié peut tester des pseudos un par un pour découvrir lesquels existent — énumération lente et laborieuse, sans listage possible. Accepté en cercle restreint ; à re-trancher à l'ouverture : limitation de débit, ou liste d'amis qui rend la recherche inutile.
 
 ## Horizon 4 — Clubs & associations
 
