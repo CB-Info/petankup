@@ -6,10 +6,11 @@
 // coche corail sur l'option active). `indicator="hidden"` masque le point
 // radio natif : la coche est l'unique indicateur de sélection.
 //
-// La disposition interne est couplée à `columns` (2 → verticale : pastille
-// au-dessus du titre ; 1 → horizontale : pastille · texte · coche) car les
-// deux cas actuels tombent ainsi. Si un jour une carte pleine largeur doit
-// être verticale, découpler via une prop `layout` dédiée.
+// La disposition interne est couplée à `columns` (2 ou 3 → verticale :
+// pastille au-dessus du titre ; 1 → horizontale : pastille · texte · coche)
+// car les cas actuels tombent ainsi. Si un jour une carte pleine largeur
+// doit être verticale, découpler via une prop `layout` dédiée. À 3 colonnes
+// (format du match libre) le titre est réduit pour tenir sur une ligne.
 
 type CarteSelectionOption = {
   value: string;
@@ -22,8 +23,11 @@ const props = withDefaults(
   defineProps<{
     options: CarteSelectionOption[];
     name?: string;
-    /** 2 = cartes côte à côte (Visibilité), 1 = pleine largeur (Format). */
-    columns?: 1 | 2;
+    /**
+     * 2 = cartes côte à côte (Visibilité), 1 = pleine largeur (Format de
+     * tournoi), 3 = trois cartes serrées (Format du match libre).
+     */
+    columns?: 1 | 2 | 3;
   }>(),
   {
     name: undefined,
@@ -47,10 +51,16 @@ const radioItems = computed(() =>
   })),
 );
 
-const fieldsetClass = computed(() =>
-  props.columns === 2
-    ? "grid w-full grid-cols-2 gap-2.75"
-    : "flex w-full flex-col gap-2.75",
+const FIELDSET_CLASS_BY_COLUMNS: Record<1 | 2 | 3, string> = {
+  1: "flex w-full flex-col gap-2.75",
+  2: "grid w-full grid-cols-2 gap-2.75",
+  3: "grid w-full grid-cols-3 gap-2.75",
+};
+
+const fieldsetClass = computed(() => FIELDSET_CLASS_BY_COLUMNS[props.columns]);
+
+const labelSizeClass = computed(() =>
+  props.columns === 3 ? "text-[13.5px]" : "text-[15px]",
 );
 </script>
 
@@ -90,10 +100,11 @@ const fieldsetClass = computed(() =>
 
         <span class="min-w-0" :class="isHorizontal ? 'flex-1' : ''">
           <span
-            class="block font-disp text-[15px] font-extrabold"
-            :class="
-              item.value === modelValue ? 'text-primary' : 'text-(--pk-ink)'
-            "
+            class="block font-disp font-extrabold"
+            :class="[
+              labelSizeClass,
+              item.value === modelValue ? 'text-primary' : 'text-(--pk-ink)',
+            ]"
           >
             {{ item.label }}
           </span>

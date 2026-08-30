@@ -1,0 +1,179 @@
+import type {
+  FreeMatchFormat,
+  FreeMatchPlayer,
+  FreeMatchSide,
+  ScoreValidationResult,
+} from '../types'
+
+// Logique pure du match libre : formats, slots du formulaire de création,
+// règle de score stricte, camp en tête, ordre d'affichage des joueurs.
+// Aucun side effect, aucune date interne.
+
+// --- Formats ---
+
+export const FREE_MATCH_FORMATS: readonly FreeMatchFormat[] = [
+  'tete_a_tete',
+  'doublette',
+  'triplette',
+]
+
+const PLAYERS_PER_SIDE_BY_FORMAT: Record<FreeMatchFormat, number> = {
+  tete_a_tete: 1,
+  doublette: 2,
+  triplette: 3,
+}
+
+export const FREE_MATCH_FORMAT_LABELS: Record<FreeMatchFormat, string> = {
+  tete_a_tete: 'Tête-à-tête',
+  doublette: 'Doublette',
+  triplette: 'Triplette',
+}
+
+export function playersPerSide(format: FreeMatchFormat): number {
+  return PLAYERS_PER_SIDE_BY_FORMAT[format]
+}
+
+export function playersOnSide(
+  players: FreeMatchPlayer[],
+  side: FreeMatchSide,
+): FreeMatchPlayer[] {
+  return players.filter(player => player.side === side)
+}
+
+// Format d'un match enregistré, déduit de l'effectif du camp A (la base
+// garantit des camps équilibrés). null si l'effectif ne correspond à aucun
+// format — impossible depuis la base, gardé pour ne pas mentir au typage.
+export function freeMatchFormatOf(players: FreeMatchPlayer[]): FreeMatchFormat | null {
+  const sideACount = playersOnSide(players, 'A').length
+  const matchingFormat = FREE_MATCH_FORMATS.find(
+    format => playersPerSide(format) === sideACount,
+  )
+  return matchingFormat ?? null
+}
+
+// --- Slots du formulaire de création ---
+
+// Un slot = un joueur à renseigner : lié à un compte (userId non-null, pseudo
+// canonique) ou libre (userId null, nom saisi). Même modèle que les slots
+// d'équipe (TeamFormModal), sans liste d'invités où piocher.
+export type FreeMatchSlot = { userId: string | null, displayName: string }
+
+export function emptySlot(): FreeMatchSlot {
+  return { userId: null, displayName: '' }
+}
+
+export function isSlotFilled(slot: FreeMatchSlot): boolean {
+  return slot.userId !== null || slot.displayName.trim() !== ''
+}
+
+export type ResizeSideResult = {
+  slots: FreeMatchSlot[]
+  droppedFilledCount: number
+}
+
+// Changement de format : le camp garde ses joueurs renseignés dans l'ordre,
+// tronqués à la nouvelle taille et complétés de slots vides. Les slots vides
+// intercalés ne comptent pas — on ne perd un joueur que si le camp rétrécit
+// sous son nombre de joueurs renseignés (droppedFilledCount > 0, que l'écran
+// signale).
+export function resizeSide(
+  slots: FreeMatchSlot[],
+  targetSize: number,
+): ResizeSideResult {
+  const filledSlots = slots.filter(isSlotFilled)
+  const keptSlots = filledSlots.slice(0, targetSize)
+  const droppedFilledCount = filledSlots.length - keptSlots.length
+  const paddedSlots = [...keptSlots]
+  while (paddedSlots.length < targetSize) {
+    paddedSlots.push(emptySlot())
+  }
+  return { slots: paddedSlots, droppedFilledCount }
+}
+
+// Disposition des slots autour du créateur. Le créateur n'occupe pas de slot
+// (ligne verrouillée à l'écran) : son camp a donc UN slot de moins que
+// l'autre, pour un effectif total identique des deux côtés.
+export type FreeMatchSidesLayout = {
+  creatorSide: FreeMatchSide
+  sideA: FreeMatchSlot[]
+  sideB: FreeMatchSlot[]
+}
+
+// Déplace le créateur dans l'autre camp sans perdre personne : le premier
+// slot du camp d'arrivée passe en tête du camp quitté, pour que chaque camp
+// garde son effectif. Retourne la disposition inchangée si le créateur y
+// est déjà.
+export function moveCreatorToSide(
+  layout: FreeMatchSidesLayout,
+  targetSide: FreeMatchSide,
+): FreeMatchSidesLayout {
+  if (layout.creatorSide === targetSide) return layout
+
+  const leavingSideSlots = layout.creatorSide === 'A' ? layout.sideA : layout.sideB
+  const arrivingSideSlots = targetSide === 'A' ? layout.sideA : layout.sideB
+  const [firstArrivingSlot, ...remainingArrivingSlots] = arrivingSideSlots
+  const slotHandedOver = firstArrivingSlot ?? emptySlot()
+
+  const newLeavingSideSlots = [slotHandedOver, ...leavingSideSlots]
+  const newArrivingSideSlots = remainingArrivingSlots
+
+  if (targetSide === 'A') {
+    return { creatorSide: 'A', sideA: newArrivingSideSlots, sideB: newLeavingSideSlots }
+  }
+  return { creatorSide: 'B', sideA: newLeavingSideSlots, sideB: newArrivingSideSlots }
+}
+
+// --- Score ---
+
+// Un match de pétanque se joue en 13 points : un score ne dépasse jamais 13.
+export const FREE_MATCH_MAX_SCORE = 13
+
+// Règle stricte du match libre (plus stricte que celle des tournois, qui
+// accepte « au moins 13 ») : le vainqueur a EXACTEMENT 13, le perdant de 0
+// à 12 — ce que garantissent ensemble « pas d'égalité » et « le plus haut
+// vaut 13 ». Miroir des CHECK de la table free_matches.
+export function validateFreeMatchScore(
+  scoreA: number,
+  scoreB: number,
+): ScoreValidationResult {
+  const bothAreNonNegativeIntegers
+    = Number.isInteger(scoreA)
+      && Number.isInteger(scoreB)
+      && scoreA >= 0
+      && scoreB >= 0
+  if (!bothAreNonNegativeIntegers) {
+    return { valid: false, error: 'Les scores doivent être des entiers positifs ou nuls.' }
+  }
+  if (scoreA === scoreB) {
+    return { valid: false, error: 'Pas de match nul à la pétanque.' }
+  }
+  if (Math.max(scoreA, scoreB) !== FREE_MATCH_MAX_SCORE) {
+    return { valid: false, error: 'Le vainqueur doit avoir exactement 13 points.' }
+  }
+  return { valid: true }
+}
+
+// Camp en tête pendant la saisie ; null à égalité.
+export function leadingSideOf(scoreA: number, scoreB: number): FreeMatchSide | null {
+  if (scoreA === scoreB) return null
+  return scoreA > scoreB ? 'A' : 'B'
+}
+
+// Vainqueur d'un match enregistré (scores finaux, jamais égaux en base) —
+// même règle que le camp en tête, nommée pour l'intention.
+export function winnerSideOf(scoreA: number, scoreB: number): FreeMatchSide | null {
+  return leadingSideOf(scoreA, scoreB)
+}
+
+// --- Affichage ---
+
+// L'ordre des joueurs d'un camp n'est pas reconstituable depuis la base
+// (même created_at) : tri déterministe par pseudo figé (locale française),
+// id en départage pour rester stable entre deux chargements.
+export function sortFreeMatchPlayers(players: FreeMatchPlayer[]): FreeMatchPlayer[] {
+  return [...players].sort(
+    (firstPlayer, secondPlayer) =>
+      firstPlayer.displayNameSnapshot.localeCompare(secondPlayer.displayNameSnapshot, 'fr')
+      || firstPlayer.id.localeCompare(secondPlayer.id),
+  )
+}

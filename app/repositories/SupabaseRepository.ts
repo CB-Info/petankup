@@ -1,17 +1,24 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '../types/database.types'
 import type {
+  AccountMatch,
+  CreateFreeMatchInput,
+  FreeMatch,
   InviteMemberErrorCode,
-  TournamentMatch,
   Profile,
   Team,
   Tournament,
+  TournamentMatch,
   TournamentMember,
   UserProfileBundle,
 } from '../types'
-import { InviteMemberError, ProfileError } from '../types'
+import { FreeMatchError, InviteMemberError, ProfileError } from '../types'
+import { parseFreeMatchErrorCode } from '../utils/free-match-errors'
 import type { TournamentRepository } from './TournamentRepository'
 import {
+  mapAccountMatchRowToDomain,
+  mapCreateFreeMatchInputToRpcPayload,
+  mapFreeMatchRowToDomain,
   mapMatchDomainToInsert,
   mapMatchDomainToUpdate,
   mapMatchRowToDomain,
@@ -71,6 +78,9 @@ function mapPlayersToRpcPayload(
 //   - updateMyProfile : ProfileError('display_name_taken') sur conflit 23505
 //     vérifié par code Postgres ET nom de l'index unique ; Error standard
 //     pour les autres erreurs (réseau, RLS, etc.).
+//   - createFreeMatch : FreeMatchError typée, mappée depuis les raise
+//     exception SQL par parseFreeMatchErrorCode (égalité stricte du message,
+//     cf. utils/free-match-errors). La page dispatch via instanceof + code.
 // Le store gère le toggle isLoading dans tous les cas.
 export class SupabaseRepository implements TournamentRepository {
   constructor(private readonly client: SupabaseClient<Database>) {}
@@ -325,5 +335,52 @@ export class SupabaseRepository implements TournamentRepository {
     // classe d'erreur typée (cf. décision Phase J) : 'not_authenticated'
     // remonte tel quel dans le message de l'Error standard.
     return mapUserProfileBundleJsonToDomain(data as RawUserProfileBundleJson)
+  }
+
+  // --- Free matches ---
+
+  async getFreeMatchById(id: string): Promise<FreeMatch | undefined> {
+    const { data, error } = await this.client
+      .from('free_matches')
+      .select('*, free_match_players(*)')
+      .eq('id', id)
+      .maybeSingle()
+    if (error !== null) throw new Error(error.message)
+    if (data === null) return undefined
+    return mapFreeMatchRowToDomain(data)
+  }
+
+  async createFreeMatch(input: CreateFreeMatchInput): Promise<string> {
+    const payload = mapCreateFreeMatchInputToRpcPayload(input)
+    // Cast ciblé : le type généré déclare p_played_on: string alors que la
+    // RPC accepte NULL (« aujourd'hui » en date de Paris) — le générateur ne
+    // connaît pas la nullabilité des arguments de fonction. La vraie forme
+    // est celle de CreateFreeMatchRpcPayload.
+    const { data, error } = await this.client.rpc(
+      'create_free_match',
+      payload as Database['public']['Functions']['create_free_match']['Args'],
+    )
+    if (error !== null) {
+      throw new FreeMatchError(parseFreeMatchErrorCode(error.message))
+    }
+    if (typeof data !== 'string') throw new FreeMatchError('unknown')
+    return data
+  }
+
+  async deleteFreeMatch(id: string): Promise<void> {
+    const { error } = await this.client
+      .from('free_matches')
+      .delete()
+      .eq('id', id)
+    if (error !== null) throw new Error(error.message)
+  }
+
+  async findAccountByDisplayName(displayName: string): Promise<AccountMatch | undefined> {
+    const { data, error } = await this.client.rpc('find_account_by_display_name', {
+      p_display_name: displayName,
+    })
+    if (error !== null) throw new Error(error.message)
+    const firstRow = (data ?? [])[0]
+    return firstRow === undefined ? undefined : mapAccountMatchRowToDomain(firstRow)
   }
 }

@@ -1,4 +1,14 @@
-import type { TournamentMatch, Profile, Team, Tournament, TournamentMember, UserProfileBundle } from '../types'
+import type {
+  AccountMatch,
+  CreateFreeMatchInput,
+  FreeMatch,
+  Profile,
+  Team,
+  Tournament,
+  TournamentMatch,
+  TournamentMember,
+  UserProfileBundle,
+} from '../types'
 
 // Contrat de persistance pour le domaine pétanque. Toutes les méthodes
 // sont asynchrones — l'implémentation actuelle (SupabaseRepository) fait
@@ -72,4 +82,18 @@ export interface TournamentRepository {
   // résolue ; remontée en Error standard (pas de classe typée, cf.
   // décision Phase J).
   getUserProfile(userId: string): Promise<UserProfileBundle>
+
+  // Matchs libres (H2). Lecture avec les joueurs embarqués
+  // (free_match_players(*)) ; getFreeMatchById retourne undefined si le
+  // match n'est pas visible via RLS (maybeSingle), distingué d'une erreur
+  // réseau. L'écriture passe EXCLUSIVEMENT par la RPC create_free_match
+  // (match + joueurs atomiques, snapshot des pseudos côté DB, règles typées
+  // remontées en FreeMatchError) et retourne l'id créé. deleteFreeMatch :
+  // DELETE ciblé ; 0 ligne (non créateur, déjà supprimé) reste silencieux,
+  // miroir de deleteTournament. findAccountByDisplayName : RPC d'égalité
+  // exacte sur le pseudo, 0 ou 1 compte — undefined si aucun.
+  getFreeMatchById(id: string): Promise<FreeMatch | undefined>
+  createFreeMatch(input: CreateFreeMatchInput): Promise<string>
+  deleteFreeMatch(id: string): Promise<void>
+  findAccountByDisplayName(displayName: string): Promise<AccountMatch | undefined>
 }

@@ -161,3 +161,88 @@ export interface UserProfileBundle {
   // l'ordre est à conserver tel quel.
   results: UserTournamentResult[];
 }
+
+// --- Match libre (H2) ---
+// Une partie hors tournoi, notée après coup : deux camps A / B de même
+// effectif (1 à 3 joueurs), un score final strict (vainqueur à 13 exactement,
+// perdant de 0 à 12), une date et une visibilité. Créée par la RPC
+// create_free_match, jamais modifiée ensuite (aucun UPDATE côté base) ;
+// supprimable par son créateur seul.
+
+export type FreeMatchSide = "A" | "B";
+export type FreeMatchVisibility = "private" | "public";
+// Le format n'est pas stocké : il se déduit de l'effectif par camp (1 / 2 / 3).
+export type FreeMatchFormat = "tete_a_tete" | "doublette" | "triplette";
+
+export interface FreeMatchPlayer {
+  id: string;
+  matchId: string;
+  side: FreeMatchSide;
+  // null = joueur libre, ou compte supprimé depuis (SET NULL côté base).
+  userId: string | null;
+  // Pseudo figé à l'enregistrement (cf. TeamPlayer.displayNameSnapshot).
+  displayNameSnapshot: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FreeMatch {
+  id: string;
+  // null si le compte du créateur a été supprimé (SET NULL côté base).
+  createdBy: string | null;
+  playedOn: string; // ISO date (YYYY-MM-DD)
+  scoreA: number;
+  scoreB: number;
+  visibility: FreeMatchVisibility;
+  players: FreeMatchPlayer[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Résultat de la recherche d'un compte par pseudo exact
+// (find_account_by_display_name) : le pseudo renvoyé est la forme canonique
+// du profil (casse, espaces), pas la saisie.
+export interface AccountMatch {
+  userId: string;
+  displayName: string;
+}
+
+export interface CreateFreeMatchPlayerInput {
+  side: FreeMatchSide;
+  userId: string | null;
+  displayName: string;
+}
+
+export interface CreateFreeMatchInput {
+  // null = date non renseignée : la base applique « aujourd'hui » en date de
+  // Paris (cf. règle S11), sans dépendre du fuseau du navigateur.
+  playedOn: string | null;
+  visibility: FreeMatchVisibility;
+  scoreA: number;
+  scoreB: number;
+  players: CreateFreeMatchPlayerInput[];
+}
+
+// Codes levés par la RPC create_free_match (`raise exception '<code>'`), dans
+// l'ordre de vérification côté base. `unknown` couvre tout le reste (réseau,
+// RLS, contrainte non prévue) — jamais affiché tel quel.
+export type FreeMatchErrorCode =
+  | "not_authenticated"
+  | "invalid_players"
+  | "invalid_side"
+  | "invalid_display_name"
+  | "not_participant"
+  | "invalid_side_count"
+  | "unbalanced_sides"
+  | "duplicate_player"
+  | "invalid_score"
+  | "invalid_played_on"
+  | "player_user_not_found"
+  | "unknown";
+
+export class FreeMatchError extends Error {
+  constructor(public readonly code: FreeMatchErrorCode) {
+    super(code);
+    this.name = "FreeMatchError";
+  }
+}

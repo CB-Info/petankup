@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { flushPromises } from '@vue/test-utils'
 import type { TournamentRepository } from '../../app/repositories/TournamentRepository'
 import type {
+  AccountMatch,
   TournamentMatch,
   Profile,
   Team,
@@ -88,6 +89,7 @@ type ProfileMockRepository = TournamentRepository & {
   __getProfileByIdSpy: ReturnType<typeof vi.fn>
   __getProfilesByIdsSpy: ReturnType<typeof vi.fn>
   __updateMyProfileSpy: ReturnType<typeof vi.fn>
+  __findAccountByDisplayNameSpy: ReturnType<typeof vi.fn>
 }
 
 // Repo in-memory côté profiles + spies pour assertions d'appels.
@@ -100,6 +102,7 @@ function createMockRepository(overrides: Partial<{
   getProfileById: (id: string) => Promise<Profile | undefined>
   getProfilesByIds: (ids: string[]) => Promise<Profile[]>
   updateMyProfile: (userId: string, displayName: string) => Promise<Profile>
+  findAccountByDisplayName: (displayName: string) => Promise<AccountMatch | undefined>
   getAllTournaments: () => Promise<Tournament[]>
   getMyMemberships: (userId: string) => Promise<TournamentMember[]>
 }> = {}): ProfileMockRepository {
@@ -135,6 +138,19 @@ function createMockRepository(overrides: Partial<{
   const getProfilesByIdsSpy = vi.fn(overrides.getProfilesByIds ?? defaultGetProfilesByIds)
   const updateMyProfileSpy = vi.fn(overrides.updateMyProfile ?? defaultUpdateMyProfile)
 
+  // Recherche par pseudo exact : même normalisation que la base
+  // (lower(trim)) sur les profils in-memory.
+  const defaultFindAccountByDisplayName = async (
+    displayName: string,
+  ): Promise<AccountMatch | undefined> => {
+    const normalized = displayName.trim().toLowerCase()
+    const found = profiles.find(profile => profile.displayName.trim().toLowerCase() === normalized)
+    return found === undefined ? undefined : { userId: found.id, displayName: found.displayName }
+  }
+  const findAccountByDisplayNameSpy = vi.fn(
+    overrides.findAccountByDisplayName ?? defaultFindAccountByDisplayName,
+  )
+
   const repo: ProfileMockRepository = {
     // Tournament / team / match / member — no-op pour ces tests.
     getAllTournaments: overrides.getAllTournaments ?? (async () => []),
@@ -162,10 +178,12 @@ function createMockRepository(overrides: Partial<{
     getProfileById: getProfileByIdSpy,
     getProfilesByIds: getProfilesByIdsSpy,
     updateMyProfile: updateMyProfileSpy,
+    findAccountByDisplayName: findAccountByDisplayNameSpy,
     __profiles: profiles,
     __getProfileByIdSpy: getProfileByIdSpy,
     __getProfilesByIdsSpy: getProfilesByIdsSpy,
     __updateMyProfileSpy: updateMyProfileSpy,
+    __findAccountByDisplayNameSpy: findAccountByDisplayNameSpy,
   }
   return repo
 }
@@ -657,6 +675,63 @@ describe('useProfileStore — non-regression with tournaments loading', () => {
     await tournamentStore.loadTournamentsForCurrentSession()
 
     expect(tournamentStore.lastLoadTournamentsError).toBeNull()
+  })
+})
+
+describe('findAccountByDisplayName (H2.b)', () => {
+  it('returns the matching account with its canonical display name, passing the raw input through', async () => {
+    const repo = createMockRepository({
+      initialProfiles: [makeProfile({ id: OTHER_USER_ID, displayName: 'Bob' })],
+    })
+    mockRepositoryRef.current = repo
+    const store = useProfileStore()
+
+    const account = await store.findAccountByDisplayName('  bob ')
+
+    expect(account).toEqual({ userId: OTHER_USER_ID, displayName: 'Bob' })
+    expect(repo.__findAccountByDisplayNameSpy).toHaveBeenCalledWith('  bob ')
+  })
+
+  it('returns null when no account bears that display name (nominal, not an error)', async () => {
+    const store = useProfileStore()
+
+    expect(await store.findAccountByDisplayName('Personne')).toBeNull()
+  })
+
+  it('does not feed profileById (an AccountMatch is not a full Profile)', async () => {
+    mockRepositoryRef.current = createMockRepository({
+      initialProfiles: [makeProfile({ id: OTHER_USER_ID, displayName: 'Bob' })],
+    })
+    const store = useProfileStore()
+
+    await store.findAccountByDisplayName('Bob')
+
+    expect(store.profileById[OTHER_USER_ID]).toBeUndefined()
+  })
+
+  it('propagates repository errors to the caller', async () => {
+    mockRepositoryRef.current = createMockRepository({
+      findAccountByDisplayName: async () => {
+        throw new Error('lookup boom')
+      },
+    })
+    const store = useProfileStore()
+
+    await expect(store.findAccountByDisplayName('Bob')).rejects.toThrow('lookup boom')
+  })
+
+  it('throws without an authenticated identity and never calls the repository', async () => {
+    stubUserRef.value = null
+    stubClaimsSub.value = null
+    const repo = createMockRepository()
+    mockRepositoryRef.current = repo
+    const store = useProfileStore()
+    await flushPromises()
+
+    await expect(store.findAccountByDisplayName('Bob')).rejects.toThrow(
+      'Aucun utilisateur authentifié',
+    )
+    expect(repo.__findAccountByDisplayNameSpy).not.toHaveBeenCalled()
   })
 })
 
