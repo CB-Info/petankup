@@ -37,6 +37,34 @@ const matchId = computed(() => route.params.matchId as string);
 
 const matchIdIsValid = computed(() => isUuid(matchId.value));
 
+// Flèche retour contextuelle : « Profil » si on est arrivé depuis une
+// entrée du journal (origine mémorisée par la page profil, cf.
+// useBackOrigin), sinon « Accueil » — y compris depuis l'écran de
+// création (il n'écrit pas d'origine, décision documentée). Miroir de la
+// page tournoi : lecture dans un watch d'id dédié (l'origine n'attend pas
+// la résolution d'identité du watcher de chargement), clear du contexte
+// précédent sur changement de param, consommation à la sortie du contexte.
+const DEFAULT_BACK_LINK = { label: "Accueil", to: "/" };
+const { readOrigin, clearOrigin } = useBackOrigin();
+const headerBackLink = ref(DEFAULT_BACK_LINK);
+
+watch(
+  matchId,
+  (id, previousId) => {
+    if (previousId !== undefined) clearOrigin(`/free-matches/${previousId}`);
+    headerBackLink.value = readOrigin(`/free-matches/${id}`) ?? DEFAULT_BACK_LINK;
+  },
+  { immediate: true },
+);
+
+onBeforeRouteLeave((to) => {
+  // Base reconstruite à l'invocation (cf. page tournoi).
+  const matchBasePath = `/free-matches/${matchId.value}`;
+  if (!pathBelongsToContext(to.path, matchBasePath)) {
+    clearOrigin(matchBasePath);
+  }
+});
+
 const isLoadingDetail = ref(true);
 
 // Token local : seul le dernier chargement déclenché a le droit de remettre
@@ -214,7 +242,7 @@ watchEffect(() => {
   }
   setHeader({
     mode: "interne",
-    back: { label: "Accueil", to: "/" },
+    back: headerBackLink.value,
     kicker: "● Match libre",
     title: formatLabel.value,
     subtitle: headerSubtitle.value,

@@ -64,7 +64,7 @@ let loadDetailRequestId = 0;
 // sessionStorage), sinon « Accueil ». Toute origine absente, invalide ou
 // d'un autre tournoi retombe sur Accueil — jamais de flèche cassée.
 const DEFAULT_BACK_LINK = { label: "Accueil", to: "/" };
-const { readProfileOrigin, clearOrigin } = useTournamentOrigin();
+const { readOrigin, clearOrigin } = useBackOrigin();
 const headerBackLink = ref(DEFAULT_BACK_LINK);
 
 // L'entrée est consommée quand on quitte le CONTEXTE du tournoi (accueil,
@@ -74,8 +74,11 @@ const headerBackLink = ref(DEFAULT_BACK_LINK);
 // DESTINATION plutôt qu'onUnmounted. Un F5 ne déclenche aucune garde de
 // navigation → le retour contextuel survit au rechargement.
 onBeforeRouteLeave((to) => {
-  if (!pathBelongsToTournament(to.path, tournamentId.value)) {
-    clearOrigin(tournamentId.value);
+  // Base reconstruite à l'invocation : un changement de param A→B réutilise
+  // le composant sans re-setup, une valeur figée testerait la base de A.
+  const tournamentBasePath = `/tournaments/${tournamentId.value}`;
+  if (!pathBelongsToContext(to.path, tournamentBasePath)) {
+    clearOrigin(tournamentBasePath);
   }
 });
 
@@ -85,7 +88,7 @@ onBeforeRouteLeave((to) => {
 watch(
   tournamentId,
   async (id, previousId) => {
-    if (previousId !== undefined) clearOrigin(previousId);
+    if (previousId !== undefined) clearOrigin(`/tournaments/${previousId}`);
     // Id malformé : « Tournoi introuvable » immédiat, sans requête ni toast
     // (le cast uuid échouerait côté base — erreur technique présentée à
     // tort comme une panne, pour un id qui ne peut rien désigner). La
@@ -94,11 +97,7 @@ watch(
       isLoadingDetail.value = false;
       return;
     }
-    const profileOrigin = readProfileOrigin(id);
-    headerBackLink.value =
-      profileOrigin !== null
-        ? { label: "Profil", to: profileOrigin }
-        : DEFAULT_BACK_LINK;
+    headerBackLink.value = readOrigin(`/tournaments/${id}`) ?? DEFAULT_BACK_LINK;
 
     const requestId = ++loadDetailRequestId;
     isLoadingDetail.value = true;

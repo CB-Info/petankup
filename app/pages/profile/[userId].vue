@@ -173,18 +173,20 @@ function playerNamesFor(players: Teammate[]): string[] {
   );
 }
 
-// Mémorise l'origine AVANT la navigation vers le tournoi, pour que sa
-// flèche retour ramène ici (et survive à un F5, cf. useTournamentOrigin).
-// Ignoré si le clic ouvre un nouvel onglet (modificateur ou bouton non
-// principal) : sessionStorage n'y est pas partagé, écrire ne ferait que
-// polluer l'onglet courant d'une origine jamais consommée.
-const { rememberProfileOrigin } = useTournamentOrigin();
+// Mémorise l'origine AVANT la navigation vers un tournoi ou un match
+// libre, pour que sa flèche retour ramène ici (et survive à un F5, cf.
+// useBackOrigin). Un seul handler, sans domaine : la branche du journal
+// passe le chemin de base du contexte de destination. Ignoré si le clic
+// ouvre un nouvel onglet (modificateur ou bouton non principal) :
+// sessionStorage n'y est pas partagé, écrire ne ferait que polluer
+// l'onglet courant d'une origine jamais consommée.
+const { rememberOrigin } = useBackOrigin();
 
-function rememberJournalOrigin(event: MouseEvent, tournamentId: string): void {
+function rememberJournalOrigin(event: MouseEvent, contextBasePath: string): void {
   const opensOutsideThisTab =
     event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0;
   if (opensOutsideThisTab) return;
-  rememberProfileOrigin(tournamentId, `/profile/${userId.value}`);
+  rememberOrigin(contextBasePath, `/profile/${userId.value}`);
 }
 
 // Config header. watchEffect pour suivre le pseudo (arrive après le mount).
@@ -316,7 +318,12 @@ useHead({
                 v-if="entry.result.viewerCanOpen"
                 :to="`/tournaments/${entry.result.tournamentId}`"
                 class="block rounded-(--pk-r-card) transition-opacity hover:opacity-90 active:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                @click="rememberJournalOrigin($event, entry.result.tournamentId)"
+                @click="
+                rememberJournalOrigin(
+                  $event,
+                  `/tournaments/${entry.result.tournamentId}`,
+                )
+              "
               >
                 <ProfileJournalEntry
                   :result="entry.result"
@@ -335,6 +342,12 @@ useHead({
                 v-if="entry.freeMatch.viewerCanOpen"
                 :to="`/free-matches/${entry.freeMatch.matchId}`"
                 class="block rounded-(--pk-r-card) transition-opacity hover:opacity-90 active:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                @click="
+                  rememberJournalOrigin(
+                    $event,
+                    `/free-matches/${entry.freeMatch.matchId}`,
+                  )
+                "
               >
                 <ProfileFreeMatchEntry
                   :free-match="entry.freeMatch"
