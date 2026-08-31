@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '../../app/types/database.types'
-import type { Match, Team, Tournament, TournamentMember } from '../../app/types'
-import { InviteMemberError } from '../../app/types'
+import type { TournamentMatch, Tournament, TournamentMember, UserProfileBundle } from '../../app/types'
+import { InviteMemberError, ProfileError } from '../../app/types'
 import { SupabaseRepository } from '../../app/repositories/SupabaseRepository'
 
 // Mock du client Supabase. Le builder Supabase est un objet PromiseLike :
@@ -14,14 +14,20 @@ import { SupabaseRepository } from '../../app/repositories/SupabaseRepository'
 // toutes les méthodes sont des `vi.fn()` espionnables, et dont le `then`
 // résout au { data, error } passé en paramètre.
 
-type ChainResult = { data: unknown, error: { message: string } | null }
+type ChainResult = {
+  data: unknown
+  error: { message: string, code?: string } | null
+}
 
 type MockChain = {
   select: ReturnType<typeof vi.fn>
   eq: ReturnType<typeof vi.fn>
-  upsert: ReturnType<typeof vi.fn>
+  in: ReturnType<typeof vi.fn>
+  insert: ReturnType<typeof vi.fn>
   delete: ReturnType<typeof vi.fn>
+  update: ReturnType<typeof vi.fn>
   maybeSingle: ReturnType<typeof vi.fn>
+  single: ReturnType<typeof vi.fn>
   then: (onFulfilled: (value: ChainResult) => unknown) => unknown
 }
 
@@ -29,9 +35,12 @@ function makeChainWithResult(result: ChainResult): MockChain {
   const chain: Partial<MockChain> = {}
   chain.select = vi.fn(() => chain)
   chain.eq = vi.fn(() => chain)
-  chain.upsert = vi.fn(() => chain)
+  chain.in = vi.fn(() => chain)
+  chain.insert = vi.fn(() => chain)
   chain.delete = vi.fn(() => chain)
+  chain.update = vi.fn(() => chain)
   chain.maybeSingle = vi.fn(() => chain)
+  chain.single = vi.fn(() => chain)
   chain.then = onFulfilled => onFulfilled(result)
   return chain as MockChain
 }
@@ -61,6 +70,24 @@ function makeRepoWithRpcResult(result: ChainResult): {
   const from = vi.fn()
   const client = { from, rpc } as unknown as SupabaseClient<Database>
   return { repo: new SupabaseRepository(client), rpc }
+}
+
+// Helper pour les RPCs qui écrivent puis refetch (createTeam / updateTeam) :
+// rpc() résout vers rpcResult, et from() vers un chain résolvant chainResult.
+function makeRepoWithRpcAndChain(rpcResult: ChainResult, chainResult: ChainResult): {
+  repo: SupabaseRepository
+  rpc: ReturnType<typeof vi.fn>
+  from: ReturnType<typeof vi.fn>
+  chain: MockChain
+} {
+  const rpcThenable = {
+    then: (onFulfilled: (value: ChainResult) => unknown) => onFulfilled(rpcResult),
+  }
+  const rpc = vi.fn(() => rpcThenable)
+  const chain = makeChainWithResult(chainResult)
+  const from = vi.fn(() => chain)
+  const client = { from, rpc } as unknown as SupabaseClient<Database>
+  return { repo: new SupabaseRepository(client), rpc, from, chain }
 }
 
 const NOW = '2026-01-01T00:00:00.000Z'
@@ -113,25 +140,28 @@ function makeTournamentDomain(): Tournament {
   }
 }
 
+function makeTeamPlayerRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: '88888888-8888-4888-8888-888888888888',
+    team_id: TEAM_A_ID,
+    tournament_id: TOURNAMENT_ID,
+    user_id: null,
+    display_name: 'Alice',
+    created_at: NOW,
+    updated_at: NOW,
+    ...overrides,
+  }
+}
+
+// teams est toujours lu avec l'embed team_players(*).
 function makeTeamRow() {
   return {
     id: TEAM_A_ID,
     tournament_id: TOURNAMENT_ID,
     name: 'Les Boulistes',
-    players: ['Alice', 'Bob'],
     created_at: NOW,
     updated_at: NOW,
-  }
-}
-
-function makeTeamDomain(): Team {
-  return {
-    id: TEAM_A_ID,
-    tournamentId: TOURNAMENT_ID,
-    name: 'Les Boulistes',
-    players: ['Alice', 'Bob'],
-    createdAt: NOW,
-    updatedAt: NOW,
+    team_players: [makeTeamPlayerRow()],
   }
 }
 
@@ -151,7 +181,7 @@ function makeMatchRow() {
   }
 }
 
-function makeMatchDomain(): Match {
+function makeMatchDomain(): TournamentMatch {
   return {
     id: MATCH_ID,
     tournamentId: TOURNAMENT_ID,
@@ -224,15 +254,15 @@ describe('SupabaseRepository — getTournamentById', () => {
   })
 })
 
-describe('SupabaseRepository — saveTournament', () => {
-  it('upserts the tournament with the mapped Insert payload', async () => {
+describe('SupabaseRepository — createTournament', () => {
+  it('inserts the tournament with the mapped Insert payload', async () => {
     const chain = makeChainWithResult({ data: null, error: null })
     const { repo, from } = makeRepoWithChain(chain)
 
-    await repo.saveTournament(makeTournamentDomain())
+    await repo.createTournament(makeTournamentDomain())
 
     expect(from).toHaveBeenCalledWith('tournaments')
-    expect(chain.upsert).toHaveBeenCalledWith(
+    expect(chain.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         id: TOURNAMENT_ID,
         owner_id: OWNER_ID,
@@ -245,10 +275,42 @@ describe('SupabaseRepository — saveTournament', () => {
   })
 
   it('throws when Supabase returns an error', async () => {
-    const chain = makeChainWithResult({ data: null, error: { message: 'upsert failed' } })
+    const chain = makeChainWithResult({ data: null, error: { message: 'insert failed' } })
     const { repo } = makeRepoWithChain(chain)
 
-    await expect(repo.saveTournament(makeTournamentDomain())).rejects.toThrow('upsert failed')
+    await expect(repo.createTournament(makeTournamentDomain())).rejects.toThrow('insert failed')
+  })
+})
+
+describe('SupabaseRepository — updateTournament', () => {
+  it('updates only mutable columns and targets the row by id', async () => {
+    const chain = makeChainWithResult({ data: null, error: null })
+    const { repo, from } = makeRepoWithChain(chain)
+
+    await repo.updateTournament(makeTournamentDomain())
+
+    expect(from).toHaveBeenCalledWith('tournaments')
+    expect(chain.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Tournoi',
+        status: 'draft',
+        visibility: 'private',
+      }),
+    )
+    expect(chain.eq).toHaveBeenCalledWith('id', TOURNAMENT_ID)
+    // Colonnes immutables / pilotées par la DB jamais émises.
+    const updatePayload = chain.update.mock.calls[0]![0] as Record<string, unknown>
+    expect(updatePayload).not.toHaveProperty('id')
+    expect(updatePayload).not.toHaveProperty('owner_id')
+    expect(updatePayload).not.toHaveProperty('format')
+    expect(updatePayload).not.toHaveProperty('completed_at')
+  })
+
+  it('throws when Supabase returns an error', async () => {
+    const chain = makeChainWithResult({ data: null, error: { message: 'update failed' } })
+    const { repo } = makeRepoWithChain(chain)
+
+    await expect(repo.updateTournament(makeTournamentDomain())).rejects.toThrow('update failed')
   })
 })
 
@@ -282,10 +344,12 @@ describe('SupabaseRepository — getTeamsByTournament', () => {
     const teams = await repo.getTeamsByTournament(TOURNAMENT_ID)
 
     expect(from).toHaveBeenCalledWith('teams')
-    expect(chain.select).toHaveBeenCalledWith('*')
+    expect(chain.select).toHaveBeenCalledWith('*, team_players(*)')
     expect(chain.eq).toHaveBeenCalledWith('tournament_id', TOURNAMENT_ID)
     expect(teams).toHaveLength(1)
     expect(teams[0]!.tournamentId).toBe(TOURNAMENT_ID)
+    expect(teams[0]!.players).toHaveLength(1)
+    expect(teams[0]!.players[0]!.displayNameSnapshot).toBe('Alice')
   })
 
   it('throws when Supabase returns an error', async () => {
@@ -296,27 +360,87 @@ describe('SupabaseRepository — getTeamsByTournament', () => {
   })
 })
 
-describe('SupabaseRepository — saveTeam', () => {
-  it('upserts the team with the mapped Insert payload', async () => {
-    const chain = makeChainWithResult({ data: null, error: null })
-    const { repo, from } = makeRepoWithChain(chain)
+describe('SupabaseRepository — createTeam', () => {
+  it('calls the RPC with mapped players and refetches the full team', async () => {
+    const { repo, rpc, from, chain } = makeRepoWithRpcAndChain(
+      { data: TEAM_A_ID, error: null },
+      { data: makeTeamRow(), error: null },
+    )
 
-    await repo.saveTeam(makeTeamDomain())
+    const team = await repo.createTeam(TOURNAMENT_ID, 'Les Boulistes', [
+      { userId: null, displayName: 'Alice' },
+      { userId: INVITEE_USER_ID, displayName: 'Bob' },
+    ])
 
-    expect(from).toHaveBeenCalledWith('teams')
-    expect(chain.upsert).toHaveBeenCalledWith({
-      id: TEAM_A_ID,
-      tournament_id: TOURNAMENT_ID,
-      name: 'Les Boulistes',
-      players: ['Alice', 'Bob'],
+    expect(rpc).toHaveBeenCalledWith('create_team_with_players', {
+      p_tournament_id: TOURNAMENT_ID,
+      p_name: 'Les Boulistes',
+      p_players: [
+        { user_id: null, display_name: 'Alice' },
+        { user_id: INVITEE_USER_ID, display_name: 'Bob' },
+      ],
     })
+    // Refetch ciblé de l'équipe complète.
+    expect(from).toHaveBeenCalledWith('teams')
+    expect(chain.select).toHaveBeenCalledWith('*, team_players(*)')
+    expect(chain.eq).toHaveBeenCalledWith('id', TEAM_A_ID)
+    expect(chain.single).toHaveBeenCalled()
+    expect(team.id).toBe(TEAM_A_ID)
+    expect(team.players).toHaveLength(1)
   })
 
-  it('throws when Supabase returns an error', async () => {
-    const chain = makeChainWithResult({ data: null, error: { message: 'team upsert failed' } })
-    const { repo } = makeRepoWithChain(chain)
+  it('throws when the RPC returns an error', async () => {
+    const { repo } = makeRepoWithRpcAndChain(
+      { data: null, error: { message: 'not_owner raised by RPC' } },
+      { data: null, error: null },
+    )
 
-    await expect(repo.saveTeam(makeTeamDomain())).rejects.toThrow('team upsert failed')
+    await expect(
+      repo.createTeam(TOURNAMENT_ID, 'X', [{ userId: null, displayName: 'A' }]),
+    ).rejects.toThrow('not_owner raised by RPC')
+  })
+
+  it('throws when the RPC returns a null team id', async () => {
+    const { repo } = makeRepoWithRpcAndChain(
+      { data: null, error: null },
+      { data: null, error: null },
+    )
+
+    await expect(
+      repo.createTeam(TOURNAMENT_ID, 'X', [{ userId: null, displayName: 'A' }]),
+    ).rejects.toThrow('create_team_with_players returned null')
+  })
+})
+
+describe('SupabaseRepository — updateTeam', () => {
+  it('calls the RPC with team id + mapped players and refetches', async () => {
+    const { repo, rpc, chain } = makeRepoWithRpcAndChain(
+      { data: TEAM_A_ID, error: null },
+      { data: makeTeamRow(), error: null },
+    )
+
+    const team = await repo.updateTeam(TEAM_A_ID, 'Renommée', [
+      { userId: null, displayName: 'Alice' },
+    ])
+
+    expect(rpc).toHaveBeenCalledWith('update_team_with_players', {
+      p_team_id: TEAM_A_ID,
+      p_name: 'Renommée',
+      p_players: [{ user_id: null, display_name: 'Alice' }],
+    })
+    expect(chain.eq).toHaveBeenCalledWith('id', TEAM_A_ID)
+    expect(team.id).toBe(TEAM_A_ID)
+  })
+
+  it('throws when the RPC returns an error', async () => {
+    const { repo } = makeRepoWithRpcAndChain(
+      { data: null, error: { message: 'team_not_found raised by RPC' } },
+      { data: null, error: null },
+    )
+
+    await expect(
+      repo.updateTeam(TEAM_A_ID, 'X', [{ userId: null, displayName: 'A' }]),
+    ).rejects.toThrow('team_not_found raised by RPC')
   })
 })
 
@@ -349,7 +473,7 @@ describe('SupabaseRepository — getMatchesByTournament', () => {
 
     const matches = await repo.getMatchesByTournament(TOURNAMENT_ID)
 
-    expect(from).toHaveBeenCalledWith('matches')
+    expect(from).toHaveBeenCalledWith('tournament_matches')
     expect(chain.select).toHaveBeenCalledWith('*')
     expect(chain.eq).toHaveBeenCalledWith('tournament_id', TOURNAMENT_ID)
     expect(matches).toHaveLength(1)
@@ -364,56 +488,60 @@ describe('SupabaseRepository — getMatchesByTournament', () => {
   })
 })
 
-describe('SupabaseRepository — saveMatch', () => {
-  it('upserts the match with the mapped Insert payload', async () => {
+describe('SupabaseRepository — updateMatch', () => {
+  it('updates only score/outcome columns and targets the row by id', async () => {
     const chain = makeChainWithResult({ data: null, error: null })
     const { repo, from } = makeRepoWithChain(chain)
 
-    await repo.saveMatch(makeMatchDomain())
+    await repo.updateMatch(makeMatchDomain())
 
-    expect(from).toHaveBeenCalledWith('matches')
-    expect(chain.upsert).toHaveBeenCalledWith(
+    expect(from).toHaveBeenCalledWith('tournament_matches')
+    expect(chain.update).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: MATCH_ID,
-        tournament_id: TOURNAMENT_ID,
-        team_a_id: TEAM_A_ID,
-        team_b_id: TEAM_B_ID,
-        round_number: 1,
+        score_a: null,
+        score_b: null,
+        winner_id: null,
         status: 'pending',
       }),
     )
+    expect(chain.eq).toHaveBeenCalledWith('id', MATCH_ID)
+    // Colonnes structurelles / pilotées par la DB jamais émises.
+    const updatePayload = chain.update.mock.calls[0]![0] as Record<string, unknown>
+    expect(updatePayload).not.toHaveProperty('id')
+    expect(updatePayload).not.toHaveProperty('tournament_id')
+    expect(updatePayload).not.toHaveProperty('round_number')
   })
 
   it('throws when Supabase returns an error', async () => {
-    const chain = makeChainWithResult({ data: null, error: { message: 'match upsert failed' } })
+    const chain = makeChainWithResult({ data: null, error: { message: 'match update failed' } })
     const { repo } = makeRepoWithChain(chain)
 
-    await expect(repo.saveMatch(makeMatchDomain())).rejects.toThrow('match upsert failed')
+    await expect(repo.updateMatch(makeMatchDomain())).rejects.toThrow('match update failed')
   })
 })
 
-describe('SupabaseRepository — saveMatches (batch)', () => {
-  it('upserts an array of mapped Insert payloads', async () => {
+describe('SupabaseRepository — createMatches (batch)', () => {
+  it('inserts an array of mapped Insert payloads', async () => {
     const chain = makeChainWithResult({ data: null, error: null })
     const { repo, from } = makeRepoWithChain(chain)
     const firstMatch = makeMatchDomain()
-    const secondMatch: Match = { ...firstMatch, id: 'other', roundNumber: 2 }
+    const secondMatch: TournamentMatch = { ...firstMatch, id: 'other', roundNumber: 2 }
 
-    await repo.saveMatches([firstMatch, secondMatch])
+    await repo.createMatches([firstMatch, secondMatch])
 
-    expect(from).toHaveBeenCalledWith('matches')
-    const upsertArg = chain.upsert.mock.calls[0]![0] as Array<{ id: string, round_number: number }>
-    expect(upsertArg).toHaveLength(2)
-    expect(upsertArg[0]!.id).toBe(MATCH_ID)
-    expect(upsertArg[1]!.id).toBe('other')
-    expect(upsertArg[1]!.round_number).toBe(2)
+    expect(from).toHaveBeenCalledWith('tournament_matches')
+    const insertArg = chain.insert.mock.calls[0]![0] as Array<{ id: string, round_number: number }>
+    expect(insertArg).toHaveLength(2)
+    expect(insertArg[0]!.id).toBe(MATCH_ID)
+    expect(insertArg[1]!.id).toBe('other')
+    expect(insertArg[1]!.round_number).toBe(2)
   })
 
   it('throws when Supabase returns an error', async () => {
     const chain = makeChainWithResult({ data: null, error: { message: 'batch failed' } })
     const { repo } = makeRepoWithChain(chain)
 
-    await expect(repo.saveMatches([makeMatchDomain()])).rejects.toThrow('batch failed')
+    await expect(repo.createMatches([makeMatchDomain()])).rejects.toThrow('batch failed')
   })
 })
 
@@ -476,22 +604,25 @@ describe('SupabaseRepository — getMyMemberships', () => {
   })
 })
 
-describe('SupabaseRepository — inviteMemberByEmail', () => {
-  it('calls rpc(invite_tournament_member_by_email) with the provided tournament id and email and maps the inserted row', async () => {
+describe('SupabaseRepository — inviteMemberByDisplayName', () => {
+  it('calls rpc(invite_tournament_member_by_display_name) with the provided tournament id and display name and maps the inserted row', async () => {
     const { repo, rpc } = makeRepoWithRpcResult({
       data: makeMemberRow(),
       error: null,
     })
 
-    const inserted = await repo.inviteMemberByEmail(
+    const inserted = await repo.inviteMemberByDisplayName(
       TOURNAMENT_ID,
-      'guest@example.com',
+      'Bob',
     )
 
-    expect(rpc).toHaveBeenCalledWith('invite_tournament_member_by_email', {
-      p_tournament_id: TOURNAMENT_ID,
-      p_email: 'guest@example.com',
-    })
+    expect(rpc).toHaveBeenCalledWith(
+      'invite_tournament_member_by_display_name',
+      {
+        p_tournament_id: TOURNAMENT_ID,
+        p_display_name: 'Bob',
+      },
+    )
     expect(inserted).toEqual<TournamentMember>({
       id: MEMBER_ID,
       tournamentId: TOURNAMENT_ID,
@@ -502,26 +633,30 @@ describe('SupabaseRepository — inviteMemberByEmail', () => {
     })
   })
 
-  it('passes the email through without normalisation (DB does lower(trim))', async () => {
+  it('passes the display name through without normalisation (DB does lower(trim))', async () => {
     const { repo, rpc } = makeRepoWithRpcResult({
       data: makeMemberRow(),
       error: null,
     })
 
-    await repo.inviteMemberByEmail(TOURNAMENT_ID, '  Mixed.Case@Example.COM  ')
+    await repo.inviteMemberByDisplayName(TOURNAMENT_ID, '  Bob  ')
 
-    expect(rpc).toHaveBeenCalledWith('invite_tournament_member_by_email', {
-      p_tournament_id: TOURNAMENT_ID,
-      p_email: '  Mixed.Case@Example.COM  ',
-    })
+    expect(rpc).toHaveBeenCalledWith(
+      'invite_tournament_member_by_display_name',
+      {
+        p_tournament_id: TOURNAMENT_ID,
+        p_display_name: '  Bob  ',
+      },
+    )
   })
 
   it.each([
-    'user_not_found',
+    'display_name_not_found',
     'already_member',
     'self_invite',
     'not_owner',
-    'invalid_email',
+    'not_authenticated',
+    'tournament_completed',
   ] as const)(
     'throws InviteMemberError(%s) when rpc error message contains the code',
     async (code) => {
@@ -532,7 +667,7 @@ describe('SupabaseRepository — inviteMemberByEmail', () => {
 
       let caught: unknown = null
       try {
-        await repo.inviteMemberByEmail(TOURNAMENT_ID, 'guest@example.com')
+        await repo.inviteMemberByDisplayName(TOURNAMENT_ID, 'Bob')
       }
       catch (error) {
         caught = error
@@ -550,7 +685,7 @@ describe('SupabaseRepository — inviteMemberByEmail', () => {
 
     let caught: unknown = null
     try {
-      await repo.inviteMemberByEmail(TOURNAMENT_ID, 'guest@example.com')
+      await repo.inviteMemberByDisplayName(TOURNAMENT_ID, 'Bob')
     }
     catch (error) {
       caught = error
@@ -564,7 +699,7 @@ describe('SupabaseRepository — inviteMemberByEmail', () => {
 
     let caught: unknown = null
     try {
-      await repo.inviteMemberByEmail(TOURNAMENT_ID, 'guest@example.com')
+      await repo.inviteMemberByDisplayName(TOURNAMENT_ID, 'Bob')
     }
     catch (error) {
       caught = error
@@ -575,24 +710,432 @@ describe('SupabaseRepository — inviteMemberByEmail', () => {
 })
 
 describe('SupabaseRepository — removeMember', () => {
-  it('deletes the row by member id', async () => {
-    const chain = makeChainWithResult({ data: null, error: null })
-    const { repo, from } = makeRepoWithChain(chain)
+  it('calls the remove_tournament_member RPC with the member id', async () => {
+    const { repo, rpc } = makeRepoWithRpcResult({ data: null, error: null })
 
     await repo.removeMember(MEMBER_ID)
 
-    expect(from).toHaveBeenCalledWith('tournament_members')
-    expect(chain.delete).toHaveBeenCalled()
-    expect(chain.eq).toHaveBeenCalledWith('id', MEMBER_ID)
+    expect(rpc).toHaveBeenCalledWith('remove_tournament_member', {
+      p_member_id: MEMBER_ID,
+    })
+  })
+
+  it.each([
+    'member_in_team',
+    'not_owner',
+    'tournament_completed',
+    'not_authenticated',
+  ] as const)(
+    'throws InviteMemberError(%s) when the RPC raises that code',
+    async (code) => {
+      const { repo } = makeRepoWithRpcResult({
+        data: null,
+        error: { message: `error: ${code} raised by RPC` },
+      })
+
+      let caught: unknown = null
+      try {
+        await repo.removeMember(MEMBER_ID)
+      }
+      catch (error) {
+        caught = error
+      }
+      expect(caught).toBeInstanceOf(InviteMemberError)
+      expect((caught as InviteMemberError).code).toBe(code)
+    },
+  )
+
+  it('throws InviteMemberError(unknown) for an unrecognized RPC error', async () => {
+    const { repo } = makeRepoWithRpcResult({
+      data: null,
+      error: { message: 'connection reset by peer' },
+    })
+
+    let caught: unknown = null
+    try {
+      await repo.removeMember(MEMBER_ID)
+    }
+    catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(InviteMemberError)
+    expect((caught as InviteMemberError).code).toBe('unknown')
+  })
+})
+
+// --- Profiles ---
+
+function makeProfileRow(overrides: Partial<{ id: string, display_name: string }> = {}) {
+  return {
+    id: overrides.id ?? OWNER_ID,
+    display_name: overrides.display_name ?? 'Alice',
+    created_at: NOW,
+    updated_at: NOW,
+  }
+}
+
+describe('SupabaseRepository — getProfileById', () => {
+  it('returns the mapped profile when the row exists', async () => {
+    const chain = makeChainWithResult({ data: makeProfileRow(), error: null })
+    const { repo, from } = makeRepoWithChain(chain)
+
+    const profile = await repo.getProfileById(OWNER_ID)
+
+    expect(from).toHaveBeenCalledWith('profiles')
+    expect(chain.eq).toHaveBeenCalledWith('id', OWNER_ID)
+    expect(chain.maybeSingle).toHaveBeenCalled()
+    expect(profile).toEqual({
+      id: OWNER_ID,
+      displayName: 'Alice',
+      createdAt: NOW,
+      updatedAt: NOW,
+    })
+  })
+
+  it('returns undefined when the row is not visible (RLS) or absent', async () => {
+    const chain = makeChainWithResult({ data: null, error: null })
+    const { repo } = makeRepoWithChain(chain)
+
+    expect(await repo.getProfileById('missing')).toBeUndefined()
   })
 
   it('throws when Supabase returns an error', async () => {
     const chain = makeChainWithResult({
       data: null,
-      error: { message: 'member delete failed' },
+      error: { message: 'profile fetch failed' },
     })
     const { repo } = makeRepoWithChain(chain)
 
-    await expect(repo.removeMember('any')).rejects.toThrow('member delete failed')
+    await expect(repo.getProfileById(OWNER_ID)).rejects.toThrow('profile fetch failed')
+  })
+})
+
+describe('SupabaseRepository — getProfilesByIds', () => {
+  it('returns [] without touching the client when ids is empty', async () => {
+    const chain = makeChainWithResult({ data: [], error: null })
+    const { repo, from } = makeRepoWithChain(chain)
+
+    expect(await repo.getProfilesByIds([])).toEqual([])
+    expect(from).not.toHaveBeenCalled()
+  })
+
+  it('deduplicates ids before calling .in', async () => {
+    const chain = makeChainWithResult({
+      data: [makeProfileRow({ id: OWNER_ID }), makeProfileRow({ id: INVITEE_USER_ID, display_name: 'Bob' })],
+      error: null,
+    })
+    const { repo, from } = makeRepoWithChain(chain)
+
+    await repo.getProfilesByIds([OWNER_ID, OWNER_ID, INVITEE_USER_ID])
+
+    expect(from).toHaveBeenCalledWith('profiles')
+    expect(chain.in).toHaveBeenCalledTimes(1)
+    const [column, values] = chain.in.mock.calls[0]!
+    expect(column).toBe('id')
+    expect(values).toHaveLength(2)
+    expect(values).toEqual(expect.arrayContaining([OWNER_ID, INVITEE_USER_ID]))
+  })
+
+  it('maps the returned rows to Profile[]', async () => {
+    const chain = makeChainWithResult({
+      data: [
+        makeProfileRow({ id: OWNER_ID, display_name: 'Alice' }),
+        makeProfileRow({ id: INVITEE_USER_ID, display_name: 'Bob' }),
+      ],
+      error: null,
+    })
+    const { repo } = makeRepoWithChain(chain)
+
+    const profiles = await repo.getProfilesByIds([OWNER_ID, INVITEE_USER_ID])
+    expect(profiles).toEqual([
+      { id: OWNER_ID, displayName: 'Alice', createdAt: NOW, updatedAt: NOW },
+      { id: INVITEE_USER_ID, displayName: 'Bob', createdAt: NOW, updatedAt: NOW },
+    ])
+  })
+
+  it('returns [] when data is null (no row matches RLS)', async () => {
+    const chain = makeChainWithResult({ data: null, error: null })
+    const { repo } = makeRepoWithChain(chain)
+
+    expect(await repo.getProfilesByIds([OWNER_ID])).toEqual([])
+  })
+
+  it('throws when Supabase returns an error', async () => {
+    const chain = makeChainWithResult({
+      data: null,
+      error: { message: 'profiles batch failed' },
+    })
+    const { repo } = makeRepoWithChain(chain)
+
+    await expect(repo.getProfilesByIds([OWNER_ID])).rejects.toThrow(
+      'profiles batch failed',
+    )
+  })
+})
+
+describe('SupabaseRepository — updateMyProfile', () => {
+  it('updates display_name for the given user and returns the mapped row', async () => {
+    const chain = makeChainWithResult({
+      data: makeProfileRow({ display_name: 'Alice (updated)' }),
+      error: null,
+    })
+    const { repo, from } = makeRepoWithChain(chain)
+
+    const profile = await repo.updateMyProfile(OWNER_ID, 'Alice (updated)')
+
+    expect(from).toHaveBeenCalledWith('profiles')
+    expect(chain.update).toHaveBeenCalledWith({ display_name: 'Alice (updated)' })
+    expect(chain.eq).toHaveBeenCalledWith('id', OWNER_ID)
+    expect(chain.select).toHaveBeenCalled()
+    expect(chain.single).toHaveBeenCalled()
+    expect(profile).toEqual({
+      id: OWNER_ID,
+      displayName: 'Alice (updated)',
+      createdAt: NOW,
+      updatedAt: NOW,
+    })
+  })
+
+  it('throws when Supabase returns an error (RLS denial or CHECK violation)', async () => {
+    const chain = makeChainWithResult({
+      data: null,
+      error: { message: 'new row violates row-level security policy' },
+    })
+    const { repo } = makeRepoWithChain(chain)
+
+    await expect(repo.updateMyProfile(OWNER_ID, 'X')).rejects.toThrow(
+      'new row violates row-level security policy',
+    )
+  })
+
+  it('throws ProfileError(display_name_taken) on 23505 over the display_name index', async () => {
+    const chain = makeChainWithResult({
+      data: null,
+      error: {
+        code: '23505',
+        message:
+          'duplicate key value violates unique constraint "profiles_display_name_lower_idx"',
+      },
+    })
+    const { repo } = makeRepoWithChain(chain)
+
+    let caught: unknown
+    try {
+      await repo.updateMyProfile(OWNER_ID, 'Alice')
+    }
+    catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(ProfileError)
+    expect((caught as ProfileError).code).toBe('display_name_taken')
+  })
+
+  it('throws a generic Error (not ProfileError) on 23505 over a different unique index', async () => {
+    const chain = makeChainWithResult({
+      data: null,
+      error: {
+        code: '23505',
+        message:
+          'duplicate key value violates unique constraint "some_other_unique_idx"',
+      },
+    })
+    const { repo } = makeRepoWithChain(chain)
+
+    let caught: unknown
+    try {
+      await repo.updateMyProfile(OWNER_ID, 'Alice')
+    }
+    catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(Error)
+    expect(caught).not.toBeInstanceOf(ProfileError)
+  })
+
+  it('throws a generic Error for non-unique-violation Supabase errors', async () => {
+    const chain = makeChainWithResult({
+      data: null,
+      error: { code: 'PGRST116', message: 'some other error' },
+    })
+    const { repo } = makeRepoWithChain(chain)
+
+    await expect(repo.updateMyProfile(OWNER_ID, 'Alice')).rejects.toThrow(
+      'some other error',
+    )
+    await expect(
+      repo.updateMyProfile(OWNER_ID, 'Alice'),
+    ).rejects.not.toBeInstanceOf(ProfileError)
+  })
+})
+
+describe('SupabaseRepository — getUserProfile', () => {
+  function makeRawProfileBundle() {
+    return {
+      profile: {
+        id: INVITEE_USER_ID,
+        display_name: 'Bob',
+        created_at: NOW,
+        updated_at: NOW,
+      },
+      stats: {
+        matches_played: 2,
+        wins: 1,
+        losses: 1,
+        points_scored: 20,
+        points_conceded: 18,
+        tournaments_played: 1,
+        tournaments_won: 0,
+        podiums: 1,
+        last_tournament_at: NOW,
+      },
+      results: [
+        {
+          tournament_id: TOURNAMENT_ID,
+          tournament_name: 'Tournoi',
+          tournament_date: '2026-05-10',
+          tournament_completed_at: NOW,
+          team_id: TEAM_A_ID,
+          team_name: 'Team Bob',
+          wins: 1,
+          losses: 1,
+          points_scored: 20,
+          points_conceded: 18,
+          final_rank: 2,
+          is_winner: false,
+          is_podium: true,
+          viewer_can_open: true,
+          teammates: [{ user_id: OWNER_ID, display_name: 'Alice' }],
+        },
+      ],
+      free_matches: [
+        {
+          match_id: MATCH_ID,
+          played_on: '2026-08-20',
+          created_at: NOW,
+          score_a: 13,
+          score_b: 7,
+          side: 'A',
+          viewer_can_open: true,
+          teammates: [],
+          opponents: [{ user_id: null, display_name: 'Marcel' }],
+        },
+      ],
+      free_match_stats: {
+        matches_played: 1,
+        wins: 1,
+        losses: 0,
+        points_scored: 13,
+        points_conceded: 7,
+      },
+    }
+  }
+
+  it('calls rpc(get_user_profile) with the user id and maps the JSON bundle', async () => {
+    const { repo, rpc } = makeRepoWithRpcResult({
+      data: makeRawProfileBundle(),
+      error: null,
+    })
+
+    const bundle = await repo.getUserProfile(INVITEE_USER_ID)
+
+    expect(rpc).toHaveBeenCalledWith('get_user_profile', {
+      p_user_id: INVITEE_USER_ID,
+    })
+    expect(bundle).toEqual<UserProfileBundle>({
+      profile: {
+        id: INVITEE_USER_ID,
+        displayName: 'Bob',
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+      stats: {
+        matchesPlayed: 2,
+        wins: 1,
+        losses: 1,
+        pointsScored: 20,
+        pointsConceded: 18,
+        tournamentsPlayed: 1,
+        tournamentsWon: 0,
+        podiums: 1,
+        lastTournamentAt: NOW,
+      },
+      results: [
+        {
+          tournamentId: TOURNAMENT_ID,
+          tournamentName: 'Tournoi',
+          tournamentDate: '2026-05-10',
+          tournamentCompletedAt: NOW,
+          teamId: TEAM_A_ID,
+          teamName: 'Team Bob',
+          wins: 1,
+          losses: 1,
+          pointsScored: 20,
+          pointsConceded: 18,
+          finalRank: 2,
+          isWinner: false,
+          isPodium: true,
+          viewerCanOpen: true,
+          teammates: [{ userId: OWNER_ID, displayName: 'Alice' }],
+        },
+      ],
+      freeMatches: [
+        {
+          matchId: MATCH_ID,
+          playedOn: '2026-08-20',
+          createdAt: NOW,
+          scoreA: 13,
+          scoreB: 7,
+          side: 'A',
+          viewerCanOpen: true,
+          teammates: [],
+          opponents: [{ userId: null, displayName: 'Marcel' }],
+        },
+      ],
+      freeMatchStats: {
+        matchesPlayed: 1,
+        wins: 1,
+        losses: 0,
+        pointsScored: 13,
+        pointsConceded: 7,
+      },
+    })
+  })
+
+  it('relays not_authenticated as a plain Error (no typed error class)', async () => {
+    const { repo } = makeRepoWithRpcResult({
+      data: null,
+      error: { message: 'not_authenticated' },
+    })
+
+    let caught: unknown
+    try {
+      await repo.getUserProfile(INVITEE_USER_ID)
+    }
+    catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(Error)
+    expect((caught as Error).message).toBe('not_authenticated')
+    expect(caught).not.toBeInstanceOf(InviteMemberError)
+    expect(caught).not.toBeInstanceOf(ProfileError)
+  })
+
+  it('throws Error(message) on any other RPC error', async () => {
+    const { repo } = makeRepoWithRpcResult({
+      data: null,
+      error: { message: 'network down' },
+    })
+
+    await expect(repo.getUserProfile(INVITEE_USER_ID)).rejects.toThrow(
+      'network down',
+    )
+  })
+
+  it('throws when the RPC returns null data without error', async () => {
+    const { repo } = makeRepoWithRpcResult({ data: null, error: null })
+
+    await expect(repo.getUserProfile(INVITEE_USER_ID)).rejects.toThrow(
+      'get_user_profile returned null',
+    )
   })
 })

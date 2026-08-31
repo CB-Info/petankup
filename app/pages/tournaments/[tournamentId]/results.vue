@@ -1,7 +1,13 @@
 <script setup lang="ts">
 // Pattern d'erreurs : les actions du store throw ; on attrape ici et on
 // affiche un toast via useErrorToast (voir composables/useErrorToast).
+//
+// Écran « célébration » : fond navy plein écran (--pk-grad-podium), à la
+// différence des écrans crème. Layout désactivé ; pas d'AppHeader (une
+// bande navy sur fond navy serait invisible) — simple lien retour.
 import type { Ranking, Team } from "../../../types";
+
+definePageMeta({ layout: false });
 
 const route = useRoute();
 const tournamentStore = useTournamentStore();
@@ -21,6 +27,12 @@ let loadDetailRequestId = 0;
 watch(
   tournamentId,
   async (id) => {
+    // Id malformé : « Tournoi introuvable » immédiat, sans requête ni toast
+    // — même garde que la page détail (cf. utils/uuid).
+    if (!isUuid(id)) {
+      isLoadingDetail.value = false;
+      return;
+    }
     // Court-circuit : si on arrive depuis la page détail du même
     // tournoi, le store a déjà currentTournament + teams + matches
     // pour cet id. Pas de reload, pas de flash "Chargement…".
@@ -84,28 +96,54 @@ const podiumDisplayOrder = computed<PodiumEntry[]>(() => {
   return ordered;
 });
 
-// Hauteurs différenciées des marches via padding vertical — pas de
-// hauteur fixe pour rester adaptatif aux noms longs.
-function stepBgClass(rank: number): string {
-  if (rank === 1) return "bg-secondary-50 border-secondary-200";
-  return "bg-elevated border-default";
+// ── Re-sélections de PRÉSENTATION depuis les computeds existants : le
+// champion en hero, les 2e/3e en cartes. Aucun recalcul de classement.
+
+const championEntry = computed(
+  () => podiumEntries.value.find((entry) => entry.rank === 1) ?? null,
+);
+
+const runnersUp = computed(() =>
+  podiumDisplayOrder.value.filter((entry) => entry.rank !== 1),
+);
+
+// Nombre de manches jouées (footer) : manches distinctes des matchs déjà
+// chargés — calcul d'affichage, pas une règle métier.
+const roundCount = computed(
+  () => new Set(matches.value.map((match) => match.roundNumber)).size,
+);
+
+// Diff signé pour l'affichage : "+12", "-4", "0" (le signe moins vient
+// du nombre lui-même).
+function signedDiff(pointDifference: number): string {
+  return pointDifference > 0 ? `+${pointDifference}` : `${pointDifference}`;
 }
 
-function stepPaddingClass(rank: number): string {
-  if (rank === 1) return "pt-8 pb-10";
-  if (rank === 2) return "pt-6 pb-7";
-  return "pt-5 pb-5";
-}
+const championDiffLabel = computed(() => {
+  if (!championEntry.value) return "";
+  return signedDiff(championEntry.value.ranking.pointDifference);
+});
 
-function rankNumberSizeClass(rank: number): string {
-  if (rank === 1) return "text-5xl font-bold text-primary-900";
-  return "text-3xl font-semibold text-primary-900";
-}
+// Couleur matière du numéro de rang des cartes : argent pour #2, bronze
+// pour #3 — stops 34 % des dégradés silver/bronze de BouleAvatar (hex
+// locaux assumés, comme les TONE_GRADIENTS).
+const RUNNER_UP_RANK_COLOR_CLASS: Record<number, string> = {
+  2: "text-[#D2CEC4]",
+  3: "text-[#C78A5C]",
+};
 
-function teamNameWeightClass(rank: number): string {
-  if (rank === 1) return "font-semibold text-primary-900";
-  return "font-medium text-primary-900";
-}
+// Libellés pluriels des badges du champion (affichage).
+const championWinsLabel = computed(() => {
+  if (!championEntry.value) return "";
+  const wins = championEntry.value.ranking.wins;
+  return `${wins} ${wins > 1 ? "victoires" : "victoire"}`;
+});
+
+const championLossesLabel = computed(() => {
+  if (!championEntry.value) return "";
+  const losses = championEntry.value.ranking.losses;
+  return `${losses} ${losses > 1 ? "défaites" : "défaite"}`;
+});
 
 useHead(() => ({
   title: currentTournament.value
@@ -115,149 +153,182 @@ useHead(() => ({
 </script>
 
 <template>
-  <div v-if="isLoadingDetail" class="py-12 text-center">
-    <p class="text-toned">Chargement du tournoi…</p>
-  </div>
-
-  <!-- Garde finale : on n'affiche le contenu que si le tournoi en
-       mémoire correspond à l'id de route. La forme inline (vs un
-       computed booléen) permet à volar de narrower currentTournament
-       à non-null dans les v-else suivants. -->
   <div
-    v-else-if="!currentTournament || currentTournament.id !== tournamentId"
-    class="space-y-4 py-12 text-center"
+    class="min-h-screen [background:var(--pk-grad-podium)] text-(--pk-cream)"
   >
-    <h1 class="text-xl font-semibold text-primary-900">Tournoi introuvable</h1>
-    <UButton to="/" variant="ghost" color="neutral" icon="i-lucide-arrow-left">
-      Retour à l'accueil
-    </UButton>
-  </div>
-
-  <div v-else-if="!tournamentIsCompleted" class="space-y-4 py-12 text-center">
-    <h1 class="text-xl font-semibold text-primary-900">
-      Ce tournoi n'est pas encore terminé
-    </h1>
-    <p class="text-sm text-toned">
-      Les résultats seront disponibles une fois le tournoi terminé.
-    </p>
-    <UButton
-      :to="`/tournaments/${tournamentId}`"
-      variant="ghost"
-      color="neutral"
-      icon="i-lucide-arrow-left"
-    >
-      Retour au tournoi
-    </UButton>
-  </div>
-
-  <div v-else class="space-y-8">
-    <div class="space-y-3">
-      <UButton
-        :to="`/tournaments/${tournamentId}`"
-        variant="ghost"
-        color="neutral"
-        icon="i-lucide-arrow-left"
-        size="sm"
+    <div class="mx-auto max-w-2xl px-4.5 pt-[env(safe-area-inset-top)] pb-10">
+      <p
+        v-if="isLoadingDetail"
+        class="py-16 text-center font-sans text-sm text-(--pk-on-navy-2)"
       >
-        Retour au tournoi
-      </UButton>
-      <div class="space-y-1">
-        <p
-          class="text-xs font-semibold uppercase tracking-[0.08em] text-toned"
-        >
-          Résultats
-        </p>
-        <h1 class="truncate text-2xl font-semibold text-primary-900">
-          {{ currentTournament.name }}
+        Chargement du tournoi…
+      </p>
+
+      <!-- Garde finale : on n'affiche le contenu que si le tournoi en
+           mémoire correspond à l'id de route. La forme inline (vs un
+           computed booléen) permet à volar de narrower currentTournament
+           à non-null dans les v-else suivants. -->
+      <div
+        v-else-if="!currentTournament || currentTournament.id !== tournamentId"
+        class="flex flex-col items-center gap-3 py-16 text-center"
+      >
+        <h1 class="font-disp text-[19px] font-extrabold text-(--pk-cream)">
+          Tournoi introuvable
         </h1>
-        <p class="text-sm text-toned">
-          {{ formatDate(currentTournament.date) }}
-          <template v-if="currentTournament.location">
-            · {{ currentTournament.location }}
+        <NuxtLink
+          to="/"
+          class="inline-flex items-center gap-1.75 font-sans text-sm font-bold text-(--pk-on-navy-2)"
+        >
+          <UIcon name="i-lucide-arrow-left" class="size-4.5" />
+          Retour à l'accueil
+        </NuxtLink>
+      </div>
+
+      <div
+        v-else-if="!tournamentIsCompleted"
+        class="flex flex-col items-center gap-3 py-16 text-center"
+      >
+        <h1 class="font-disp text-[19px] font-extrabold text-(--pk-cream)">
+          Ce tournoi n'est pas encore terminé
+        </h1>
+        <p class="font-sans text-sm text-(--pk-on-navy-2)">
+          Les résultats seront disponibles une fois le tournoi terminé.
+        </p>
+        <NuxtLink
+          :to="`/tournaments/${tournamentId}`"
+          class="inline-flex items-center gap-1.75 font-sans text-sm font-bold text-(--pk-on-navy-2)"
+        >
+          <UIcon name="i-lucide-arrow-left" class="size-4.5" />
+          Retour au tournoi
+        </NuxtLink>
+      </div>
+
+      <div v-else>
+        <NuxtLink
+          :to="`/tournaments/${tournamentId}?tab=classement`"
+          class="inline-flex items-center gap-1.75 pt-4 font-sans text-sm font-bold text-(--pk-on-navy-2)"
+        >
+          <UIcon name="i-lucide-arrow-left" class="size-4.5" />
+          Retour
+        </NuxtLink>
+
+        <!-- Bloc champion -->
+        <div
+          v-if="championEntry"
+          class="flex flex-col items-center text-center"
+        >
+          <p
+            class="mt-6 font-disp text-[11px] font-extrabold tracking-[0.14em] uppercase text-secondary"
+          >
+            {{ currentTournament.name }}
+          </p>
+          <h1
+            class="mt-1 font-disp text-[40px] font-extrabold tracking-[-0.02em] uppercase text-(--pk-cream)"
+          >
+            Champions
+          </h1>
+
+          <div class="relative mt-4">
+            <span
+              aria-hidden="true"
+              class="pointer-events-none absolute top-1/2 left-1/2 size-75 -translate-x-1/2 -translate-y-1/2 [background:radial-gradient(circle,rgb(var(--pk-gold-rgb)/0.28),transparent_65%)]"
+            />
+            <BouleAvatar
+              tone="gold"
+              :size="110"
+              :aria-label="`Champions : ${championEntry.team.name}`"
+            >
+              <UIcon name="i-lucide-trophy" class="size-9 text-(--pk-navy)" />
+            </BouleAvatar>
+          </div>
+
+          <h2
+            class="mt-4 truncate font-disp text-[26px] font-extrabold tracking-[-0.01em] text-(--pk-cream)"
+          >
+            {{ championEntry.team.name }}
+          </h2>
+
+          <div class="mt-3 flex flex-wrap items-center justify-center gap-2">
+            <span
+              class="rounded-lg bg-[rgb(var(--pk-gold-rgb)/0.14)] px-2.5 py-1.25 font-disp text-[11px] font-extrabold tracking-[0.04em] uppercase text-secondary"
+            >
+              {{ championWinsLabel }}
+            </span>
+            <span
+              class="rounded-lg bg-[rgb(var(--pk-gold-rgb)/0.14)] px-2.5 py-1.25 font-disp text-[11px] font-extrabold tracking-[0.04em] uppercase text-secondary"
+            >
+              {{ championLossesLabel }}
+            </span>
+            <span
+              class="rounded-lg bg-[rgb(var(--pk-gold-rgb)/0.14)] px-2.5 py-1.25 font-disp text-[11px] font-extrabold tracking-[0.04em] uppercase text-secondary"
+            >
+              {{ championDiffLabel }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Cartes 2e / 3e (0, 1 ou 2 cartes selon le nombre d'équipes) -->
+        <div v-if="runnersUp.length > 0" class="mt-7 grid grid-cols-2 gap-2.75">
+          <div
+            v-for="entry in runnersUp"
+            :key="entry.team.id"
+            class="flex flex-col items-center gap-1.5 rounded-(--pk-r-card) bg-white/6 p-3.5 text-center"
+          >
+            <BouleAvatar :tone="medalTone(entry.rank)" :size="48" />
+            <p
+              class="font-num text-[18px] font-bold"
+              :class="RUNNER_UP_RANK_COLOR_CLASS[entry.rank]"
+            >
+              #{{ entry.rank }}
+            </p>
+            <p
+              class="w-full truncate font-disp text-sm font-bold text-(--pk-cream)"
+            >
+              {{ entry.team.name }}
+            </p>
+            <p
+              class="font-sans text-[11.5px] text-(--pk-on-navy-3) tabular-nums"
+            >
+              {{ entry.ranking.wins }}V · {{ entry.ranking.losses }}D ·
+              {{ signedDiff(entry.ranking.pointDifference) }}
+            </p>
+          </div>
+        </div>
+
+        <!-- Partage : pas encore construit — bouton désactivé -->
+        <UButton
+          color="primary"
+          block
+          disabled
+          icon="i-lucide-share"
+          class="mt-7 h-13.5 gap-2.25 rounded-[14px] font-disp text-[14.5px] font-extrabold tracking-[0.03em] uppercase text-(--pk-cream)"
+          :ui="{ leadingIcon: 'size-4.5' }"
+        >
+          Partager le podium
+        </UButton>
+
+        <!-- bg-transparent : le compound outline×neutral du thème pose un
+             bg-default (crème) qui rendrait le bouton plein sur le navy. -->
+        <UButton
+          :to="`/tournaments/${tournamentId}?tab=classement`"
+          variant="outline"
+          color="neutral"
+          block
+          class="mt-2.5 h-12.5 rounded-[14px] bg-transparent font-disp text-[13.5px] font-extrabold tracking-[0.04em] uppercase text-(--pk-on-navy-2) ring-white/14 hover:bg-white/5 active:bg-white/5"
+        >
+          Revoir le classement complet
+        </UButton>
+
+        <p
+          class="mt-4.5 text-center font-sans text-[11.5px] tracking-[0.04em] text-(--pk-on-navy-3)"
+        >
+          <template v-if="currentTournament.location"
+            >{{ currentTournament.location }} ·
           </template>
+          {{ completedMatchCount }} matchs joués · {{ roundCount }}
+          {{ roundCount > 1 ? "manches" : "manche" }}
         </p>
       </div>
     </div>
-
-    <section aria-label="Podium" class="space-y-4">
-      <div class="flex items-end justify-center gap-2 sm:gap-3">
-        <div
-          v-for="entry in podiumDisplayOrder"
-          :key="entry.team.id"
-          class="flex-1 rounded-xl border px-3 text-center"
-          :class="[stepBgClass(entry.rank), stepPaddingClass(entry.rank)]"
-        >
-          <p
-            class="tabular-nums leading-none"
-            :class="rankNumberSizeClass(entry.rank)"
-          >
-            {{ entry.rank }}
-          </p>
-          <p
-            class="mt-3 truncate text-sm sm:text-base"
-            :class="teamNameWeightClass(entry.rank)"
-          >
-            {{ entry.team.name }}
-          </p>
-          <p
-            v-if="entry.team.players.length > 0"
-            class="mt-1 line-clamp-2 text-xs text-toned sm:text-sm"
-          >
-            {{ entry.team.players.join(" · ") }}
-          </p>
-        </div>
-      </div>
-    </section>
-
-    <section aria-label="Récapitulatif" class="space-y-3">
-      <h2
-        class="text-xs font-semibold uppercase tracking-[0.08em] text-toned"
-      >
-        Récapitulatif
-      </h2>
-      <UCard>
-        <dl class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-          <div>
-            <dt class="text-toned">Date</dt>
-            <dd class="font-medium text-primary-900">
-              {{ formatDate(currentTournament.date) }}
-            </dd>
-          </div>
-          <div v-if="currentTournament.location">
-            <dt class="text-toned">Lieu</dt>
-            <dd class="truncate font-medium text-primary-900">
-              {{ currentTournament.location }}
-            </dd>
-          </div>
-          <div>
-            <dt class="text-toned">Équipes</dt>
-            <dd class="font-medium tabular-nums text-primary-900">
-              {{ teams.length }}
-            </dd>
-          </div>
-          <div>
-            <dt class="text-toned">Matchs joués</dt>
-            <dd class="font-medium tabular-nums text-primary-900">
-              {{ completedMatchCount }}
-            </dd>
-          </div>
-        </dl>
-      </UCard>
-    </section>
-
-    <section aria-label="Classement final" class="space-y-3">
-      <h2
-        class="text-xs font-semibold uppercase tracking-[0.08em] text-toned"
-      >
-        Classement final
-      </h2>
-      <RankingTable :ranking="ranking" :teams="teams" />
-    </section>
-
-    <p
-      class="border-t border-default pt-6 text-center text-xs text-muted"
-    >
-      Bientôt&nbsp;: partagez les résultats avec vos amis.
-    </p>
   </div>
 </template>

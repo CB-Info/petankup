@@ -1,36 +1,50 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '../types/database.types'
 import type {
+  AccountMatch,
+  CreateFreeMatchInput,
+  FreeMatch,
   InviteMemberErrorCode,
-  Match,
+  Profile,
   Team,
   Tournament,
+  TournamentMatch,
   TournamentMember,
+  UserProfileBundle,
 } from '../types'
-import { InviteMemberError } from '../types'
+import { FreeMatchError, InviteMemberError, ProfileError } from '../types'
+import { parseFreeMatchErrorCode } from '../utils/free-match-errors'
 import type { TournamentRepository } from './TournamentRepository'
 import {
+  mapAccountMatchRowToDomain,
+  mapCreateFreeMatchInputToRpcPayload,
+  mapFreeMatchRowToDomain,
   mapMatchDomainToInsert,
+  mapMatchDomainToUpdate,
   mapMatchRowToDomain,
-  mapTeamDomainToInsert,
+  mapProfileRowToDomain,
   mapTeamRowToDomain,
   mapTournamentDomainToInsert,
+  mapTournamentDomainToUpdate,
   mapTournamentMemberRowToDomain,
   mapTournamentRowToDomain,
+  mapUserProfileBundleJsonToDomain,
+  type RawUserProfileBundleJson,
 } from './supabase-mappers'
 
-// Codes d'erreur connus levés par la RPC invite_tournament_member_by_email
-// (cf. migration B.1). PostgREST surface le `raise exception 'code'`
+// Codes d'erreur connus levés par la RPC invite_tournament_member_by_display_name
+// (cf. migration Phase E). PostgREST surface le `raise exception 'code'`
 // comme un message texte ; on reconnaît le code par sous-chaîne. Aucun
 // code n'est sous-chaîne d'un autre, donc `includes` est suffisant et
 // non ambigu.
 const KNOWN_INVITE_ERROR_CODES: readonly InviteMemberErrorCode[] = [
-  'invalid_email',
   'not_authenticated',
   'not_owner',
-  'user_not_found',
+  'display_name_not_found',
   'self_invite',
   'already_member',
+  'tournament_completed',
+  'member_in_team',
 ]
 
 function parseInviteErrorCode(rawMessage: string): InviteMemberErrorCode {
@@ -38,12 +52,36 @@ function parseInviteErrorCode(rawMessage: string): InviteMemberErrorCode {
   return matched ?? 'unknown'
 }
 
+// Mappe le shape domaine de l'argument createTeam/updateTeam vers le payload
+// jsonb attendu par les RPCs create_team_with_players /
+// update_team_with_players (snake_case côté DB). Helper local : aucun usage
+// hors de ce fichier, pas exporté.
+function mapPlayersToRpcPayload(
+  players: Array<{ userId: string | null, displayName: string }>,
+): Array<{ user_id: string | null, display_name: string }> {
+  return players.map(player => ({
+    user_id: player.userId,
+    display_name: player.displayName,
+  }))
+}
+
 // Implémentation Supabase du contrat TournamentRepository.
 // Les cascades de suppression sont gérées par la DB via ON DELETE CASCADE
 // (voir migration initiale) — le repo se contente de DELETE l'entité ciblée.
-// Sur erreur Supabase, on throw une Error nue ; le store gère le toggle
-// isLoading et propage l'erreur au site d'appel UI qui affiche un toast
-// (voir composables/useErrorToast.ts).
+//
+// Gestion d'erreur, trois cas selon le contexte :
+//   - Par défaut : Error standard portant le message Supabase, propagée au
+//     site d'appel UI qui affiche un toast (cf. composables/useErrorToast).
+//   - inviteMemberByDisplayName / removeMember : InviteMemberError typée
+//     avec code discriminant, mappée depuis les raise exception SQL via
+//     parseInviteErrorCode. Le composant dispatch via instanceof + switch.
+//   - updateMyProfile : ProfileError('display_name_taken') sur conflit 23505
+//     vérifié par code Postgres ET nom de l'index unique ; Error standard
+//     pour les autres erreurs (réseau, RLS, etc.).
+//   - createFreeMatch : FreeMatchError typée, mappée depuis les raise
+//     exception SQL par parseFreeMatchErrorCode (égalité stricte du message,
+//     cf. utils/free-match-errors). La page dispatch via instanceof + code.
+// Le store gère le toggle isLoading dans tous les cas.
 export class SupabaseRepository implements TournamentRepository {
   constructor(private readonly client: SupabaseClient<Database>) {}
 
@@ -65,11 +103,18 @@ export class SupabaseRepository implements TournamentRepository {
     return data === null ? undefined : mapTournamentRowToDomain(data)
   }
 
-  async saveTournament(tournament: Tournament): Promise<void> {
-    const insertPayload = mapTournamentDomainToInsert(tournament)
+  async createTournament(tournament: Tournament): Promise<void> {
     const { error } = await this.client
       .from('tournaments')
-      .upsert(insertPayload)
+      .insert(mapTournamentDomainToInsert(tournament))
+    if (error !== null) throw new Error(error.message)
+  }
+
+  async updateTournament(tournament: Tournament): Promise<void> {
+    const { error } = await this.client
+      .from('tournaments')
+      .update(mapTournamentDomainToUpdate(tournament))
+      .eq('id', tournament.id)
     if (error !== null) throw new Error(error.message)
   }
 
@@ -86,16 +131,59 @@ export class SupabaseRepository implements TournamentRepository {
   async getTeamsByTournament(tournamentId: string): Promise<Team[]> {
     const { data, error } = await this.client
       .from('teams')
-      .select('*')
+      .select('*, team_players(*)')
       .eq('tournament_id', tournamentId)
     if (error !== null) throw new Error(error.message)
     return (data ?? []).map(mapTeamRowToDomain)
   }
 
-  async saveTeam(team: Team): Promise<void> {
-    const insertPayload = mapTeamDomainToInsert(team)
-    const { error } = await this.client.from('teams').upsert(insertPayload)
+  // Reconstitue un Team complet (avec ses joueurs) après une RPC qui ne
+  // retourne que l'id. Deux round-trips assumés (write RPC puis read embed).
+  private async getTeamByIdWithPlayers(teamId: string): Promise<Team> {
+    const { data, error } = await this.client
+      .from('teams')
+      .select('*, team_players(*)')
+      .eq('id', teamId)
+      .single()
     if (error !== null) throw new Error(error.message)
+    return mapTeamRowToDomain(data)
+  }
+
+  // Écriture atomique team + joueurs via RPC. Le payload mappe le contrat
+  // domaine { userId, displayName } vers le jsonb attendu par la RPC
+  // { user_id, display_name }.
+  async createTeam(
+    tournamentId: string,
+    name: string,
+    players: Array<{ userId: string | null, displayName: string }>,
+  ): Promise<Team> {
+    const playersPayload = mapPlayersToRpcPayload(players)
+    const { data: createdTeamId, error } = await this.client.rpc(
+      'create_team_with_players',
+      { p_tournament_id: tournamentId, p_name: name, p_players: playersPayload },
+    )
+    if (error !== null) throw new Error(error.message)
+    if (createdTeamId === null) {
+      throw new Error('create_team_with_players returned null')
+    }
+    return this.getTeamByIdWithPlayers(createdTeamId)
+  }
+
+  async updateTeam(
+    teamId: string,
+    name: string,
+    players: Array<{ userId: string | null, displayName: string }>,
+  ): Promise<Team> {
+    const playersPayload = mapPlayersToRpcPayload(players)
+    const { data: updatedTeamId, error } = await this.client.rpc(
+      'update_team_with_players',
+      { p_team_id: teamId, p_name: name, p_players: playersPayload },
+    )
+    if (error !== null) throw new Error(error.message)
+    if (updatedTeamId === null) {
+      throw new Error('update_team_with_players returned null')
+    }
+    return this.getTeamByIdWithPlayers(updatedTeamId)
   }
 
   async deleteTeam(id: string): Promise<void> {
@@ -105,24 +193,27 @@ export class SupabaseRepository implements TournamentRepository {
 
   // --- Matches ---
 
-  async getMatchesByTournament(tournamentId: string): Promise<Match[]> {
+  async getMatchesByTournament(tournamentId: string): Promise<TournamentMatch[]> {
     const { data, error } = await this.client
-      .from('matches')
+      .from('tournament_matches')
       .select('*')
       .eq('tournament_id', tournamentId)
     if (error !== null) throw new Error(error.message)
     return (data ?? []).map(mapMatchRowToDomain)
   }
 
-  async saveMatch(match: Match): Promise<void> {
-    const insertPayload = mapMatchDomainToInsert(match)
-    const { error } = await this.client.from('matches').upsert(insertPayload)
+  async createMatches(matches: TournamentMatch[]): Promise<void> {
+    const { error } = await this.client
+      .from('tournament_matches')
+      .insert(matches.map(mapMatchDomainToInsert))
     if (error !== null) throw new Error(error.message)
   }
 
-  async saveMatches(matches: Match[]): Promise<void> {
-    const insertPayloads = matches.map(mapMatchDomainToInsert)
-    const { error } = await this.client.from('matches').upsert(insertPayloads)
+  async updateMatch(match: TournamentMatch): Promise<void> {
+    const { error } = await this.client
+      .from('tournament_matches')
+      .update(mapMatchDomainToUpdate(match))
+      .eq('id', match.id)
     if (error !== null) throw new Error(error.message)
   }
 
@@ -146,19 +237,19 @@ export class SupabaseRepository implements TournamentRepository {
     return (data ?? []).map(mapTournamentMemberRowToDomain)
   }
 
-  // Invitation par email. Pass-through total : pas de normalisation
-  // d'email côté client — la RPC fait `lower(trim(p_email))` côté DB.
-  // Les erreurs métier (user_not_found, already_member, self_invite,
-  // not_owner, invalid_email) sont mappées vers InviteMemberError via
-  // parseInviteErrorCode. Tout autre cas (réseau, schéma DB inattendu,
-  // data null sans error) tombe dans le code 'unknown'.
-  async inviteMemberByEmail(
+  // Invitation par pseudo. Pass-through total : pas de normalisation côté
+  // client — la RPC fait `lower(trim(p_display_name))` côté DB. Les erreurs
+  // métier (display_name_not_found, already_member, self_invite, not_owner)
+  // sont mappées vers InviteMemberError via parseInviteErrorCode. Tout autre
+  // cas (réseau, schéma DB inattendu, data null sans error) tombe dans le
+  // code 'unknown'.
+  async inviteMemberByDisplayName(
     tournamentId: string,
-    email: string,
+    displayName: string,
   ): Promise<TournamentMember> {
     const { data, error } = await this.client.rpc(
-      'invite_tournament_member_by_email',
-      { p_tournament_id: tournamentId, p_email: email },
+      'invite_tournament_member_by_display_name',
+      { p_tournament_id: tournamentId, p_display_name: displayName },
     )
     if (error !== null) {
       throw new InviteMemberError(parseInviteErrorCode(error.message))
@@ -169,11 +260,127 @@ export class SupabaseRepository implements TournamentRepository {
     return mapTournamentMemberRowToDomain(data)
   }
 
+  // Retrait d'un membre via la RPC remove_tournament_member (le DELETE direct
+  // n'est plus autorisé depuis G.1 — policy retirée). Gates côté DB : owner,
+  // tournoi non terminé, et member_in_team. Les codes métier remontent en
+  // InviteMemberError (même mécanique que inviteMemberByDisplayName).
   async removeMember(memberId: string): Promise<void> {
-    const { error } = await this.client
-      .from('tournament_members')
-      .delete()
-      .eq('id', memberId)
+    const { error } = await this.client.rpc('remove_tournament_member', {
+      p_member_id: memberId,
+    })
+    if (error !== null) {
+      throw new InviteMemberError(parseInviteErrorCode(error.message))
+    }
+  }
+
+  // --- Profiles ---
+  // La table profiles est peuplée par le trigger DB au signup (cf.
+  // migration C.1). Le repo ne fait ni insert ni delete : seulement
+  // SELECT (un et batch) et UPDATE de display_name pour soi.
+  // RLS C.1 garantit que la visibilité est scopée par co-tournoi
+  // avec granularité fine, et que l'UPDATE n'autorise que self.
+
+  async getProfileById(id: string): Promise<Profile | undefined> {
+    const { data, error } = await this.client
+      .from('profiles')
+      .select('id, display_name, created_at, updated_at')
+      .eq('id', id)
+      .maybeSingle()
     if (error !== null) throw new Error(error.message)
+    return data === null ? undefined : mapProfileRowToDomain(data)
+  }
+
+  async getProfilesByIds(ids: string[]): Promise<Profile[]> {
+    if (ids.length === 0) return []
+    const uniqueIds = [...new Set(ids)]
+    const { data, error } = await this.client
+      .from('profiles')
+      .select('id, display_name, created_at, updated_at')
+      .in('id', uniqueIds)
+    if (error !== null) throw new Error(error.message)
+    return (data ?? []).map(mapProfileRowToDomain)
+  }
+
+  async updateMyProfile(userId: string, displayName: string): Promise<Profile> {
+    const { data, error } = await this.client
+      .from('profiles')
+      .update({ display_name: displayName })
+      .eq('id', userId)
+      .select('id, display_name, created_at, updated_at')
+      .single()
+    if (error !== null) {
+      // 23505 = unique_violation Postgres. On vérifie en plus le nom de
+      // l'index pour ne pas confondre avec un futur autre unique sur
+      // profiles (cf. index unique posé en D.1).
+      const isDisplayNameConflict
+        = error.code === '23505'
+          && typeof error.message === 'string'
+          && error.message.includes('profiles_display_name_lower_idx')
+      if (isDisplayNameConflict) throw new ProfileError('display_name_taken')
+      throw new Error(error.message)
+    }
+    return mapProfileRowToDomain(data)
+  }
+
+  async getUserProfile(userId: string): Promise<UserProfileBundle> {
+    const { data, error } = await this.client.rpc('get_user_profile', {
+      p_user_id: userId,
+    })
+    if (error !== null) throw new Error(error.message)
+    if (data === null) {
+      throw new Error('get_user_profile returned null')
+    }
+    // Le retour de la RPC est typé Json (cf. database.types.ts). On le cast
+    // vers la forme brute attendue par le mapper avant traduction. Pas de
+    // classe d'erreur typée (cf. décision Phase J) : 'not_authenticated'
+    // remonte tel quel dans le message de l'Error standard.
+    return mapUserProfileBundleJsonToDomain(data as RawUserProfileBundleJson)
+  }
+
+  // --- Free matches ---
+
+  async getFreeMatchById(id: string): Promise<FreeMatch | undefined> {
+    const { data, error } = await this.client
+      .from('free_matches')
+      .select('*, free_match_players(*)')
+      .eq('id', id)
+      .maybeSingle()
+    if (error !== null) throw new Error(error.message)
+    if (data === null) return undefined
+    return mapFreeMatchRowToDomain(data)
+  }
+
+  async createFreeMatch(input: CreateFreeMatchInput): Promise<string> {
+    const payload = mapCreateFreeMatchInputToRpcPayload(input)
+    // Cast ciblé : le type généré déclare p_played_on: string alors que la
+    // RPC accepte NULL (« aujourd'hui » en date de Paris) — le générateur ne
+    // connaît pas la nullabilité des arguments de fonction. La vraie forme
+    // est celle de CreateFreeMatchRpcPayload.
+    const { data, error } = await this.client.rpc(
+      'create_free_match',
+      payload as Database['public']['Functions']['create_free_match']['Args'],
+    )
+    if (error !== null) {
+      throw new FreeMatchError(parseFreeMatchErrorCode(error.message))
+    }
+    if (typeof data !== 'string') throw new FreeMatchError('unknown')
+    return data
+  }
+
+  async deleteFreeMatch(id: string): Promise<void> {
+    const { error } = await this.client
+      .from('free_matches')
+      .delete()
+      .eq('id', id)
+    if (error !== null) throw new Error(error.message)
+  }
+
+  async findAccountByDisplayName(displayName: string): Promise<AccountMatch | undefined> {
+    const { data, error } = await this.client.rpc('find_account_by_display_name', {
+      p_display_name: displayName,
+    })
+    if (error !== null) throw new Error(error.message)
+    const firstRow = (data ?? [])[0]
+    return firstRow === undefined ? undefined : mapAccountMatchRowToDomain(firstRow)
   }
 }

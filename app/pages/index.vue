@@ -2,11 +2,13 @@
 // Pattern d'erreurs : les actions du store throw ; on attrape ici et on
 // affiche un toast via useErrorToast (voir composables/useErrorToast).
 //
-// Le déclenchement de loadTournaments() est piloté par le store via un
-// watch interne sur currentUserId — couvre boot, magic link et
-// changement de compte sans qu'on ait à le faire ici. La page n'a
-// qu'à observer hasFetchedTournaments / lastLoadTournamentsError et
-// fournir un retry manuel sur erreur.
+// L'identité est résolue au boot par le store identity (plugin). La page
+// tire ce qu'elle affiche — liste des tournois et profil courant — dès que
+// l'identité est connue (watcher ci-dessous), puis observe
+// hasFetchedTournaments / l'erreur affichée et fournit un retry manuel.
+//
+// Header (mode accueil) déclaré via useAppHeader et rendu une fois par le
+// layout. La déconnexion reste accessible via /account (pastille profil).
 import type { TournamentStatus } from "../types";
 
 const tournamentStore = useTournamentStore();
@@ -17,7 +19,64 @@ const {
   hasFetchedTournaments,
   lastLoadTournamentsError,
 } = storeToRefs(tournamentStore);
+const profileStore = useProfileStore();
+const { profileById, currentProfile } = storeToRefs(profileStore);
+const identityStore = useIdentityStore();
+const { currentUserId, identityUnavailable, lastResolveError } =
+  storeToRefs(identityStore);
 const { showError } = useErrorToast();
+
+// Chargement gaté sur l'identité : liste des tournois + profil courant
+// (pastille du header). Les deux actions sont idempotentes et dédupliquent
+// leurs requêtes en vol ; `void` : fire-and-forget, elles ne throw pas.
+// immediate : couvre le boot (identité déjà connue ou non) et le changement
+// de compte.
+watch(
+  currentUserId,
+  (userId) => {
+    if (userId === null) return;
+    void tournamentStore.loadTournamentsForCurrentSession();
+    void profileStore.loadCurrentProfile();
+  },
+  { immediate: true },
+);
+
+// Erreur affichée par la branche d'erreur : échec du chargement des
+// tournois, ou identité indisponible (résolution en échec sans identité
+// connue — jamais une erreur d'identité par-dessus des données valides).
+const homeError = computed(
+  () =>
+    lastLoadTournamentsError.value ??
+    (identityUnavailable.value ? lastResolveError.value : null),
+);
+
+// Initiale de la pastille profil du header. Pastille vide (valeur neutre)
+// le temps du chargement du profil courant.
+const profileInitial = computed(() =>
+  (currentProfile.value?.displayName ?? "").charAt(0).toUpperCase(),
+);
+
+// Pastille profil → MON profil public (sens de navigation inversé : le
+// compte s'atteint depuis le profil). Identité canonique du store identity ;
+// dernier recours : /account.
+function goToMyProfile() {
+  const myUserId = currentUserId.value;
+  void navigateTo(myUserId ? `/profile/${myUserId}` : "/account");
+}
+
+// Config header (mode accueil). watchEffect pour que l'initiale se mette à
+// jour quand le profil s'hydrate.
+const { set: setHeader } = useAppHeader();
+watchEffect(() => {
+  setHeader({
+    mode: "accueil",
+    profileInitial: profileInitial.value,
+    onProfile: goToMyProfile,
+  });
+});
+// TODO bloc tournoi-en-cours : à brancher quand le store exposera
+// matchsJoues/matchsTotal/equipes du tournoi in_progress (prop `tournoi`
+// d'AppHeader, cf. HeaderTournoi) — l'ajouter à la config ci-dessus.
 
 const isRetrying = ref(false);
 
@@ -25,9 +84,14 @@ async function retryLoadTournaments() {
   if (isRetrying.value) return;
   isRetrying.value = true;
   try {
-    // On rejoue l'orchestration identité+fetch : si l'erreur initiale
-    // venait de getClaims() (fallback magic-link), un retry direct sur
-    // loadTournaments partirait sans identité résolue.
+    // Identité indisponible (getClaims en échec) : on relance seulement la
+    // résolution — si elle aboutit, le watcher ci-dessus charge. Sinon
+    // l'identité est connue et c'est le chargement lui-même qui a échoué :
+    // on le relance. Jamais les deux, pour ne pas doubler les requêtes.
+    if (currentUserId.value === null) {
+      await identityStore.resolveForCurrentSession();
+      return;
+    }
     await tournamentStore.loadTournamentsForCurrentSession();
   } catch (error) {
     showError(error);
@@ -74,6 +138,37 @@ const sortedPublicTournaments = computed(() => {
   );
 });
 
+// Owners des tournois où je ne suis pas l'organisateur (partagés +
+// publics). Mes propres tournois sont exclus : j'en suis l'owner, on
+// n'affiche pas "Organisé par moi".
+const ownerIdsToHydrate = computed(() => {
+  const ownerIds = new Set<string>();
+  for (const tournament of sortedSharedTournaments.value) {
+    ownerIds.add(tournament.ownerId);
+  }
+  for (const tournament of sortedPublicTournaments.value) {
+    ownerIds.add(tournament.ownerId);
+  }
+  return [...ownerIds];
+});
+
+// Hydratation best-effort du cache des profils. loadProfilesByIds est
+// idempotent (dédupe + exclut le cache) et ne throw jamais ; le `void`
+// est fire-and-forget pour ne pas bloquer le rendu de la home.
+watch(
+  ownerIdsToHydrate,
+  (ownerIds) => {
+    if (ownerIds.length > 0) void profileStore.loadProfilesByIds(ownerIds);
+  },
+  { immediate: true },
+);
+
+// Nom de l'organisateur si son profil est déjà résolu, sinon null (la
+// ligne "Organisé par" est alors omise — pas de placeholder).
+function organizerName(ownerId: string): string | null {
+  return profileById.value[ownerId]?.displayName ?? null;
+}
+
 const mineEmpty = computed(() => sortedMyTournaments.value.length === 0);
 const sharedEmpty = computed(() => sortedSharedTournaments.value.length === 0);
 const publicEmpty = computed(() => sortedPublicTournaments.value.length === 0);
@@ -81,28 +176,20 @@ const allEmpty = computed(
   () => mineEmpty.value && sharedEmpty.value && publicEmpty.value,
 );
 
-function statusLabel(status: TournamentStatus): string {
-  switch (status) {
-    case "draft":
-      return "Brouillon";
-    case "in_progress":
-      return "En cours";
-    case "completed":
-      return "Terminé";
+// Sous-info d'une CarteTournoi : « date · lieu », complétée du nom de
+// l'organisateur pour les tournois partagés/publics quand son profil est
+// résolu. Le statut n'y figure pas (porté par le label de la carte).
+function tournamentSubInfo(
+  tournament: { date: string; location?: string; ownerId: string },
+  withOrganizer = false,
+): string {
+  const parts = [formatDate(tournament.date)];
+  if (tournament.location) parts.push(tournament.location);
+  if (withOrganizer) {
+    const organizer = organizerName(tournament.ownerId);
+    if (organizer) parts.push(`Par ${organizer}`);
   }
-}
-
-type BadgeColor = "primary" | "secondary" | "success";
-
-function statusBadgeColor(status: TournamentStatus): BadgeColor {
-  switch (status) {
-    case "in_progress":
-      return "primary";
-    case "draft":
-      return "secondary";
-    case "completed":
-      return "success";
-  }
+  return parts.join(" · ");
 }
 
 useHead({ title: "Pétankup — Gestion de tournois" });
@@ -110,175 +197,159 @@ useHead({ title: "Pétankup — Gestion de tournois" });
 
 <template>
   <div>
-    <div v-if="lastLoadTournamentsError" class="space-y-3 py-16 text-center">
-      <h2 class="text-lg font-semibold text-primary-900">
+    <div
+      v-if="homeError"
+      class="flex flex-col items-center gap-3 py-16 text-center"
+    >
+      <h2 class="font-disp text-[19px] font-extrabold text-(--pk-ink)">
         Impossible de charger les tournois
       </h2>
-      <p class="text-toned">Vérifiez votre connexion et réessayez.</p>
+      <p class="font-sans text-sm text-(--pk-subtle)">
+        Vérifiez votre connexion et réessayez.
+      </p>
       <UButton
         color="primary"
-        size="lg"
-        :loading="isRetrying"
-        class="mt-2"
         block
+        :loading="isRetrying"
+        class="mt-2 h-13 rounded-[13px] font-disp text-[15px] font-extrabold tracking-[0.02em] uppercase text-(--pk-cream)"
         @click="retryLoadTournaments"
       >
         Réessayer
       </UButton>
     </div>
 
-    <div
+    <p
       v-else-if="!hasFetchedTournaments"
-      class="py-16 text-center"
+      class="py-16 text-center font-sans text-sm text-(--pk-subtle)"
     >
-      <p class="text-toned">Chargement…</p>
-    </div>
+      Chargement…
+    </p>
 
-    <div v-else-if="allEmpty" class="py-16 text-center">
-      <h2 class="text-lg font-semibold text-primary-900">
+    <div
+      v-else-if="allEmpty"
+      class="flex flex-col items-center gap-3 py-8 text-center"
+    >
+      <BouleAvatar tone="gold" :size="64" />
+      <p class="font-disp text-[19px] font-extrabold text-(--pk-ink)">
         Aucun tournoi pour l'instant
-      </h2>
-      <p class="mt-2 text-toned">Créez votre premier tournoi de pétanque</p>
-      <UButton
-        to="/tournaments/new"
-        color="primary"
-        size="lg"
-        class="mt-6"
-        block
-      >
-        Créer un tournoi
-      </UButton>
+      </p>
+      <p class="font-sans text-sm text-(--pk-subtle)">
+        Créez votre premier tournoi, ou notez une partie
+      </p>
+      <!-- Deux entrées de création, à hauteur tactile (h-13) : tournoi et
+           match libre. Mêmes boutons que sur l'accueil rempli. -->
+      <div class="mt-2 grid w-full grid-cols-2 gap-2.75">
+        <UButton
+          to="/tournaments/new"
+          color="primary"
+          icon="i-lucide-plus"
+          block
+          class="h-13 rounded-[13px] font-disp text-[13px] font-extrabold tracking-[0.02em] uppercase text-(--pk-cream)"
+          :ui="{ leadingIcon: 'size-4.5' }"
+        >
+          Nouveau tournoi
+        </UButton>
+        <UButton
+          to="/free-matches/new"
+          color="navy"
+          icon="i-lucide-swords"
+          block
+          class="h-13 rounded-[13px] font-disp text-[13px] font-extrabold tracking-[0.02em] uppercase"
+          :ui="{ leadingIcon: 'size-4.5' }"
+        >
+          Nouveau match
+        </UButton>
+      </div>
     </div>
 
     <div v-else class="space-y-6">
-      <UButton to="/tournaments/new" color="primary" size="lg" block>
-        Créer un tournoi
-      </UButton>
-
-      <section v-if="!mineEmpty" class="space-y-3">
-        <h2
-          class="text-xs font-semibold uppercase tracking-[0.08em] text-toned"
+      <!-- Deux entrées de création, à hauteur tactile (h-13) : tournoi et
+           match libre. Remplace le petit « Nouveau » de l'en-tête de section
+           (31 px, sous la cible tactile). -->
+      <div class="grid grid-cols-2 gap-2.75">
+        <UButton
+          to="/tournaments/new"
+          color="primary"
+          icon="i-lucide-plus"
+          block
+          class="h-13 rounded-[13px] font-disp text-[13px] font-extrabold tracking-[0.02em] uppercase text-(--pk-cream)"
+          :ui="{ leadingIcon: 'size-4.5' }"
         >
-          Mes tournois
+          Nouveau tournoi
+        </UButton>
+        <UButton
+          to="/free-matches/new"
+          color="navy"
+          icon="i-lucide-swords"
+          block
+          class="h-13 rounded-[13px] font-disp text-[13px] font-extrabold tracking-[0.02em] uppercase"
+          :ui="{ leadingIcon: 'size-4.5' }"
+        >
+          Nouveau match
+        </UButton>
+      </div>
+
+      <section>
+        <h2
+          class="mb-3 font-disp text-[11px] font-extrabold tracking-[0.14em] uppercase text-(--pk-subtle)"
+        >
+          Tous les tournois
         </h2>
-        <ul class="space-y-3">
-          <li v-for="tournament in sortedMyTournaments" :key="tournament.id">
+        <ul v-if="!mineEmpty" class="space-y-2.75">
+          <li
+            v-for="tournament in sortedMyTournaments"
+            :key="tournament.id"
+          >
             <NuxtLink :to="`/tournaments/${tournament.id}`" class="block">
-              <UCard>
-                <div class="flex items-start justify-between gap-3">
-                  <div class="min-w-0 space-y-1">
-                    <h3 class="truncate font-semibold text-primary-900">
-                      {{ tournament.name }}
-                    </h3>
-                    <p class="text-sm text-toned">
-                      {{ formatDate(tournament.date) }}
-                    </p>
-                    <p
-                      v-if="tournament.location"
-                      class="truncate text-sm text-toned"
-                    >
-                      {{ tournament.location }}
-                    </p>
-                  </div>
-                  <div class="flex shrink-0 flex-col items-end gap-1">
-                    <UBadge
-                      :color="statusBadgeColor(tournament.status)"
-                      variant="soft"
-                    >
-                      {{ statusLabel(tournament.status) }}
-                    </UBadge>
-                    <VisibilityBadge :visibility="tournament.visibility" />
-                  </div>
-                </div>
-              </UCard>
+              <CarteTournoi
+                :name="tournament.name"
+                :sub-info="tournamentSubInfo(tournament)"
+                :status="tournament.status"
+              />
             </NuxtLink>
           </li>
         </ul>
       </section>
 
-      <section v-if="!sharedEmpty" class="space-y-3">
+      <section v-if="!sharedEmpty">
         <h2
-          class="text-xs font-semibold uppercase tracking-[0.08em] text-toned"
+          class="mb-3 font-disp text-[11px] font-extrabold tracking-[0.14em] uppercase text-(--pk-subtle)"
         >
           Partagés avec moi
         </h2>
-        <ul class="space-y-3">
+        <ul class="space-y-2.75">
           <li
             v-for="tournament in sortedSharedTournaments"
             :key="tournament.id"
           >
             <NuxtLink :to="`/tournaments/${tournament.id}`" class="block">
-              <UCard>
-                <div class="flex items-start justify-between gap-3">
-                  <div class="min-w-0 space-y-1">
-                    <h3 class="truncate font-semibold text-primary-900">
-                      {{ tournament.name }}
-                    </h3>
-                    <p class="text-sm text-toned">
-                      {{ formatDate(tournament.date) }}
-                    </p>
-                    <p
-                      v-if="tournament.location"
-                      class="truncate text-sm text-toned"
-                    >
-                      {{ tournament.location }}
-                    </p>
-                  </div>
-                  <div class="flex shrink-0 flex-col items-end gap-1">
-                    <UBadge
-                      :color="statusBadgeColor(tournament.status)"
-                      variant="soft"
-                    >
-                      {{ statusLabel(tournament.status) }}
-                    </UBadge>
-                    <VisibilityBadge :visibility="tournament.visibility" />
-                  </div>
-                </div>
-              </UCard>
+              <CarteTournoi
+                :name="tournament.name"
+                :sub-info="tournamentSubInfo(tournament, true)"
+                :status="tournament.status"
+              />
             </NuxtLink>
           </li>
         </ul>
       </section>
 
-      <section v-if="!publicEmpty" class="space-y-3">
+      <section v-if="!publicEmpty">
         <h2
-          class="text-xs font-semibold uppercase tracking-[0.08em] text-toned"
+          class="mb-3 font-disp text-[11px] font-extrabold tracking-[0.14em] uppercase text-(--pk-subtle)"
         >
           Tournois publics
         </h2>
-        <ul class="space-y-3">
+        <ul class="space-y-2.75">
           <li
             v-for="tournament in sortedPublicTournaments"
             :key="tournament.id"
           >
             <NuxtLink :to="`/tournaments/${tournament.id}`" class="block">
-              <UCard>
-                <div class="flex items-start justify-between gap-3">
-                  <div class="min-w-0 space-y-1">
-                    <h3 class="truncate font-semibold text-primary-900">
-                      {{ tournament.name }}
-                    </h3>
-                    <p class="text-sm text-toned">
-                      {{ formatDate(tournament.date) }}
-                    </p>
-                    <p
-                      v-if="tournament.location"
-                      class="truncate text-sm text-toned"
-                    >
-                      {{ tournament.location }}
-                    </p>
-                  </div>
-                  <div class="flex shrink-0 flex-col items-end gap-1">
-                    <UBadge
-                      :color="statusBadgeColor(tournament.status)"
-                      variant="soft"
-                    >
-                      {{ statusLabel(tournament.status) }}
-                    </UBadge>
-                    <VisibilityBadge :visibility="tournament.visibility" />
-                  </div>
-                </div>
-              </UCard>
+              <CarteTournoi
+                :name="tournament.name"
+                :sub-info="tournamentSubInfo(tournament, true)"
+                :status="tournament.status"
+              />
             </NuxtLink>
           </li>
         </ul>

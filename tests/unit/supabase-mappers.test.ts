@@ -1,21 +1,29 @@
 import { describe, expect, it } from 'vitest'
 import type { Database } from '../../app/types/database.types'
-import type { Match, Team, Tournament, TournamentMember } from '../../app/types'
+import type { TournamentMatch, Profile, Team, TeamPlayer, Teammate, Tournament, TournamentMember, UserProfileBundle } from '../../app/types'
 import {
   mapMatchDomainToInsert,
+  mapMatchDomainToUpdate,
   mapMatchRowToDomain,
-  mapTeamDomainToInsert,
+  mapProfileRowToDomain,
+  mapTeamPlayerRowToDomain,
   mapTeamRowToDomain,
   mapTournamentDomainToInsert,
+  mapTournamentDomainToUpdate,
   mapTournamentMemberRowToDomain,
   mapTournamentRowToDomain,
+  mapUserProfileBundleJsonToDomain,
+  type RawUserProfileBundleJson,
 } from '../../app/repositories/supabase-mappers'
 
 type TournamentRow = Database['public']['Tables']['tournaments']['Row']
 type TeamRow = Database['public']['Tables']['teams']['Row']
-type MatchRow = Database['public']['Tables']['matches']['Row']
+type TeamPlayerRow = Database['public']['Tables']['team_players']['Row']
+type TeamRowWithPlayers = TeamRow & { team_players: TeamPlayerRow[] }
+type MatchRow = Database['public']['Tables']['tournament_matches']['Row']
 type TournamentMemberRow
   = Database['public']['Tables']['tournament_members']['Row']
+type ProfileRow = Database['public']['Tables']['profiles']['Row']
 
 const NOW = '2026-01-01T00:00:00.000Z'
 const OWNER_ID = '11111111-1111-4111-8111-111111111111'
@@ -164,53 +172,115 @@ describe('mapTournamentDomainToInsert', () => {
   })
 })
 
+const PLAYER_FREE_ID = '88888888-8888-4888-8888-888888888888'
+const PLAYER_LINKED_ID = '99999999-9999-4999-8999-999999999999'
+
+function makeTeamPlayerRow(overrides: Partial<TeamPlayerRow> = {}): TeamPlayerRow {
+  return {
+    id: PLAYER_FREE_ID,
+    team_id: TEAM_A_ID,
+    tournament_id: TOURNAMENT_ID,
+    user_id: null,
+    display_name: 'Alice',
+    created_at: NOW,
+    updated_at: NOW,
+    ...overrides,
+  }
+}
+
+describe('mapTeamPlayerRowToDomain', () => {
+  it('translates a free player row (user_id null)', () => {
+    expect(mapTeamPlayerRowToDomain(makeTeamPlayerRow())).toEqual<TeamPlayer>({
+      id: PLAYER_FREE_ID,
+      teamId: TEAM_A_ID,
+      tournamentId: TOURNAMENT_ID,
+      userId: null,
+      displayNameSnapshot: 'Alice',
+      createdAt: NOW,
+      updatedAt: NOW,
+    })
+  })
+
+  it('translates a linked player row (user_id set)', () => {
+    const row = makeTeamPlayerRow({
+      id: PLAYER_LINKED_ID,
+      user_id: INVITEE_USER_ID,
+      display_name: 'Bob',
+    })
+    expect(mapTeamPlayerRowToDomain(row)).toEqual<TeamPlayer>({
+      id: PLAYER_LINKED_ID,
+      teamId: TEAM_A_ID,
+      tournamentId: TOURNAMENT_ID,
+      userId: INVITEE_USER_ID,
+      displayNameSnapshot: 'Bob',
+      createdAt: NOW,
+      updatedAt: NOW,
+    })
+  })
+})
+
 describe('mapTeamRowToDomain', () => {
-  it('translates a complete row to a Team', () => {
-    const row: TeamRow = {
+  it('translates a complete row with embedded team_players to a Team', () => {
+    const row: TeamRowWithPlayers = {
       id: TEAM_A_ID,
       tournament_id: TOURNAMENT_ID,
       name: 'Les Boulistes',
-      players: ['Alice', 'Bob'],
       created_at: NOW,
       updated_at: NOW,
+      team_players: [
+        makeTeamPlayerRow(),
+        makeTeamPlayerRow({
+          id: PLAYER_LINKED_ID,
+          user_id: INVITEE_USER_ID,
+          display_name: 'Bob',
+        }),
+      ],
     }
 
     expect(mapTeamRowToDomain(row)).toEqual<Team>({
       id: TEAM_A_ID,
       tournamentId: TOURNAMENT_ID,
       name: 'Les Boulistes',
-      players: ['Alice', 'Bob'],
+      players: [
+        {
+          id: PLAYER_FREE_ID,
+          teamId: TEAM_A_ID,
+          tournamentId: TOURNAMENT_ID,
+          userId: null,
+          displayNameSnapshot: 'Alice',
+          createdAt: NOW,
+          updatedAt: NOW,
+        },
+        {
+          id: PLAYER_LINKED_ID,
+          teamId: TEAM_A_ID,
+          tournamentId: TOURNAMENT_ID,
+          userId: INVITEE_USER_ID,
+          displayNameSnapshot: 'Bob',
+          createdAt: NOW,
+          updatedAt: NOW,
+        },
+      ],
       createdAt: NOW,
       updatedAt: NOW,
     })
   })
-})
 
-describe('mapTeamDomainToInsert', () => {
-  it('translates a domain Team to an Insert payload', () => {
-    const team: Team = {
-      id: TEAM_A_ID,
-      tournamentId: TOURNAMENT_ID,
-      name: 'Les Boulistes',
-      players: ['Alice', 'Bob'],
-      createdAt: NOW,
-      updatedAt: NOW,
-    }
-
-    const insert = mapTeamDomainToInsert(team)
-    expect(insert).toEqual({
+  it('maps an empty team_players embed to an empty players array', () => {
+    const row: TeamRowWithPlayers = {
       id: TEAM_A_ID,
       tournament_id: TOURNAMENT_ID,
-      name: 'Les Boulistes',
-      players: ['Alice', 'Bob'],
-    })
-    expect(insert).not.toHaveProperty('created_at')
-    expect(insert).not.toHaveProperty('updated_at')
+      name: 'Équipe vide',
+      created_at: NOW,
+      updated_at: NOW,
+      team_players: [],
+    }
+    expect(mapTeamRowToDomain(row).players).toEqual([])
   })
 })
 
 describe('mapMatchRowToDomain', () => {
-  it('translates a completed match row to a Match', () => {
+  it('translates a completed match row to a TournamentMatch', () => {
     const row: MatchRow = {
       id: MATCH_ID,
       tournament_id: TOURNAMENT_ID,
@@ -225,7 +295,7 @@ describe('mapMatchRowToDomain', () => {
       updated_at: NOW,
     }
 
-    expect(mapMatchRowToDomain(row)).toEqual<Match>({
+    expect(mapMatchRowToDomain(row)).toEqual<TournamentMatch>({
       id: MATCH_ID,
       tournamentId: TOURNAMENT_ID,
       teamAId: TEAM_A_ID,
@@ -264,8 +334,8 @@ describe('mapMatchRowToDomain', () => {
 })
 
 describe('mapMatchDomainToInsert', () => {
-  it('translates a domain Match to an Insert payload (roundNumber → round_number)', () => {
-    const match: Match = {
+  it('translates a domain TournamentMatch to an Insert payload (roundNumber → round_number)', () => {
+    const match: TournamentMatch = {
       id: MATCH_ID,
       tournamentId: TOURNAMENT_ID,
       teamAId: TEAM_A_ID,
@@ -296,7 +366,7 @@ describe('mapMatchDomainToInsert', () => {
   })
 
   it('preserves null for pending match scores and winner', () => {
-    const match: Match = {
+    const match: TournamentMatch = {
       id: MATCH_ID,
       tournamentId: TOURNAMENT_ID,
       teamAId: TEAM_A_ID,
@@ -354,5 +424,439 @@ describe('mapTournamentMemberRowToDomain', () => {
     expect(mapTournamentMemberRowToDomain(row).memberEmail).toBe(
       'Mixed.Case+tag@Example.COM',
     )
+  })
+})
+
+describe('mapProfileRowToDomain', () => {
+  it('translates a complete row to a Profile with snake_case → camelCase', () => {
+    const row: ProfileRow = {
+      id: OWNER_ID,
+      display_name: 'Alice',
+      created_at: NOW,
+      updated_at: NOW,
+    }
+
+    expect(mapProfileRowToDomain(row)).toEqual<Profile>({
+      id: OWNER_ID,
+      displayName: 'Alice',
+      createdAt: NOW,
+      updatedAt: NOW,
+    })
+  })
+})
+
+describe('mapUserProfileBundleJsonToDomain', () => {
+  function makeRawBundle(
+    overrides: Partial<RawUserProfileBundleJson> = {},
+  ): RawUserProfileBundleJson {
+    return {
+      profile: {
+        id: OWNER_ID,
+        display_name: 'Alice',
+        created_at: NOW,
+        updated_at: NOW,
+      },
+      stats: {
+        matches_played: 4,
+        wins: 3,
+        losses: 1,
+        points_scored: 50,
+        points_conceded: 30,
+        tournaments_played: 2,
+        tournaments_won: 1,
+        podiums: 2,
+        last_tournament_at: NOW,
+      },
+      results: [
+        {
+          tournament_id: TOURNAMENT_ID,
+          tournament_name: 'Tournoi du dimanche',
+          tournament_date: '2026-05-10',
+          tournament_completed_at: NOW,
+          team_id: TEAM_A_ID,
+          team_name: 'Les Fanny',
+          wins: 2,
+          losses: 1,
+          points_scored: 30,
+          points_conceded: 20,
+          final_rank: 1,
+          is_winner: true,
+          is_podium: true,
+          viewer_can_open: true,
+          teammates: [{ user_id: INVITEE_USER_ID, display_name: 'Bob' }],
+        },
+      ],
+      free_matches: [
+        {
+          match_id: MATCH_ID,
+          played_on: '2026-08-20',
+          created_at: NOW,
+          score_a: 9,
+          score_b: 13,
+          side: 'B',
+          viewer_can_open: true,
+          teammates: [{ user_id: null, display_name: 'Marcel' }],
+          opponents: [{ user_id: INVITEE_USER_ID, display_name: 'Bob' }],
+        },
+      ],
+      free_match_stats: {
+        matches_played: 3,
+        wins: 2,
+        losses: 1,
+        points_scored: 31,
+        points_conceded: 29,
+      },
+      ...overrides,
+    }
+  }
+
+  it('translates a complete bundle snake_case → camelCase', () => {
+    expect(
+      mapUserProfileBundleJsonToDomain(makeRawBundle()),
+    ).toEqual<UserProfileBundle>({
+      profile: {
+        id: OWNER_ID,
+        displayName: 'Alice',
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+      stats: {
+        matchesPlayed: 4,
+        wins: 3,
+        losses: 1,
+        pointsScored: 50,
+        pointsConceded: 30,
+        tournamentsPlayed: 2,
+        tournamentsWon: 1,
+        podiums: 2,
+        lastTournamentAt: NOW,
+      },
+      results: [
+        {
+          tournamentId: TOURNAMENT_ID,
+          tournamentName: 'Tournoi du dimanche',
+          tournamentDate: '2026-05-10',
+          tournamentCompletedAt: NOW,
+          teamId: TEAM_A_ID,
+          teamName: 'Les Fanny',
+          wins: 2,
+          losses: 1,
+          pointsScored: 30,
+          pointsConceded: 20,
+          finalRank: 1,
+          isWinner: true,
+          isPodium: true,
+          viewerCanOpen: true,
+          teammates: [{ userId: INVITEE_USER_ID, displayName: 'Bob' }],
+        },
+      ],
+      freeMatches: [
+        {
+          matchId: MATCH_ID,
+          playedOn: '2026-08-20',
+          createdAt: NOW,
+          scoreA: 9,
+          scoreB: 13,
+          side: 'B',
+          viewerCanOpen: true,
+          teammates: [{ userId: null, displayName: 'Marcel' }],
+          opponents: [{ userId: INVITEE_USER_ID, displayName: 'Bob' }],
+        },
+      ],
+      freeMatchStats: {
+        matchesPlayed: 3,
+        wins: 2,
+        losses: 1,
+        pointsScored: 31,
+        pointsConceded: 29,
+      },
+    })
+  })
+
+  it('maps a missing free_matches / free_match_stats to [] and null (deploy skew, pre-H2.c-1 DB)', () => {
+    const raw = makeRawBundle()
+    delete raw.free_matches
+    delete raw.free_match_stats
+
+    const bundle = mapUserProfileBundleJsonToDomain(raw)
+
+    expect(bundle.freeMatches).toEqual([])
+    expect(bundle.freeMatchStats).toBeNull()
+  })
+
+  it('maps a null free_match_stats to null (player without free matches)', () => {
+    expect(
+      mapUserProfileBundleJsonToDomain(makeRawBundle({ free_match_stats: null }))
+        .freeMatchStats,
+    ).toBeNull()
+  })
+
+  it('defaults a free-match viewerCanOpen to false when the RPC omits it', () => {
+    const raw = makeRawBundle()
+    delete raw.free_matches?.[0]?.viewer_can_open
+
+    expect(
+      mapUserProfileBundleJsonToDomain(raw).freeMatches[0]?.viewerCanOpen,
+    ).toBe(false)
+  })
+
+  it('preserves the order of free matches (no sorting in the mapper)', () => {
+    const raw = makeRawBundle({
+      free_matches: [
+        {
+          match_id: MATCH_ID,
+          played_on: '2026-01-01',
+          created_at: '2026-01-01T00:00:00.000Z',
+          score_a: 13,
+          score_b: 0,
+          side: 'A',
+          viewer_can_open: true,
+          teammates: [],
+          opponents: [],
+        },
+        {
+          match_id: TEAM_B_ID,
+          played_on: '2026-05-10',
+          created_at: '2026-05-10T00:00:00.000Z',
+          score_a: 0,
+          score_b: 13,
+          side: 'B',
+          viewer_can_open: true,
+          teammates: [],
+          opponents: [],
+        },
+      ],
+    })
+
+    expect(
+      mapUserProfileBundleJsonToDomain(raw).freeMatches.map(
+        freeMatch => freeMatch.playedOn,
+      ),
+    ).toEqual(['2026-01-01', '2026-05-10'])
+  })
+
+  it('keeps empty teammates/opponents on a non-openable free match', () => {
+    const raw = makeRawBundle({
+      free_matches: [
+        {
+          match_id: MATCH_ID,
+          played_on: '2026-08-20',
+          created_at: NOW,
+          score_a: 13,
+          score_b: 7,
+          side: 'A',
+          viewer_can_open: false,
+          teammates: [],
+          opponents: [],
+        },
+      ],
+    })
+
+    const freeMatch = mapUserProfileBundleJsonToDomain(raw).freeMatches[0]!
+    expect(freeMatch.viewerCanOpen).toBe(false)
+    expect(freeMatch.teammates).toEqual([])
+    expect(freeMatch.opponents).toEqual([])
+  })
+
+  it('defaults viewerCanOpen to false when the RPC omits viewer_can_open (deploy skew)', () => {
+    const raw = makeRawBundle()
+    delete raw.results[0]?.viewer_can_open
+
+    const bundle = mapUserProfileBundleJsonToDomain(raw)
+
+    expect(bundle.results[0]?.viewerCanOpen).toBe(false)
+  })
+
+  it('preserves the order of results (no sorting in the mapper)', () => {
+    const raw = makeRawBundle({
+      results: [
+        {
+          tournament_id: TOURNAMENT_ID,
+          tournament_name: 'Récent',
+          tournament_date: '2026-05-10',
+          tournament_completed_at: '2026-05-10T00:00:00.000Z',
+          team_id: TEAM_A_ID,
+          team_name: 'A',
+          wins: 1,
+          losses: 0,
+          points_scored: 13,
+          points_conceded: 5,
+          final_rank: 1,
+          is_winner: true,
+          is_podium: true,
+          teammates: [],
+        },
+        {
+          tournament_id: TOURNAMENT_ID,
+          tournament_name: 'Ancien',
+          tournament_date: '2026-01-01',
+          tournament_completed_at: '2026-01-01T00:00:00.000Z',
+          team_id: TEAM_B_ID,
+          team_name: 'B',
+          wins: 0,
+          losses: 1,
+          points_scored: 5,
+          points_conceded: 13,
+          final_rank: 2,
+          is_winner: false,
+          is_podium: true,
+          teammates: [],
+        },
+      ],
+    })
+
+    expect(
+      mapUserProfileBundleJsonToDomain(raw).results.map(
+        result => result.tournamentName,
+      ),
+    ).toEqual(['Récent', 'Ancien'])
+  })
+
+  it('maps a null profile to null', () => {
+    expect(
+      mapUserProfileBundleJsonToDomain(makeRawBundle({ profile: null })).profile,
+    ).toBeNull()
+  })
+
+  it('maps null stats to null', () => {
+    expect(
+      mapUserProfileBundleJsonToDomain(makeRawBundle({ stats: null })).stats,
+    ).toBeNull()
+  })
+
+  it('maps empty results to []', () => {
+    expect(
+      mapUserProfileBundleJsonToDomain(makeRawBundle({ results: [] })).results,
+    ).toEqual([])
+  })
+
+  it('keeps a free teammate (user_id null) as userId null with its snapshot name', () => {
+    const raw = makeRawBundle({
+      results: [
+        {
+          tournament_id: TOURNAMENT_ID,
+          tournament_name: 'Tournoi',
+          tournament_date: '2026-05-10',
+          tournament_completed_at: NOW,
+          team_id: TEAM_A_ID,
+          team_name: 'Team',
+          wins: 1,
+          losses: 0,
+          points_scored: 13,
+          points_conceded: 7,
+          final_rank: 1,
+          is_winner: true,
+          is_podium: true,
+          teammates: [{ user_id: null, display_name: 'Pierre' }],
+        },
+      ],
+    })
+
+    expect(
+      mapUserProfileBundleJsonToDomain(raw).results[0]!.teammates,
+    ).toEqual<Teammate[]>([{ userId: null, displayName: 'Pierre' }])
+  })
+
+  it('maps a null last_tournament_at to null', () => {
+    const raw = makeRawBundle({
+      stats: {
+        matches_played: 0,
+        wins: 0,
+        losses: 0,
+        points_scored: 0,
+        points_conceded: 0,
+        tournaments_played: 0,
+        tournaments_won: 0,
+        podiums: 0,
+        last_tournament_at: null,
+      },
+    })
+
+    expect(
+      mapUserProfileBundleJsonToDomain(raw).stats?.lastTournamentAt,
+    ).toBeNull()
+  })
+})
+
+describe('mapTournamentDomainToUpdate', () => {
+  const tournament: Tournament = {
+    id: TOURNAMENT_ID,
+    name: 'Tournoi',
+    date: '2026-05-10',
+    location: 'Parc Bordelais',
+    description: 'Tournoi entre amis',
+    format: 'round_robin',
+    status: 'in_progress',
+    visibility: 'public',
+    ownerId: OWNER_ID,
+    createdAt: NOW,
+    updatedAt: NOW,
+  }
+
+  it('emits only the mutable columns', () => {
+    expect(mapTournamentDomainToUpdate(tournament)).toEqual({
+      name: 'Tournoi',
+      date: '2026-05-10',
+      location: 'Parc Bordelais',
+      description: 'Tournoi entre amis',
+      status: 'in_progress',
+      visibility: 'public',
+    })
+  })
+
+  it('omits id, immutable and DB-managed columns', () => {
+    const update = mapTournamentDomainToUpdate(tournament)
+    expect(update).not.toHaveProperty('id')
+    expect(update).not.toHaveProperty('owner_id')
+    expect(update).not.toHaveProperty('format')
+    expect(update).not.toHaveProperty('created_at')
+    expect(update).not.toHaveProperty('updated_at')
+    expect(update).not.toHaveProperty('completed_at')
+  })
+
+  it('maps absent location/description to null', () => {
+    const update = mapTournamentDomainToUpdate({
+      ...tournament,
+      location: undefined,
+      description: undefined,
+    })
+    expect(update.location).toBeNull()
+    expect(update.description).toBeNull()
+  })
+})
+
+describe('mapMatchDomainToUpdate', () => {
+  const match: TournamentMatch = {
+    id: MATCH_ID,
+    tournamentId: TOURNAMENT_ID,
+    teamAId: TEAM_A_ID,
+    teamBId: TEAM_B_ID,
+    scoreA: 13,
+    scoreB: 7,
+    winnerId: TEAM_A_ID,
+    status: 'completed',
+    roundNumber: 1,
+    createdAt: NOW,
+    updatedAt: NOW,
+  }
+
+  it('emits only the score/outcome columns', () => {
+    expect(mapMatchDomainToUpdate(match)).toEqual({
+      score_a: 13,
+      score_b: 7,
+      winner_id: TEAM_A_ID,
+      status: 'completed',
+    })
+  })
+
+  it('omits id, structural and DB-managed columns', () => {
+    const update = mapMatchDomainToUpdate(match)
+    expect(update).not.toHaveProperty('id')
+    expect(update).not.toHaveProperty('tournament_id')
+    expect(update).not.toHaveProperty('team_a_id')
+    expect(update).not.toHaveProperty('team_b_id')
+    expect(update).not.toHaveProperty('round_number')
+    expect(update).not.toHaveProperty('created_at')
+    expect(update).not.toHaveProperty('updated_at')
   })
 })

@@ -9,6 +9,10 @@ dist
 # Node dependencies
 node_modules
 
+# Artefacts TS compilés — aucun .js natif dans app/
+app/**/*.js
+app/**/*.vue.js
+
 # Logs
 logs
 *.log
@@ -18,13 +22,15 @@ logs
 .fleet
 .idea
 
+# Supabase CLI local state
+supabase/.temp/
+
 # Local env files
 .env
 .env.*
 !.env.example
 
 # Claude Code
-CLAUDE.md
 skills-lock.json
 .claude/
 .agents/
@@ -32,11 +38,12 @@ skills-lock.json
 # VS Code
 .vscode/
 
-# Docs & references
-references/
+# Docs & references — le dossier reste ignoré (design-system généré),
+# mais le cahier des charges est versionné (source de vérité produit).
+references/*
+!references/cahier_des_charges.md
 .gitattributes
 
 # macOS metadata
-.DS_Store
 __MACOSX/
 ._*

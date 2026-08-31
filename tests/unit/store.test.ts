@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { flushPromises } from '@vue/test-utils'
 import type { TournamentRepository } from '../../app/repositories/TournamentRepository'
-import type { Match, Team, Tournament, TournamentMember } from '../../app/types'
+import type { TournamentMatch, Team, TeamPlayer, Tournament, TournamentMember } from '../../app/types'
 import { InviteMemberError } from '../../app/types'
 
 const STUB_USER_ID = '99999999-9999-4999-8999-999999999999'
@@ -80,10 +80,29 @@ vi.mock('../../app/repositories', () => ({
 // Import APRÈS le `vi.mock` pour la lisibilité (vitest hisse les deux
 // de toute façon, donc l'ordre textuel est sans effet sur l'exécution).
 import { useTournamentStore } from '../../app/stores/tournament'
+import { useIdentityStore } from '../../app/stores/identity'
 
 const NOW = '2026-01-01T00:00:00.000Z'
 const UUID_V4_REGEX
   = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+// Reconstitue un TeamPlayer comme le ferait la RPC : id généré, snapshot du
+// displayName fourni, userId conservé.
+function makeTeamPlayer(
+  teamId: string,
+  tournamentId: string,
+  input: { userId: string | null, displayName: string },
+): TeamPlayer {
+  return {
+    id: crypto.randomUUID(),
+    teamId,
+    tournamentId,
+    userId: input.userId,
+    displayNameSnapshot: input.displayName,
+    createdAt: NOW,
+    updatedAt: NOW,
+  }
+}
 
 function makeTournament(overrides: Partial<Tournament> = {}): Tournament {
   return {
@@ -105,19 +124,19 @@ function makeTournament(overrides: Partial<Tournament> = {}): Tournament {
 // team → matches où elle apparaît). Reproduit le comportement de
 // SupabaseRepository (cascades DB) sans toucher au réseau.
 //
-// Convention pour inviteMemberByEmail (déterministe par email pour
+// Convention pour inviteMemberByDisplayName (déterministe par pseudo pour
 // produire les codes d'erreur sans avoir à mocker la RPC SQL) :
-//   - email contenant 'notfound@'   → throw 'user_not_found'
-//   - email contenant 'selfinvite@' → throw 'self_invite'
+//   - pseudo contenant 'NotFound'   → throw 'display_name_not_found'
+//   - pseudo contenant 'SelfInvite' → throw 'self_invite'
 //   - doublon (tournament_id, user_id) → throw 'already_member'
 //   - sinon : insert + retour de la ligne TournamentMember.
-// Pas de normalisation d'email (le repo réel est pass-through, le
-// mock reflète ce contrat). Le mock dérive un user_id stable depuis
-// l'email afin que la contrainte unique fonctionne entre appels.
+// Pas de normalisation côté mock (le repo réel est pass-through). Le mock
+// dérive un user_id stable depuis le pseudo afin que la contrainte unique
+// fonctionne entre appels, et un member_email snapshot.
 function createMockRepository(): TournamentRepository {
   let tournaments: Tournament[] = []
   let teams: Team[] = []
-  let matches: Match[] = []
+  let matches: TournamentMatch[] = []
   let tournamentMembers: TournamentMember[] = []
 
   function upsertById<T extends { id: string }>(items: T[], itemToUpsert: T): T[] {
@@ -128,19 +147,22 @@ function createMockRepository(): TournamentRepository {
     return updated
   }
 
-  function deriveUserIdFromEmail(email: string): string {
-    // UUID v4 stable dérivé du local-part : permet d'identifier un
+  function deriveUserIdFromDisplayName(displayName: string): string {
+    // UUID v4 stable dérivé du pseudo normalisé : permet d'identifier un
     // "même invité" entre deux appels sans avoir à passer un userId
     // explicite côté test. Format inspiré du STUB_USER_ID.
-    const localPart = email.split('@')[0] ?? 'unknown'
-    const padded = (localPart + '0000000000').slice(0, 12)
+    const normalized = displayName.trim().toLowerCase().replace(/[^a-z0-9]/g, '')
+    const padded = (normalized + '0000000000').slice(0, 12)
     return `00000000-0000-4000-8000-${padded}`.slice(0, 36).padEnd(36, '0')
   }
 
   return {
     getAllTournaments: async () => [...tournaments],
     getTournamentById: async id => tournaments.find(tournament => tournament.id === id),
-    saveTournament: async (tournament) => {
+    createTournament: async (tournament) => {
+      tournaments = upsertById(tournaments, tournament)
+    },
+    updateTournament: async (tournament) => {
       tournaments = upsertById(tournaments, tournament)
     },
     deleteTournament: async (id) => {
@@ -153,8 +175,32 @@ function createMockRepository(): TournamentRepository {
     },
 
     getTeamsByTournament: async tournamentId => teams.filter(team => team.tournamentId === tournamentId),
-    saveTeam: async (team) => {
-      teams = upsertById(teams, team)
+    createTeam: async (tournamentId, name, players) => {
+      const teamId = crypto.randomUUID()
+      const newTeam: Team = {
+        id: teamId,
+        tournamentId,
+        name,
+        players: players.map(player => makeTeamPlayer(teamId, tournamentId, player)),
+        createdAt: NOW,
+        updatedAt: NOW,
+      }
+      teams = [...teams, newTeam]
+      return newTeam
+    },
+    updateTeam: async (teamId, name, players) => {
+      const existing = teams.find(team => team.id === teamId)
+      const tournamentId = existing?.tournamentId ?? 't-unknown'
+      const updated: Team = {
+        id: teamId,
+        tournamentId,
+        name,
+        players: players.map(player => makeTeamPlayer(teamId, tournamentId, player)),
+        createdAt: existing?.createdAt ?? NOW,
+        updatedAt: NOW,
+      }
+      teams = upsertById(teams, updated)
+      return updated
     },
     deleteTeam: async (id) => {
       teams = teams.filter(team => team.id !== id)
@@ -162,27 +208,27 @@ function createMockRepository(): TournamentRepository {
     },
 
     getMatchesByTournament: async tournamentId => matches.filter(match => match.tournamentId === tournamentId),
-    saveMatch: async (match) => {
-      matches = upsertById(matches, match)
-    },
-    saveMatches: async (matchesToSave) => {
+    createMatches: async (matchesToSave) => {
       for (const matchToSave of matchesToSave) {
         matches = upsertById(matches, matchToSave)
       }
+    },
+    updateMatch: async (match) => {
+      matches = upsertById(matches, match)
     },
 
     getMembersByTournament: async tournamentId =>
       tournamentMembers.filter(member => member.tournamentId === tournamentId),
     getMyMemberships: async userId =>
       tournamentMembers.filter(member => member.userId === userId),
-    inviteMemberByEmail: async (tournamentId, email) => {
-      if (email.includes('notfound@')) {
-        throw new InviteMemberError('user_not_found')
+    inviteMemberByDisplayName: async (tournamentId, displayName) => {
+      if (displayName.includes('NotFound')) {
+        throw new InviteMemberError('display_name_not_found')
       }
-      if (email.includes('selfinvite@')) {
+      if (displayName.includes('SelfInvite')) {
         throw new InviteMemberError('self_invite')
       }
-      const userId = deriveUserIdFromEmail(email)
+      const userId = deriveUserIdFromDisplayName(displayName)
       const alreadyMember = tournamentMembers.some(
         member =>
           member.tournamentId === tournamentId && member.userId === userId,
@@ -194,7 +240,7 @@ function createMockRepository(): TournamentRepository {
         id: crypto.randomUUID(),
         tournamentId,
         userId,
-        memberEmail: email,
+        memberEmail: `${displayName.trim().toLowerCase()}@example.com`,
         createdAt: NOW,
         updatedAt: NOW,
       }
@@ -202,9 +248,33 @@ function createMockRepository(): TournamentRepository {
       return inserted
     },
     removeMember: async (memberId) => {
+      // Reproduit le gate member_in_team de la RPC remove_tournament_member :
+      // refus si le membre figure (par userId) dans une équipe du tournoi.
+      const member = tournamentMembers.find(entry => entry.id === memberId)
+      if (member !== undefined) {
+        const memberIsInATeam = teams.some(
+          team =>
+            team.tournamentId === member.tournamentId
+            && team.players.some(player => player.userId === member.userId),
+        )
+        if (memberIsInATeam) {
+          throw new InviteMemberError('member_in_team')
+        }
+      }
       tournamentMembers = tournamentMembers.filter(
-        member => member.id !== memberId,
+        entry => entry.id !== memberId,
       )
+    },
+
+    // Profile methods : stubs minimaux pour satisfaire l'interface
+    // TournamentRepository (cf. C.2). Les tests de ce fichier ne
+    // touchent jamais aux actions profile — la couverture profile
+    // vit dans tests/unit/store-profiles.test.ts. Si un nouveau
+    // test ici dépend du profil, étendre ces stubs.
+    getProfileById: async () => undefined,
+    getProfilesByIds: async () => [],
+    updateMyProfile: async () => {
+      throw new Error('Not implemented in this test mock')
     },
   }
 }
@@ -288,8 +358,8 @@ describe('useTournamentStore — tournaments', () => {
   it('loadTournaments: loads all tournaments persisted in the repository', async () => {
     const firstTournament = makeTournament({ name: 'Premier' })
     const secondTournament = makeTournament({ name: 'Second' })
-    await mockRepositoryRef.current!.saveTournament(firstTournament)
-    await mockRepositoryRef.current!.saveTournament(secondTournament)
+    await mockRepositoryRef.current!.createTournament(firstTournament)
+    await mockRepositoryRef.current!.createTournament(secondTournament)
 
     const store = useTournamentStore()
     await store.loadTournaments()
@@ -330,9 +400,9 @@ describe('useTournamentStore — teams', () => {
     })
     await store.loadTournament(created.id)
 
-    await store.addTeam({ name: 'Les Boulistes', players: ['Alice', 'Bob'] })
-    await store.addTeam({ name: 'Les Pointus', players: ['Carla', 'Diego'] })
-    await store.addTeam({ name: 'Les Tireurs', players: ['Eva', 'Farid'] })
+    await store.addTeam({ name: 'Les Boulistes', players: [{ userId: null, displayName: 'Alice' }, { userId: null, displayName: 'Bob' }] })
+    await store.addTeam({ name: 'Les Pointus', players: [{ userId: null, displayName: 'Carla' }, { userId: null, displayName: 'Diego' }] })
+    await store.addTeam({ name: 'Les Tireurs', players: [{ userId: null, displayName: 'Eva' }, { userId: null, displayName: 'Farid' }] })
 
     expect(store.teams).toHaveLength(3)
     for (const team of store.teams) {
@@ -349,9 +419,9 @@ describe('useTournamentStore — teams', () => {
       format: 'round_robin',
     })
     await store.loadTournament(created.id)
-    await store.addTeam({ name: 'Équipe A', players: ['Alice'] })
-    const teamToDelete = await store.addTeam({ name: 'Équipe B', players: ['Bob'] })
-    await store.addTeam({ name: 'Équipe C', players: ['Carla'] })
+    await store.addTeam({ name: 'Équipe A', players: [{ userId: null, displayName: 'Alice' }] })
+    const teamToDelete = await store.addTeam({ name: 'Équipe B', players: [{ userId: null, displayName: 'Bob' }] })
+    await store.addTeam({ name: 'Équipe C', players: [{ userId: null, displayName: 'Carla' }] })
 
     await store.deleteTeam(teamToDelete.id)
 
@@ -369,10 +439,10 @@ describe('useTournamentStore — matches', () => {
       format: 'round_robin',
     })
     await store.loadTournament(created.id)
-    await store.addTeam({ name: 'A', players: ['Alice'] })
-    await store.addTeam({ name: 'B', players: ['Bob'] })
-    await store.addTeam({ name: 'C', players: ['Carla'] })
-    await store.addTeam({ name: 'D', players: ['Diego'] })
+    await store.addTeam({ name: 'A', players: [{ userId: null, displayName: 'Alice' }] })
+    await store.addTeam({ name: 'B', players: [{ userId: null, displayName: 'Bob' }] })
+    await store.addTeam({ name: 'C', players: [{ userId: null, displayName: 'Carla' }] })
+    await store.addTeam({ name: 'D', players: [{ userId: null, displayName: 'Diego' }] })
     return { store, tournamentId: created.id }
   }
 
@@ -428,8 +498,8 @@ describe('useTournamentStore — completeTournament', () => {
       format: 'round_robin',
     })
     await store.loadTournament(created.id)
-    await store.addTeam({ name: 'A', players: ['Alice'] })
-    await store.addTeam({ name: 'B', players: ['Bob'] })
+    await store.addTeam({ name: 'A', players: [{ userId: null, displayName: 'Alice' }] })
+    await store.addTeam({ name: 'B', players: [{ userId: null, displayName: 'Bob' }] })
     await store.generateMatches()
     expect(store.matches).toHaveLength(1)
     await store.submitScore(store.matches[0]!.id, 13, 5)
@@ -448,10 +518,10 @@ describe('useTournamentStore — completeTournament', () => {
       format: 'round_robin',
     })
     await store.loadTournament(created.id)
-    await store.addTeam({ name: 'A', players: ['Alice'] })
-    await store.addTeam({ name: 'B', players: ['Bob'] })
-    await store.addTeam({ name: 'C', players: ['Carla'] })
-    await store.addTeam({ name: 'D', players: ['Diego'] })
+    await store.addTeam({ name: 'A', players: [{ userId: null, displayName: 'Alice' }] })
+    await store.addTeam({ name: 'B', players: [{ userId: null, displayName: 'Bob' }] })
+    await store.addTeam({ name: 'C', players: [{ userId: null, displayName: 'Carla' }] })
+    await store.addTeam({ name: 'D', players: [{ userId: null, displayName: 'Diego' }] })
     await store.generateMatches()
     await store.submitScore(store.matches[0]!.id, 13, 4)
 
@@ -476,7 +546,7 @@ describe('useTournamentStore — visibility partition', () => {
     // Tournoi appartenant à un autre user, inséré directement via le
     // repository mocké pour bypasser createTournament qui force ownerId
     // au user courant.
-    await mockRepositoryRef.current!.saveTournament(
+    await mockRepositoryRef.current!.createTournament(
       makeTournament({
         name: 'Theirs',
         ownerId: OTHER_USER_ID,
@@ -504,7 +574,7 @@ describe('useTournamentStore — visibility partition', () => {
       visibility: 'public',
     })
 
-    await mockRepositoryRef.current!.saveTournament(
+    await mockRepositoryRef.current!.createTournament(
       makeTournament({
         name: 'Their public',
         ownerId: OTHER_USER_ID,
@@ -513,7 +583,7 @@ describe('useTournamentStore — visibility partition', () => {
     )
     // Tournoi private d'un autre user : RLS l'aurait masqué côté DB.
     // Filtre JS doublé en sécurité.
-    await mockRepositoryRef.current!.saveTournament(
+    await mockRepositoryRef.current!.createTournament(
       makeTournament({
         name: 'Their private',
         ownerId: OTHER_USER_ID,
@@ -531,7 +601,7 @@ describe('useTournamentStore — visibility partition', () => {
     stubUserRef.value = null
     stubClaimsSub.value = null
     const store = useTournamentStore()
-    await mockRepositoryRef.current!.saveTournament(
+    await mockRepositoryRef.current!.createTournament(
       makeTournament({ visibility: 'public', ownerId: OTHER_USER_ID }),
     )
     await store.loadTournaments()
@@ -602,7 +672,7 @@ describe('useTournamentStore — isOwnerOfCurrentTournament', () => {
 
   it('returns false when the current tournament is owned by someone else', async () => {
     const otherTournament = makeTournament({ ownerId: OTHER_USER_ID })
-    await mockRepositoryRef.current!.saveTournament(otherTournament)
+    await mockRepositoryRef.current!.createTournament(otherTournament)
     const store = useTournamentStore()
     await store.loadTournament(otherTournament.id)
 
@@ -624,7 +694,7 @@ describe('useTournamentStore — isOwnerOfCurrentTournament', () => {
     stubSessionRef.value = null
     stubClaimsSub.value = null
     const someTournament = makeTournament({ ownerId: STUB_USER_ID })
-    await mockRepositoryRef.current!.saveTournament(someTournament)
+    await mockRepositoryRef.current!.createTournament(someTournament)
     const store = useTournamentStore()
     await store.loadTournament(someTournament.id)
 
@@ -655,7 +725,9 @@ describe('useTournamentStore — tournament_members partitioning', () => {
     const membershipsSpy = vi.spyOn(mockRepositoryRef.current!, 'getMyMemberships')
 
     const store = useTournamentStore()
-    await flushPromises()
+    // Le chargement n'est plus déclenché par l'instanciation du store : on
+    // le demande, comme l'accueil (gaté sur l'identité, ici déjà résolue).
+    await store.loadTournamentsForCurrentSession()
 
     expect(tournamentsSpy).toHaveBeenCalledTimes(1)
     expect(membershipsSpy).toHaveBeenCalledTimes(1)
@@ -670,7 +742,9 @@ describe('useTournamentStore — tournament_members partitioning', () => {
     )
 
     const store = useTournamentStore()
-    await flushPromises()
+    // Le chargement n'est plus déclenché par l'instanciation du store : on
+    // le demande, comme l'accueil (gaté sur l'identité, ici déjà résolue).
+    await store.loadTournamentsForCurrentSession()
 
     expect(store.lastLoadTournamentsError).not.toBeNull()
     expect((store.lastLoadTournamentsError as Error).message).toBe(
@@ -685,35 +759,39 @@ describe('useTournamentStore — tournament_members partitioning', () => {
       ownerId: OTHER_USER_ID,
       visibility: 'private',
     })
-    await mockRepositoryRef.current!.saveTournament(
+    await mockRepositoryRef.current!.createTournament(
       makeTournament({ name: 'Privé perso', ownerId: STUB_USER_ID }),
     )
-    await mockRepositoryRef.current!.saveTournament(
+    await mockRepositoryRef.current!.createTournament(
       makeTournament({
         name: 'Public perso',
         ownerId: STUB_USER_ID,
         visibility: 'public',
       }),
     )
-    await mockRepositoryRef.current!.saveTournament(sharedTournament)
+    await mockRepositoryRef.current!.createTournament(sharedTournament)
     vi.spyOn(mockRepositoryRef.current!, 'getMyMemberships').mockResolvedValue([
       makeMembership(sharedTournament.id),
     ])
 
     const store = useTournamentStore()
-    await flushPromises()
+    // Le chargement n'est plus déclenché par l'instanciation du store : on
+    // le demande, comme l'accueil (gaté sur l'identité, ici déjà résolue).
+    await store.loadTournamentsForCurrentSession()
 
     expect(store.sharedTournaments).toHaveLength(1)
     expect(store.sharedTournaments[0]!.id).toBe(sharedTournament.id)
   })
 
   it('sharedTournaments — empty when no memberships', async () => {
-    await mockRepositoryRef.current!.saveTournament(
+    await mockRepositoryRef.current!.createTournament(
       makeTournament({ ownerId: OTHER_USER_ID, visibility: 'public' }),
     )
 
     const store = useTournamentStore()
-    await flushPromises()
+    // Le chargement n'est plus déclenché par l'instanciation du store : on
+    // le demande, comme l'accueil (gaté sur l'identité, ici déjà résolue).
+    await store.loadTournamentsForCurrentSession()
 
     expect(store.sharedTournaments).toHaveLength(0)
   })
@@ -728,12 +806,14 @@ describe('useTournamentStore — tournament_members partitioning', () => {
     stubSessionRef.value = null
     stubUserRef.value = null
     stubClaimsSub.value = null
-    await mockRepositoryRef.current!.saveTournament(
+    await mockRepositoryRef.current!.createTournament(
       makeTournament({ ownerId: OTHER_USER_ID, visibility: 'public' }),
     )
 
     const store = useTournamentStore()
-    await flushPromises()
+    // Le chargement n'est plus déclenché par l'instanciation du store : on
+    // le demande, comme l'accueil (gaté sur l'identité, ici déjà résolue).
+    await store.loadTournamentsForCurrentSession()
 
     expect(store.sharedTournaments).toHaveLength(0)
   })
@@ -747,13 +827,15 @@ describe('useTournamentStore — tournament_members partitioning', () => {
       ownerId: OTHER_USER_ID,
       visibility: 'public',
     })
-    await mockRepositoryRef.current!.saveTournament(sharedPublicTournament)
+    await mockRepositoryRef.current!.createTournament(sharedPublicTournament)
     vi.spyOn(mockRepositoryRef.current!, 'getMyMemberships').mockResolvedValue([
       makeMembership(sharedPublicTournament.id),
     ])
 
     const store = useTournamentStore()
-    await flushPromises()
+    // Le chargement n'est plus déclenché par l'instanciation du store : on
+    // le demande, comme l'accueil (gaté sur l'identité, ici déjà résolue).
+    await store.loadTournamentsForCurrentSession()
 
     expect(store.sharedTournaments).toHaveLength(1)
     expect(store.publicTournaments).toHaveLength(0)
@@ -765,7 +847,7 @@ describe('useTournamentStore — tournament_members partitioning', () => {
       ownerId: STUB_USER_ID,
       visibility: 'public',
     })
-    await mockRepositoryRef.current!.saveTournament(ownPublic)
+    await mockRepositoryRef.current!.createTournament(ownPublic)
     // Cas impossible en prod (la policy DB le bloque) : un membership
     // sur son propre tournoi. La garde défensive ownerId !== userId
     // dans sharedTournaments doit l'exclure.
@@ -774,7 +856,9 @@ describe('useTournamentStore — tournament_members partitioning', () => {
     ])
 
     const store = useTournamentStore()
-    await flushPromises()
+    // Le chargement n'est plus déclenché par l'instanciation du store : on
+    // le demande, comme l'accueil (gaté sur l'identité, ici déjà résolue).
+    await store.loadTournamentsForCurrentSession()
 
     expect(store.myTournaments).toHaveLength(1)
     expect(store.myTournaments[0]!.id).toBe(ownPublic.id)
@@ -883,7 +967,7 @@ describe('useTournamentStore — invite/remove members', () => {
     expect(store.currentTournamentMembers.map(m => m.id)).toEqual([memberB.id])
   })
 
-  it('inviteMember — appends to currentTournamentMembers when current modal matches the invited tournament', async () => {
+  it('inviteMemberByDisplayName — appends to currentTournamentMembers when current modal matches the invited tournament', async () => {
     const store = useTournamentStore()
     await flushPromises()
     const created = await store.createTournament({
@@ -894,14 +978,14 @@ describe('useTournamentStore — invite/remove members', () => {
     await store.loadTournamentMembers(created.id)
     expect(store.currentTournamentMembers).toHaveLength(0)
 
-    const invited = await store.inviteMember(created.id, 'guest@example.com')
+    const invited = await store.inviteMemberByDisplayName(created.id, 'Bob')
 
     expect(store.currentTournamentMembers).toHaveLength(1)
     expect(store.currentTournamentMembers[0]!.id).toBe(invited.id)
-    expect(store.currentTournamentMembers[0]!.memberEmail).toBe('guest@example.com')
+    expect(store.currentTournamentMembers[0]!.memberEmail).toBe('bob@example.com')
   })
 
-  it('inviteMember — does NOT append when current modal targets a different tournament', async () => {
+  it('inviteMemberByDisplayName — does NOT append when current modal targets a different tournament', async () => {
     const store = useTournamentStore()
     await flushPromises()
     const tournamentA = await store.createTournament({
@@ -917,13 +1001,13 @@ describe('useTournamentStore — invite/remove members', () => {
     // Modal ouvert sur A, invitation déclenchée sur B (cas défensif).
     await store.loadTournamentMembers(tournamentA.id)
 
-    await store.inviteMember(tournamentB.id, 'guest@example.com')
+    await store.inviteMemberByDisplayName(tournamentB.id, 'Bob')
 
     // currentTournamentMembers reflète toujours A (vide), pas B.
     expect(store.currentTournamentMembers).toHaveLength(0)
   })
 
-  it('inviteMember — propagates InviteMemberError with code "user_not_found"', async () => {
+  it('inviteMemberByDisplayName — propagates InviteMemberError with code "display_name_not_found"', async () => {
     const store = useTournamentStore()
     await flushPromises()
     const created = await store.createTournament({
@@ -935,18 +1019,18 @@ describe('useTournamentStore — invite/remove members', () => {
 
     let caught: unknown = null
     try {
-      await store.inviteMember(created.id, 'notfound@example.com')
+      await store.inviteMemberByDisplayName(created.id, 'NotFoundUser')
     }
     catch (error) {
       caught = error
     }
 
     expect(caught).toBeInstanceOf(InviteMemberError)
-    expect((caught as InviteMemberError).code).toBe('user_not_found')
+    expect((caught as InviteMemberError).code).toBe('display_name_not_found')
     expect(store.currentTournamentMembers).toHaveLength(0)
   })
 
-  it('inviteMember — propagates InviteMemberError with code "already_member"', async () => {
+  it('inviteMemberByDisplayName — propagates InviteMemberError with code "already_member"', async () => {
     const store = useTournamentStore()
     await flushPromises()
     const created = await store.createTournament({
@@ -955,11 +1039,11 @@ describe('useTournamentStore — invite/remove members', () => {
       format: 'round_robin',
     })
     await store.loadTournamentMembers(created.id)
-    await store.inviteMember(created.id, 'guest@example.com')
+    await store.inviteMemberByDisplayName(created.id, 'Bob')
 
     let caught: unknown = null
     try {
-      await store.inviteMember(created.id, 'guest@example.com')
+      await store.inviteMemberByDisplayName(created.id, 'Bob')
     }
     catch (error) {
       caught = error
@@ -971,7 +1055,7 @@ describe('useTournamentStore — invite/remove members', () => {
     expect(store.currentTournamentMembers).toHaveLength(1)
   })
 
-  it('inviteMember — propagates InviteMemberError with code "self_invite"', async () => {
+  it('inviteMemberByDisplayName — propagates InviteMemberError with code "self_invite"', async () => {
     const store = useTournamentStore()
     await flushPromises()
     const created = await store.createTournament({
@@ -983,7 +1067,7 @@ describe('useTournamentStore — invite/remove members', () => {
 
     let caught: unknown = null
     try {
-      await store.inviteMember(created.id, 'selfinvite@example.com')
+      await store.inviteMemberByDisplayName(created.id, 'SelfInviteUser')
     }
     catch (error) {
       caught = error
@@ -1002,7 +1086,7 @@ describe('useTournamentStore — invite/remove members', () => {
       format: 'round_robin',
     })
     await store.loadTournamentMembers(created.id)
-    const invited = await store.inviteMember(created.id, 'guest@example.com')
+    const invited = await store.inviteMemberByDisplayName(created.id, 'Bob')
     expect(store.currentTournamentMembers).toHaveLength(1)
 
     await store.removeMember(invited.id)
@@ -1019,7 +1103,7 @@ describe('useTournamentStore — invite/remove members', () => {
       format: 'round_robin',
     })
     await store.loadTournamentMembers(created.id)
-    await store.inviteMember(created.id, 'guest@example.com')
+    await store.inviteMemberByDisplayName(created.id, 'Bob')
 
     await store.removeMember('00000000-0000-4000-8000-000000000000')
 
@@ -1028,175 +1112,124 @@ describe('useTournamentStore — invite/remove members', () => {
     // local.
     expect(store.currentTournamentMembers).toHaveLength(1)
   })
+
+  it('removeMember — propagates InviteMemberError("member_in_team") when the member is in a team', async () => {
+    const store = useTournamentStore()
+    await flushPromises()
+    const created = await store.createTournament({
+      name: 'Tournoi',
+      date: NOW,
+      format: 'round_robin',
+    })
+    await store.loadTournament(created.id)
+    await store.loadTournamentMembers(created.id)
+    const invited = await store.inviteMemberByDisplayName(created.id, 'Bob')
+    // Bob est ajouté à une équipe en tant que joueur lié à son compte.
+    await store.addTeam({
+      name: 'Les Boulistes',
+      players: [{ userId: invited.userId, displayName: 'Bob' }],
+    })
+
+    let caught: unknown = null
+    try {
+      await store.removeMember(invited.id)
+    }
+    catch (error) {
+      caught = error
+    }
+
+    expect(caught).toBeInstanceOf(InviteMemberError)
+    expect((caught as InviteMemberError).code).toBe('member_in_team')
+    // Le membre n'a pas été retiré.
+    expect(store.currentTournamentMembers).toHaveLength(1)
+  })
 })
 
-describe('useTournamentStore — auth context (session/sub watcher)', () => {
-  it('loads tournaments via session watcher even when user.value is null at mount (magic-link scenario)', async () => {
-    // Simule l'arrivée sur / juste après un magic-link : la session est
-    // hydratée, useSupabaseUser ne l'est pas encore (cf. CLAUDE.md).
-    // Le store doit retomber sur getClaims() pour résoudre le sub et
-    // déclencher le fetch — sans intervention de la home.
+describe('useTournamentStore — loadTournamentsForCurrentSession', () => {
+  // La résolution d'identité vit dans le store identity (cf.
+  // tests/unit/store-identity.test.ts) ; ici on ne teste que le contrat du
+  // chargement gaté : no-op sans identité, une seule requête par user
+  // (dédup en vol + idempotence), refetch après changement de compte.
+  it('is a no-op without identity, then loads exactly once for the resolved user (in-flight dedup + idempotence)', async () => {
+    // Session présente mais identité irrésoluble (user null, claims sans sub).
     stubUserRef.value = null
-    stubSessionRef.value = { access_token: 'magic-link-token' }
-    stubClaimsSub.value = STUB_USER_ID
-
-    await mockRepositoryRef.current!.saveTournament(
-      makeTournament({ name: 'Mine private', ownerId: STUB_USER_ID }),
-    )
-
-    const store = useTournamentStore()
-    await flushPromises()
-
-    expect(supabaseClientStub.auth.getClaims).toHaveBeenCalledTimes(1)
-    expect(store.tournaments).toHaveLength(1)
-    expect(store.hasFetchedTournaments).toBe(true)
-    expect(store.lastLoadTournamentsError).toBeNull()
-    expect(store.myTournaments).toHaveLength(1)
-    expect(store.myTournaments[0]!.name).toBe('Mine private')
-  })
-
-  it('prefers user.value.sub over getClaims when both are available (hot path)', async () => {
-    // Cas nominal après navigation : useSupabaseUser est hydraté. On
-    // ne doit pas appeler getClaims(), c'est un coût inutile sur le
-    // chemin chaud.
-    stubUserRef.value = { sub: STUB_USER_ID }
-    stubSessionRef.value = { access_token: 'stub-token' }
-    stubClaimsSub.value = STUB_USER_ID
-
-    const store = useTournamentStore()
-    await flushPromises()
-
-    expect(supabaseClientStub.auth.getClaims).not.toHaveBeenCalled()
-    expect(store.hasFetchedTournaments).toBe(true)
-  })
-
-  it('refetches tournaments after the sub changes (account switch via retry)', async () => {
-    // Phase 1 : user A connecté, fetch initial via le watcher immediate.
-    const USER_A = STUB_USER_ID
-    const USER_B = '11111111-1111-4111-8111-111111111111'
-    stubUserRef.value = { sub: USER_A }
-    await mockRepositoryRef.current!.saveTournament(
-      makeTournament({ name: 'Tournoi de A', ownerId: USER_A }),
+    stubClaimsSub.value = null
+    await mockRepositoryRef.current!.createTournament(
+      makeTournament({ name: 'Mine', ownerId: STUB_USER_ID }),
     )
     const repoSpy = vi.spyOn(mockRepositoryRef.current!, 'getAllTournaments')
 
+    const identityStore = useIdentityStore()
     const store = useTournamentStore()
     await flushPromises()
+    expect(identityStore.currentUserId).toBeNull()
+
+    await store.loadTournamentsForCurrentSession()
+    expect(repoSpy).not.toHaveBeenCalled()
+    expect(store.hasFetchedTournaments).toBe(false)
+
+    // L'identité arrive (chemin chaud) : deux demandes concurrentes — une
+    // seule requête ; une troisième après coup — toujours une seule.
+    stubUserRef.value = { sub: STUB_USER_ID }
+    await identityStore.resolveForCurrentSession()
+    await Promise.all([
+      store.loadTournamentsForCurrentSession(),
+      store.loadTournamentsForCurrentSession(),
+    ])
+    await store.loadTournamentsForCurrentSession()
+
+    expect(repoSpy).toHaveBeenCalledTimes(1)
+    expect(store.hasFetchedTournaments).toBe(true)
+    expect(store.myTournaments).toHaveLength(1)
+  })
+
+  it('refetches tournaments after the resolved identity changes (account switch)', async () => {
+    const USER_B = '11111111-1111-4111-8111-111111111111'
+    await mockRepositoryRef.current!.createTournament(
+      makeTournament({ name: 'Tournoi de A', ownerId: STUB_USER_ID }),
+    )
+    const repoSpy = vi.spyOn(mockRepositoryRef.current!, 'getAllTournaments')
+
+    const identityStore = useIdentityStore()
+    const store = useTournamentStore()
+    await store.loadTournamentsForCurrentSession()
     expect(repoSpy).toHaveBeenCalledTimes(1)
 
-    // Phase 2 : on bascule sur user B et on re-déclenche l'orchestration
-    // identité+fetch. Comme les stubs ne sont pas des Vue refs, le
-    // watcher composé ne refire pas tout seul ; on appelle l'action
-    // publique manuellement (chemin emprunté par le bouton "Réessayer"
-    // de la home, conceptuellement équivalent au refire watcher en prod).
+    // Bascule d'identité : les stubs sont des POJO non réactifs, seule
+    // resolveForCurrentSession écrit resolvedUserId (ref réactive).
     stubUserRef.value = { sub: USER_B }
     stubClaimsSub.value = USER_B
-    await mockRepositoryRef.current!.saveTournament(
+    await identityStore.resolveForCurrentSession()
+    await mockRepositoryRef.current!.createTournament(
       makeTournament({ name: 'Tournoi de B', ownerId: USER_B }),
     )
 
     await store.loadTournamentsForCurrentSession()
 
-    // Le re-fetch a bien eu lieu : la garde d'idempotence
-    // (resolvedUserId === sub && hasFetched) n'a pas court-circuité,
-    // car le sub a changé. Le store reflète le nouveau dataset repo
-    // (en prod c'est RLS DB qui filtre par owner ; ici le mock sert
-    // tout, la partition est testée par le bloc "visibility partition").
+    // La garde d'idempotence (loadedForUserId === sub) n'a pas court-circuité,
+    // car le sub a changé (en prod c'est RLS qui filtre ; le mock sert tout).
     expect(repoSpy).toHaveBeenCalledTimes(2)
     expect(store.tournaments.map(tournament => tournament.name).sort()).toEqual([
       'Tournoi de A',
       'Tournoi de B',
     ])
   })
+})
 
-  it('surfaces an error when getClaims fails', async () => {
-    stubUserRef.value = null
-    stubGetClaimsImpl.fn = async () => ({
-      data: null,
-      error: { message: 'Network error during getClaims' },
-    })
+describe('useTournamentStore — setTournamentVisibility without the list', () => {
+  it('falls back on the current tournament when the list is not loaded (deep link)', async () => {
+    const tournament = makeTournament({ name: 'Lien profond', visibility: 'private' })
+    await mockRepositoryRef.current!.createTournament(tournament)
 
     const store = useTournamentStore()
-    await flushPromises()
-
-    expect(store.lastLoadTournamentsError).not.toBeNull()
-    expect((store.lastLoadTournamentsError as Error).message).toBe(
-      'Network error during getClaims',
-    )
-    expect(store.hasFetchedTournaments).toBe(false)
+    // La page tournoi ne charge que le détail : la liste reste vide.
+    await store.loadTournament(tournament.id)
     expect(store.tournaments).toHaveLength(0)
-  })
 
-  it('surfaces an error when claims sub is missing', async () => {
-    // Cas où getClaims retourne data: null + error: null (le 3e cas
-    // de l'union, "pas de session connue côté client"). Le watcher
-    // doit tomber sur le branch "Identité utilisateur introuvable".
-    stubUserRef.value = null
-    stubClaimsSub.value = null
+    await store.setTournamentVisibility(tournament.id, 'public')
 
-    const store = useTournamentStore()
-    await flushPromises()
-
-    expect(store.lastLoadTournamentsError).not.toBeNull()
-    expect((store.lastLoadTournamentsError as Error).message).toBe(
-      'Identité utilisateur introuvable dans la session.',
-    )
-    expect(store.hasFetchedTournaments).toBe(false)
-    expect(store.tournaments).toHaveLength(0)
-  })
-
-  it('ignores a late getClaims response when a newer auth resolution started in the meantime (anti-race)', async () => {
-    // Scénario : le watcher fire post-mount avec user.value null,
-    // déclenche un getClaims() qui reste pendu ; un 2e appel survient
-    // (ex : retry, ou re-fire suite à un changement de session). Le
-    // 1er, en revenant, doit voir que le token a été bumpé et exit
-    // sans rien écrire. Sinon : risque d'écrire resolvedUserId d'une
-    // session obsolète et de fuiter des tournois entre comptes.
-    stubUserRef.value = null
-    const claimsResolvers: Array<(value: GetClaimsResult) => void> = []
-    stubGetClaimsImpl.fn = () =>
-      new Promise<GetClaimsResult>((resolve) => {
-        claimsResolvers.push(resolve)
-      })
-
-    await mockRepositoryRef.current!.saveTournament(
-      makeTournament({ name: 'Tournoi cible', ownerId: STUB_USER_ID }),
-    )
-    const repoSpy = vi.spyOn(mockRepositoryRef.current!, 'getAllTournaments')
-
-    const store = useTournamentStore()
-    // Laisse le watcher immediate démarrer le 1er appel.
-    await Promise.resolve()
-    expect(claimsResolvers).toHaveLength(1)
-
-    // 2e appel concurrent. Bumpe le token interne du store.
-    const secondCall = store.loadTournamentsForCurrentSession()
-    await Promise.resolve()
-    expect(claimsResolvers).toHaveLength(2)
-
-    // Réponse "tardive" du 1er getClaims. Doit être ignorée.
-    claimsResolvers[0]!({
-      data: {
-        claims: { sub: STUB_USER_ID },
-        header: {},
-        signature: new Uint8Array(),
-      },
-      error: null,
-    })
-    await flushPromises()
-    expect(repoSpy).not.toHaveBeenCalled()
-
-    // Réponse du 2e getClaims. C'est lui qui doit déclencher le fetch.
-    claimsResolvers[1]!({
-      data: {
-        claims: { sub: STUB_USER_ID },
-        header: {},
-        signature: new Uint8Array(),
-      },
-      error: null,
-    })
-    await secondCall
-    expect(repoSpy).toHaveBeenCalledTimes(1)
-    expect(store.tournaments).toHaveLength(1)
+    expect(store.currentTournament?.visibility).toBe('public')
+    const persisted = await mockRepositoryRef.current!.getTournamentById(tournament.id)
+    expect(persisted?.visibility).toBe('public')
   })
 })
