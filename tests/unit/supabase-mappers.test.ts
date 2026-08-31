@@ -486,6 +486,26 @@ describe('mapUserProfileBundleJsonToDomain', () => {
           teammates: [{ user_id: INVITEE_USER_ID, display_name: 'Bob' }],
         },
       ],
+      free_matches: [
+        {
+          match_id: MATCH_ID,
+          played_on: '2026-08-20',
+          created_at: NOW,
+          score_a: 9,
+          score_b: 13,
+          side: 'B',
+          viewer_can_open: true,
+          teammates: [{ user_id: null, display_name: 'Marcel' }],
+          opponents: [{ user_id: INVITEE_USER_ID, display_name: 'Bob' }],
+        },
+      ],
+      free_match_stats: {
+        matches_played: 3,
+        wins: 2,
+        losses: 1,
+        points_scored: 31,
+        points_conceded: 29,
+      },
       ...overrides,
     }
   }
@@ -530,7 +550,112 @@ describe('mapUserProfileBundleJsonToDomain', () => {
           teammates: [{ userId: INVITEE_USER_ID, displayName: 'Bob' }],
         },
       ],
+      freeMatches: [
+        {
+          matchId: MATCH_ID,
+          playedOn: '2026-08-20',
+          createdAt: NOW,
+          scoreA: 9,
+          scoreB: 13,
+          side: 'B',
+          viewerCanOpen: true,
+          teammates: [{ userId: null, displayName: 'Marcel' }],
+          opponents: [{ userId: INVITEE_USER_ID, displayName: 'Bob' }],
+        },
+      ],
+      freeMatchStats: {
+        matchesPlayed: 3,
+        wins: 2,
+        losses: 1,
+        pointsScored: 31,
+        pointsConceded: 29,
+      },
     })
+  })
+
+  it('maps a missing free_matches / free_match_stats to [] and null (deploy skew, pre-H2.c-1 DB)', () => {
+    const raw = makeRawBundle()
+    delete raw.free_matches
+    delete raw.free_match_stats
+
+    const bundle = mapUserProfileBundleJsonToDomain(raw)
+
+    expect(bundle.freeMatches).toEqual([])
+    expect(bundle.freeMatchStats).toBeNull()
+  })
+
+  it('maps a null free_match_stats to null (player without free matches)', () => {
+    expect(
+      mapUserProfileBundleJsonToDomain(makeRawBundle({ free_match_stats: null }))
+        .freeMatchStats,
+    ).toBeNull()
+  })
+
+  it('defaults a free-match viewerCanOpen to false when the RPC omits it', () => {
+    const raw = makeRawBundle()
+    delete raw.free_matches?.[0]?.viewer_can_open
+
+    expect(
+      mapUserProfileBundleJsonToDomain(raw).freeMatches[0]?.viewerCanOpen,
+    ).toBe(false)
+  })
+
+  it('preserves the order of free matches (no sorting in the mapper)', () => {
+    const raw = makeRawBundle({
+      free_matches: [
+        {
+          match_id: MATCH_ID,
+          played_on: '2026-01-01',
+          created_at: '2026-01-01T00:00:00.000Z',
+          score_a: 13,
+          score_b: 0,
+          side: 'A',
+          viewer_can_open: true,
+          teammates: [],
+          opponents: [],
+        },
+        {
+          match_id: TEAM_B_ID,
+          played_on: '2026-05-10',
+          created_at: '2026-05-10T00:00:00.000Z',
+          score_a: 0,
+          score_b: 13,
+          side: 'B',
+          viewer_can_open: true,
+          teammates: [],
+          opponents: [],
+        },
+      ],
+    })
+
+    expect(
+      mapUserProfileBundleJsonToDomain(raw).freeMatches.map(
+        freeMatch => freeMatch.playedOn,
+      ),
+    ).toEqual(['2026-01-01', '2026-05-10'])
+  })
+
+  it('keeps empty teammates/opponents on a non-openable free match', () => {
+    const raw = makeRawBundle({
+      free_matches: [
+        {
+          match_id: MATCH_ID,
+          played_on: '2026-08-20',
+          created_at: NOW,
+          score_a: 13,
+          score_b: 7,
+          side: 'A',
+          viewer_can_open: false,
+          teammates: [],
+          opponents: [],
+        },
+      ],
+    })
+
+    const freeMatch = mapUserProfileBundleJsonToDomain(raw).freeMatches[0]!
+    expect(freeMatch.viewerCanOpen).toBe(false)
+    expect(freeMatch.teammates).toEqual([])
+    expect(freeMatch.opponents).toEqual([])
   })
 
   it('defaults viewerCanOpen to false when the RPC omits viewer_can_open (deploy skew)', () => {

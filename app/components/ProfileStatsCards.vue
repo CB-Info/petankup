@@ -1,25 +1,59 @@
 <script setup lang="ts">
-// Blocs des stats globales d'un profil (Couche 2) : Tournois / Matchs /
-// Points, chacun en rangée kicker (icône + titre) puis carte en colonnes
-// égales centrées (disposition de la maquette). Taux de victoire et
-// différentiel sont dérivés à l'AFFICHAGE depuis le bundle (non stockés
-// en DB, cf. cadrage Phase J) — aucun recalcul métier. Empty state si le
-// joueur n'a aucun tournoi terminé (stats null).
-import type { UserStats } from '../types'
+// Blocs des stats globales d'un profil : Tournois / Matchs / Points, chacun
+// en rangée kicker (icône + titre) puis carte en colonnes égales centrées
+// (disposition de la maquette).
+//
+// Depuis H2.c-2, deux sources : tournois (UserStats) et matchs libres
+// (UserFreeMatchStats). Les sections Matchs et Points affichent par défaut
+// le TOTAL COMBINÉ, calculé à l'affichage (D3, jamais stocké) ; un toggle
+// trois positions (Combiné / Tournois / Matchs libres) commute leurs
+// valeurs — une source absente montre des zéros véridiques (statsForSource,
+// règle testée). La section Tournois (joués / gagnés / podiums) n'a pas
+// d'équivalent match libre : elle ne se combine jamais et reste fixe.
+// Taux de victoire et différentiel sont dérivés à l'AFFICHAGE — aucun
+// recalcul métier. Empty state si AUCUNE source n'existe.
+import type { UserFreeMatchStats, UserStats } from '../types'
+import { statsForSource } from '../utils/user-stats'
+import type { StatsSource } from '../utils/user-stats'
 
 const props = defineProps<{
   stats: UserStats | null
+  freeMatchStats: UserFreeMatchStats | null
 }>()
 
+const hasAnyStats = computed(
+  () => props.stats !== null || props.freeMatchStats !== null,
+)
+
+const statsSource = ref<StatsSource>('combined')
+
+const STATS_SOURCE_OPTIONS: Array<{ value: StatsSource, label: string }> = [
+  { value: 'combined', label: 'Combiné' },
+  { value: 'tournaments', label: 'Tournois' },
+  { value: 'free_matches', label: 'Matchs libres' },
+]
+
+// Les cinq compteurs affichés dans Matchs + Points, selon la position du
+// toggle.
+const visibleStats = computed(() =>
+  statsForSource(statsSource.value, props.stats, props.freeMatchStats),
+)
+
+// Compteurs propres au tournoi : zéros véridiques pour un joueur sans
+// tournoi terminé (stats null), la section reste lisible.
+const tournamentCounters = computed(() => ({
+  played: props.stats?.tournamentsPlayed ?? 0,
+  won: props.stats?.tournamentsWon ?? 0,
+  podiums: props.stats?.podiums ?? 0,
+}))
+
 const winRate = computed(() => {
-  if (props.stats === null || props.stats.matchesPlayed === 0) return '0%'
-  return `${Math.round((props.stats.wins / props.stats.matchesPlayed) * 100)}%`
+  if (visibleStats.value.matchesPlayed === 0) return '0%'
+  return `${Math.round((visibleStats.value.wins / visibleStats.value.matchesPlayed) * 100)}%`
 })
 
-const pointDifferentialValue = computed(() =>
-  props.stats === null
-    ? 0
-    : props.stats.pointsScored - props.stats.pointsConceded,
+const pointDifferentialValue = computed(
+  () => visibleStats.value.pointsScored - visibleStats.value.pointsConceded,
 )
 
 const pointDifferentialLabel = computed(() =>
@@ -36,10 +70,10 @@ const pointDifferentialClass = computed(() =>
 
 <template>
   <p
-    v-if="stats === null"
+    v-if="!hasAnyStats"
     class="py-8 text-center font-sans text-sm text-(--pk-muted)"
   >
-    Aucun tournoi terminé pour l'instant.
+    Aucune statistique pour l'instant.
   </p>
   <div v-else class="space-y-4">
     <section>
@@ -54,7 +88,7 @@ const pointDifferentialClass = computed(() =>
       >
         <div>
           <dd class="font-num text-2xl font-bold text-(--pk-ink)">
-            {{ stats.tournamentsPlayed }}
+            {{ tournamentCounters.played }}
           </dd>
           <dt
             class="mt-1 font-disp text-[8.5px] font-extrabold tracking-[0.06em] uppercase text-(--pk-muted)"
@@ -64,7 +98,7 @@ const pointDifferentialClass = computed(() =>
         </div>
         <div>
           <dd class="font-num text-2xl font-bold text-primary">
-            {{ stats.tournamentsWon }}
+            {{ tournamentCounters.won }}
           </dd>
           <dt
             class="mt-1 font-disp text-[8.5px] font-extrabold tracking-[0.06em] uppercase text-(--pk-muted)"
@@ -74,7 +108,7 @@ const pointDifferentialClass = computed(() =>
         </div>
         <div>
           <dd class="font-num text-2xl font-bold text-(--pk-ink)">
-            {{ stats.podiums }}
+            {{ tournamentCounters.podiums }}
           </dd>
           <dt
             class="mt-1 font-disp text-[8.5px] font-extrabold tracking-[0.06em] uppercase text-(--pk-muted)"
@@ -84,6 +118,10 @@ const pointDifferentialClass = computed(() =>
         </div>
       </dl>
     </section>
+
+    <!-- Détail par source : commute les valeurs des sections Matchs et
+         Points, sans quitter la page. -->
+    <FiltrePilules v-model="statsSource" :options="STATS_SOURCE_OPTIONS" />
 
     <section>
       <h3
@@ -97,7 +135,7 @@ const pointDifferentialClass = computed(() =>
       >
         <div>
           <dd class="font-num text-2xl font-bold text-(--pk-ink)">
-            {{ stats.matchesPlayed }}
+            {{ visibleStats.matchesPlayed }}
           </dd>
           <dt
             class="mt-1 font-disp text-[8.5px] font-extrabold tracking-[0.06em] uppercase text-(--pk-muted)"
@@ -107,7 +145,7 @@ const pointDifferentialClass = computed(() =>
         </div>
         <div>
           <dd class="font-num text-2xl font-bold text-(--pk-ink)">
-            {{ stats.wins }}
+            {{ visibleStats.wins }}
           </dd>
           <dt
             class="mt-1 font-disp text-[8.5px] font-extrabold tracking-[0.06em] uppercase text-(--pk-muted)"
@@ -117,7 +155,7 @@ const pointDifferentialClass = computed(() =>
         </div>
         <div>
           <dd class="font-num text-2xl font-bold text-(--pk-ink)">
-            {{ stats.losses }}
+            {{ visibleStats.losses }}
           </dd>
           <dt
             class="mt-1 font-disp text-[8.5px] font-extrabold tracking-[0.06em] uppercase text-(--pk-muted)"
@@ -150,7 +188,7 @@ const pointDifferentialClass = computed(() =>
       >
         <div>
           <dd class="font-num text-2xl font-bold text-(--pk-ink)">
-            {{ stats.pointsScored }}
+            {{ visibleStats.pointsScored }}
           </dd>
           <dt
             class="mt-1 font-disp text-[8.5px] font-extrabold tracking-[0.06em] uppercase text-(--pk-muted)"
@@ -160,7 +198,7 @@ const pointDifferentialClass = computed(() =>
         </div>
         <div>
           <dd class="font-num text-2xl font-bold text-(--pk-ink)">
-            {{ stats.pointsConceded }}
+            {{ visibleStats.pointsConceded }}
           </dd>
           <dt
             class="mt-1 font-disp text-[8.5px] font-extrabold tracking-[0.06em] uppercase text-(--pk-muted)"

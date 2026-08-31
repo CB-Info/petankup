@@ -246,20 +246,29 @@ export const useProfileStore = defineStore('profile', () => {
         hasFetchedProfileBundle.value = true
         lastLoadProfileBundleError.value = null
 
-        // Pré-hydratation best-effort des pseudos des coéquipiers liés à un
-        // compte, pour que l'UI (Phase K) puisse résoudre le pseudo live via
-        // getPlayerDisplayName. Fire-and-forget : pas d'await, ne bloque pas
-        // le retour de loadUserProfile. loadProfilesByIds dédupe et filtre le
-        // cache ; on exclut le profil consulté lui-même (déjà dans le bundle).
-        const teammateUserIds = bundle.results
-          .flatMap(result => result.teammates)
-          .map(teammate => teammate.userId)
+        // Pré-hydratation best-effort des pseudos liés à un compte —
+        // coéquipiers de tournoi ET joueurs des matchs libres (teammates
+        // + opponents ; une entrée non ouvrable arrive avec des listes
+        // vides, rien à hydrater). UN SEUL tableau passé à l'unique appel
+        // batché : c'est cette fusion qui garantit « au plus un
+        // getProfilesByIds » par chargement de profil. Fire-and-forget :
+        // pas d'await, ne bloque pas le retour de loadUserProfile.
+        // loadProfilesByIds dédupe et filtre le cache ; on exclut le
+        // profil consulté lui-même (déjà dans le bundle).
+        const linkedPlayerUserIds = [
+          ...bundle.results.flatMap(result => result.teammates),
+          ...bundle.freeMatches.flatMap(freeMatch => [
+            ...freeMatch.teammates,
+            ...freeMatch.opponents,
+          ]),
+        ]
+          .map(player => player.userId)
           .filter(
-            (teammateUserId): teammateUserId is string =>
-              teammateUserId !== null && teammateUserId !== userId,
+            (playerUserId): playerUserId is string =>
+              playerUserId !== null && playerUserId !== userId,
           )
-        if (teammateUserIds.length > 0) {
-          void loadProfilesByIds(teammateUserIds)
+        if (linkedPlayerUserIds.length > 0) {
+          void loadProfilesByIds(linkedPlayerUserIds)
         }
       }
       catch (error) {

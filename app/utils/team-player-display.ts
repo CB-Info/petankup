@@ -50,3 +50,11 @@ export function formatTeammatesLine(teammateNames: string[]): string | null {
   if (teammateNames.length === 0) return null
   return `avec ${frenchListFormatter.format(teammateNames)}`
 }
+
+// Ligne « contre … » d'une entrée de match libre du journal. null si les
+// adversaires sont inconnus — entrée non ouvrable, dont la base vide les
+// listes — même règle du rien plutôt qu'un libellé vide. Pure, idempotente.
+export function formatOpponentsLine(opponentNames: string[]): string | null {
+  if (opponentNames.length === 0) return null
+  return `contre ${frenchListFormatter.format(opponentNames)}`
+}

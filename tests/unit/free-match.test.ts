@@ -4,7 +4,9 @@ import {
   FREE_MATCH_FORMATS,
   FREE_MATCH_MAX_SCORE,
   emptySlot,
+  freeMatchFormatForSideCount,
   freeMatchFormatOf,
+  freeMatchOutcomeOf,
   isSlotFilled,
   leadingSideOf,
   moveCreatorToSide,
@@ -56,6 +58,14 @@ describe('formats', () => {
 
   it('returns null when side A has no matching format (defensive)', () => {
     expect(freeMatchFormatOf([])).toBeNull()
+  })
+
+  it('derives the format from a single side head count (journal entries)', () => {
+    expect(freeMatchFormatForSideCount(1)).toBe('tete_a_tete')
+    expect(freeMatchFormatForSideCount(2)).toBe('doublette')
+    expect(freeMatchFormatForSideCount(3)).toBe('triplette')
+    expect(freeMatchFormatForSideCount(0)).toBeNull()
+    expect(freeMatchFormatForSideCount(4)).toBeNull()
   })
 
   it('playersOnSide filters by side', () => {
@@ -197,6 +207,32 @@ describe('leadingSideOf / winnerSideOf', () => {
   it('winnerSideOf follows the same rule on final scores', () => {
     expect(winnerSideOf(13, 7)).toBe('A')
     expect(winnerSideOf(2, 13)).toBe('B')
+  })
+})
+
+describe('freeMatchOutcomeOf', () => {
+  it('reports a win with the player points first, on side A', () => {
+    expect(freeMatchOutcomeOf({ side: 'A', scoreA: 13, scoreB: 7 })).toEqual({
+      won: true,
+      pointsScored: 13,
+      pointsConceded: 7,
+    })
+  })
+
+  it('reports a win on side B (the side pivot, not the raw scores)', () => {
+    expect(freeMatchOutcomeOf({ side: 'B', scoreA: 9, scoreB: 13 })).toEqual({
+      won: true,
+      pointsScored: 13,
+      pointsConceded: 9,
+    })
+  })
+
+  it('reports a loss with the player points still first', () => {
+    expect(freeMatchOutcomeOf({ side: 'A', scoreA: 5, scoreB: 13 })).toEqual({
+      won: false,
+      pointsScored: 5,
+      pointsConceded: 13,
+    })
   })
 })
 

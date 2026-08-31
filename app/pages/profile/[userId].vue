@@ -10,7 +10,9 @@
 //
 // Header (mode interne) déclaré via useAppHeader, rendu une fois par le layout.
 
-import type { UserTournamentResult } from "../../types";
+import type { Teammate, UserTournamentResult } from "../../types";
+import { buildUnifiedJournal, filterJournal } from "../../utils/journal";
+import type { JournalFilter } from "../../utils/journal";
 
 const route = useRoute();
 const profileStore = useProfileStore();
@@ -104,6 +106,43 @@ async function retryLoadProfile(): Promise<void> {
 const profile = computed(() => currentProfileBundle.value?.profile ?? null);
 const stats = computed(() => currentProfileBundle.value?.stats ?? null);
 const results = computed(() => currentProfileBundle.value?.results ?? []);
+const freeMatches = computed(
+  () => currentProfileBundle.value?.freeMatches ?? [],
+);
+const freeMatchStats = computed(
+  () => currentProfileBundle.value?.freeMatchStats ?? null,
+);
+
+// Journal unifié (S5) : tournois et matchs libres mêlés, triés par jour de
+// jeu (fusion à l'affichage, cf. utils/journal.ts), plus un filtre par
+// type toujours visible.
+const journalFilter = ref<JournalFilter>("all");
+
+const JOURNAL_FILTER_OPTIONS: Array<{ value: JournalFilter; label: string }> = [
+  { value: "all", label: "Tout" },
+  { value: "tournaments", label: "Tournois" },
+  { value: "free_matches", label: "Matchs libres" },
+];
+
+const journalEntries = computed(() =>
+  buildUnifiedJournal(results.value, freeMatches.value),
+);
+
+const visibleEntries = computed(() =>
+  filterJournal(journalEntries.value, journalFilter.value),
+);
+
+// Message de la liste vide : journal entièrement vide, ou filtre sans
+// résultat — jamais une liste vide sans explication.
+const journalEmptyMessage = computed(() => {
+  if (journalEntries.value.length === 0) {
+    return "Aucune partie dans le journal pour l'instant.";
+  }
+  if (journalFilter.value === "tournaments") {
+    return "Aucun tournoi dans le journal.";
+  }
+  return "Aucun match libre dans le journal.";
+});
 
 // « Introuvable » recouvre deux causes, distinctes de l'état d'erreur :
 // un id malformé (tranché sans appel), ou un chargement effectif revenu
@@ -123,8 +162,14 @@ const profileIsNotFound = computed(
 // live si le profil est résolu (pré-hydraté par loadUserProfile), sinon
 // snapshot — même pattern que teamPlayersNames sur la page tournoi.
 function teammateNamesFor(result: UserTournamentResult): string[] {
-  return result.teammates.map((teammate) =>
-    getTeammateDisplayName(teammate, profileById.value),
+  return playerNamesFor(result.teammates);
+}
+
+// Même résolution pour les joueurs d'un match libre (teammates/opponents
+// partagent la forme Teammate).
+function playerNamesFor(players: Teammate[]): string[] {
+  return players.map((player) =>
+    getTeammateDisplayName(player, profileById.value),
   );
 }
 
@@ -241,7 +286,7 @@ useHead({
         </UButton>
       </div>
 
-      <ProfileStatsCards :stats="stats" />
+      <ProfileStatsCards :stats="stats" :free-match-stats="freeMatchStats" />
 
       <section class="space-y-3">
         <h2
@@ -249,43 +294,67 @@ useHead({
         >
           Journal de bord
         </h2>
-        <p
-          v-if="results.length === 0"
-          class="font-sans text-sm text-(--pk-subtle)"
-        >
-          Aucun tournoi joué pour l'instant.
-        </p>
+        <!-- Filtre par type, toujours visible (S5). -->
+        <FiltrePilules
+          v-model="journalFilter"
+          :options="JOURNAL_FILTER_OPTIONS"
+        />
         <!-- Une entrée est un lien SSI la base dit que le visiteur courant
-             peut ouvrir ce tournoi (viewerCanOpen, dérivé par le RPC via le
-             helper de visibilité — la base décide, l'interface obéit).
-             Entrée non ouvrable : carte statique, sans aucun indicateur
-             (signaler « privé » confirmerait l'existence d'un tournoi
-             inaccessible). Sur son propre profil, tout est ouvrable
-             (garantie H1.d) — aucune régression. -->
-        <ul v-else class="space-y-2.75">
-          <li v-for="result in results" :key="result.tournamentId">
+             peut ouvrir ce tournoi ou ce match (viewerCanOpen, dérivé par
+             le RPC via les helpers de visibilité — la base décide,
+             l'interface obéit). Entrée non ouvrable : carte statique, sans
+             aucun indicateur (signaler « privé » confirmerait l'existence
+             d'un contenu inaccessible). Sur son propre profil, tout est
+             ouvrable — aucune régression. -->
+        <ul v-if="visibleEntries.length > 0" class="space-y-2.75">
+          <li v-for="entry in visibleEntries" :key="entry.key">
             <!-- Pas d'aria-label : le nom accessible dérive du contenu de la
                  carte (rang, tournoi, date, bilan), comme les cartes-liens
                  de l'accueil. -->
-            <NuxtLink
-              v-if="result.viewerCanOpen"
-              :to="`/tournaments/${result.tournamentId}`"
-              class="block rounded-(--pk-r-card) transition-opacity hover:opacity-90 active:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-              @click="rememberJournalOrigin($event, result.tournamentId)"
-            >
+            <template v-if="entry.kind === 'tournament'">
+              <NuxtLink
+                v-if="entry.result.viewerCanOpen"
+                :to="`/tournaments/${entry.result.tournamentId}`"
+                class="block rounded-(--pk-r-card) transition-opacity hover:opacity-90 active:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                @click="rememberJournalOrigin($event, entry.result.tournamentId)"
+              >
+                <ProfileJournalEntry
+                  :result="entry.result"
+                  :teammate-names="teammateNamesFor(entry.result)"
+                  interactive
+                />
+              </NuxtLink>
               <ProfileJournalEntry
-                :result="result"
-                :teammate-names="teammateNamesFor(result)"
-                interactive
+                v-else
+                :result="entry.result"
+                :teammate-names="teammateNamesFor(entry.result)"
               />
-            </NuxtLink>
-            <ProfileJournalEntry
-              v-else
-              :result="result"
-              :teammate-names="teammateNamesFor(result)"
-            />
+            </template>
+            <template v-else>
+              <NuxtLink
+                v-if="entry.freeMatch.viewerCanOpen"
+                :to="`/free-matches/${entry.freeMatch.matchId}`"
+                class="block rounded-(--pk-r-card) transition-opacity hover:opacity-90 active:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              >
+                <ProfileFreeMatchEntry
+                  :free-match="entry.freeMatch"
+                  :teammate-names="playerNamesFor(entry.freeMatch.teammates)"
+                  :opponent-names="playerNamesFor(entry.freeMatch.opponents)"
+                  interactive
+                />
+              </NuxtLink>
+              <ProfileFreeMatchEntry
+                v-else
+                :free-match="entry.freeMatch"
+                :teammate-names="playerNamesFor(entry.freeMatch.teammates)"
+                :opponent-names="playerNamesFor(entry.freeMatch.opponents)"
+              />
+            </template>
           </li>
         </ul>
+        <p v-else class="font-sans text-sm text-(--pk-subtle)">
+          {{ journalEmptyMessage }}
+        </p>
       </section>
     </div>
   </div>
