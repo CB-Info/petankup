@@ -1007,6 +1007,26 @@ describe('SupabaseRepository — getUserProfile', () => {
           teammates: [{ user_id: OWNER_ID, display_name: 'Alice' }],
         },
       ],
+      free_matches: [
+        {
+          match_id: MATCH_ID,
+          played_on: '2026-08-20',
+          created_at: NOW,
+          score_a: 13,
+          score_b: 7,
+          side: 'A',
+          viewer_can_open: true,
+          teammates: [],
+          opponents: [{ user_id: null, display_name: 'Marcel' }],
+        },
+      ],
+      free_match_stats: {
+        matches_played: 1,
+        wins: 1,
+        losses: 0,
+        points_scored: 13,
+        points_conceded: 7,
+      },
     }
   }
 
@@ -1058,6 +1078,26 @@ describe('SupabaseRepository — getUserProfile', () => {
           teammates: [{ userId: OWNER_ID, displayName: 'Alice' }],
         },
       ],
+      freeMatches: [
+        {
+          matchId: MATCH_ID,
+          playedOn: '2026-08-20',
+          createdAt: NOW,
+          scoreA: 13,
+          scoreB: 7,
+          side: 'A',
+          viewerCanOpen: true,
+          teammates: [],
+          opponents: [{ userId: null, displayName: 'Marcel' }],
+        },
+      ],
+      freeMatchStats: {
+        matchesPlayed: 1,
+        wins: 1,
+        losses: 0,
+        pointsScored: 13,
+        pointsConceded: 7,
+      },
     })
   })
 

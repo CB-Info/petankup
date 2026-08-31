@@ -111,7 +111,7 @@ function createMockRepository(overrides: Partial<{
     updateMyProfile: async () => {
       throw new Error('Not implemented in this test mock')
     },
-    getUserProfile: async () => ({ profile: null, stats: null, results: [] }),
+    getUserProfile: async () => ({ profile: null, stats: null, results: [], freeMatches: [], freeMatchStats: null }),
     getFreeMatchById: getFreeMatchByIdSpy,
     createFreeMatch: createFreeMatchSpy,
     deleteFreeMatch: deleteFreeMatchSpy,

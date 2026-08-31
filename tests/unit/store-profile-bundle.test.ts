@@ -7,6 +7,7 @@ import type {
   Teammate,
   Tournament,
   TournamentMember,
+  UserFreeMatchResult,
   UserProfileBundle,
   UserStats,
   UserTournamentResult,
@@ -103,6 +104,8 @@ function createMockRepository(overrides: Partial<{
     profile: null,
     stats: null,
     results: [],
+    freeMatches: [],
+    freeMatchStats: null,
   })
   const defaultGetProfilesByIds = async (): Promise<Profile[]> => []
   const defaultGetProfileById = async (): Promise<Profile | undefined> => undefined
@@ -190,11 +193,31 @@ function makeResult(teammates: Teammate[] = []): UserTournamentResult {
   }
 }
 
+// Entrée de match libre du journal (teammates/opponents = forme Teammate).
+function makeFreeMatchResult(
+  teammates: Teammate[] = [],
+  opponents: Teammate[] = [],
+): UserFreeMatchResult {
+  return {
+    matchId: crypto.randomUUID(),
+    playedOn: '2026-08-20',
+    createdAt: NOW,
+    scoreA: 13,
+    scoreB: 7,
+    side: 'A',
+    viewerCanOpen: true,
+    teammates,
+    opponents,
+  }
+}
+
 function makeBundle(overrides: Partial<UserProfileBundle> = {}): UserProfileBundle {
   return {
     profile: makeProfile({ id: OTHER_USER_ID, displayName: 'Bob' }),
     stats: makeStats(),
     results: [makeResult()],
+    freeMatches: [],
+    freeMatchStats: null,
     ...overrides,
   }
 }
@@ -401,6 +424,57 @@ describe('useProfileStore — loadUserProfile', () => {
     await flushPromises()
 
     expect(repo.__getProfilesByIdsSpy).not.toHaveBeenCalled()
+  })
+
+  it('pre-hydrates free-match players too — teammates AND opponents, one single batched call', async () => {
+    const bundle = makeBundle({
+      results: [makeResult([{ userId: THIRD_USER_ID, displayName: 'Carol' }])],
+      freeMatches: [
+        makeFreeMatchResult(
+          [{ userId: null, displayName: 'Marcel' }], // libre : exclu
+          [
+            { userId: STUB_USER_ID, displayName: 'Moi' },
+            { userId: OTHER_USER_ID, displayName: 'Bob' }, // profil consulté : exclu
+          ],
+        ),
+      ],
+    })
+    const repo = createMockRepository({ getUserProfile: async () => bundle })
+    mockRepositoryRef.current = repo
+
+    const store = useProfileStore()
+    await flushPromises()
+    repo.__getProfilesByIdsSpy.mockClear()
+
+    await store.loadUserProfile(OTHER_USER_ID)
+    await flushPromises()
+
+    expect(repo.__getProfilesByIdsSpy).toHaveBeenCalledTimes(1)
+    expect(repo.__getProfilesByIdsSpy.mock.calls[0]![0]).toEqual([
+      THIRD_USER_ID,
+      STUB_USER_ID,
+    ])
+  })
+
+  it('pre-hydrates from free matches even when results is empty', async () => {
+    const bundle = makeBundle({
+      results: [],
+      freeMatches: [
+        makeFreeMatchResult([], [{ userId: THIRD_USER_ID, displayName: 'Carol' }]),
+      ],
+    })
+    const repo = createMockRepository({ getUserProfile: async () => bundle })
+    mockRepositoryRef.current = repo
+
+    const store = useProfileStore()
+    await flushPromises()
+    repo.__getProfilesByIdsSpy.mockClear()
+
+    await store.loadUserProfile(OTHER_USER_ID)
+    await flushPromises()
+
+    expect(repo.__getProfilesByIdsSpy).toHaveBeenCalledTimes(1)
+    expect(repo.__getProfilesByIdsSpy.mock.calls[0]![0]).toEqual([THIRD_USER_ID])
   })
 
   it('does not pre-hydrate when results is empty', async () => {

@@ -5,6 +5,8 @@ import type {
   FreeMatch,
   FreeMatchPlayer,
   Profile,
+  UserFreeMatchResult,
+  UserFreeMatchStats,
   Team,
   TeamPlayer,
   Teammate,
@@ -249,6 +251,26 @@ export type RawUserProfileBundleJson = {
     viewer_can_open?: boolean
     teammates: Array<{ user_id: string | null, display_name: string }>
   }>
+  // Optionnelles : absentes si l'app est déployée avant la migration
+  // H2.c-1 (décalage de déploiement). Le mapper retombe sur [] / null.
+  free_matches?: Array<{
+    match_id: string
+    played_on: string
+    created_at: string
+    score_a: number
+    score_b: number
+    side: 'A' | 'B'
+    viewer_can_open?: boolean
+    teammates: Array<{ user_id: string | null, display_name: string }>
+    opponents: Array<{ user_id: string | null, display_name: string }>
+  }>
+  free_match_stats?: {
+    matches_played: number
+    wins: number
+    losses: number
+    points_scored: number
+    points_conceded: number
+  } | null
 }
 
 // Sous-formes brutes dérivées par accès indexé : évite de redéclarer les
@@ -256,6 +278,10 @@ export type RawUserProfileBundleJson = {
 type RawUserStatsJson = NonNullable<RawUserProfileBundleJson['stats']>
 type RawUserTournamentResultJson = RawUserProfileBundleJson['results'][number]
 type RawTeammateJson = RawUserTournamentResultJson['teammates'][number]
+type RawUserFreeMatchResultJson
+  = NonNullable<RawUserProfileBundleJson['free_matches']>[number]
+type RawUserFreeMatchStatsJson
+  = NonNullable<RawUserProfileBundleJson['free_match_stats']>
 
 function mapUserStatsJsonToDomain(raw: RawUserStatsJson): UserStats {
   return {
@@ -300,16 +326,55 @@ function mapUserTournamentResultJsonToDomain(
   }
 }
 
+// Coéquipiers et adversaires d'un match libre partagent la forme Teammate
+// des coéquipiers de tournoi — mapTeammateJsonToDomain sert aux deux listes.
+function mapUserFreeMatchResultJsonToDomain(
+  raw: RawUserFreeMatchResultJson,
+): UserFreeMatchResult {
+  return {
+    matchId: raw.match_id,
+    playedOn: raw.played_on,
+    createdAt: raw.created_at,
+    scoreA: raw.score_a,
+    scoreB: raw.score_b,
+    side: raw.side,
+    // Même garde fail-closed que viewer_can_open des tournois.
+    viewerCanOpen: raw.viewer_can_open ?? false,
+    teammates: raw.teammates.map(mapTeammateJsonToDomain),
+    opponents: raw.opponents.map(mapTeammateJsonToDomain),
+  }
+}
+
+function mapUserFreeMatchStatsJsonToDomain(
+  raw: RawUserFreeMatchStatsJson,
+): UserFreeMatchStats {
+  return {
+    matchesPlayed: raw.matches_played,
+    wins: raw.wins,
+    losses: raw.losses,
+    pointsScored: raw.points_scored,
+    pointsConceded: raw.points_conceded,
+  }
+}
+
 // Traduction technique pure snake_case → camelCase. Aucune logique métier :
-// pas de tri (l'ordre des results est garanti côté RPC), pas d'agrégation,
-// pas de re-hydratation de pseudo (faite au render en Phase K).
+// pas de tri (l'ordre des results et des free_matches est garanti côté
+// RPC — la fusion chronologique vit dans utils/journal.ts), pas
+// d'agrégation, pas de re-hydratation de pseudo (faite au render).
 export function mapUserProfileBundleJsonToDomain(
   raw: RawUserProfileBundleJson,
 ): UserProfileBundle {
+  // ?? null : free_match_stats absent (décalage de déploiement) vaut null.
+  const rawFreeMatchStats = raw.free_match_stats ?? null
   return {
     profile: raw.profile === null ? null : mapProfileRowToDomain(raw.profile),
     stats: raw.stats === null ? null : mapUserStatsJsonToDomain(raw.stats),
     results: (raw.results ?? []).map(mapUserTournamentResultJsonToDomain),
+    freeMatches: (raw.free_matches ?? []).map(mapUserFreeMatchResultJsonToDomain),
+    freeMatchStats:
+      rawFreeMatchStats === null
+        ? null
+        : mapUserFreeMatchStatsJsonToDomain(rawFreeMatchStats),
   }
 }
 

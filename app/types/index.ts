@@ -150,6 +150,36 @@ export interface UserTournamentResult {
   teammates: Teammate[];
 }
 
+export interface UserFreeMatchResult {
+  matchId: string;
+  playedOn: string; // ISO date (YYYY-MM-DD)
+  // Moment de l'enregistrement (pendant de tournamentCompletedAt) :
+  // départage des égalités jour/jour dans le journal unifié.
+  createdAt: string;
+  scoreA: number;
+  scoreB: number;
+  // Camp du joueur consulté — son résultat s'en déduit (freeMatchOutcomeOf).
+  side: FreeMatchSide;
+  // Dérivé par la base RELATIVEMENT AU VISITEUR courant (helper de
+  // visibilité partagé H2.a) — jamais la visibilité brute du match.
+  viewerCanOpen: boolean;
+  // Même camp (le joueur consulté exclu) / camp adverse. VIDES quand
+  // viewerCanOpen est faux : les participants d'un match privé ne sont
+  // jamais divulgués à un tiers (décision H2.c-1).
+  teammates: Teammate[];
+  opponents: Teammate[];
+}
+
+// Compteurs de match libre, séparés de UserStats : seuls les cinq communs
+// se combinent, à l'affichage (D3) — jamais stockés sommés.
+export interface UserFreeMatchStats {
+  matchesPlayed: number;
+  wins: number;
+  losses: number;
+  pointsScored: number;
+  pointsConceded: number;
+}
+
 export interface UserProfileBundle {
   // null si la RPC ne trouve pas de ligne profiles pour le user (cas
   // dégénéré : user supprimé, etc.).
@@ -160,6 +190,13 @@ export interface UserProfileBundle {
   // [] si pas d'historique. Trié par tournamentCompletedAt desc côté RPC,
   // l'ordre est à conserver tel quel.
   results: UserTournamentResult[];
+  // [] si aucun match libre. Trié par playedOn desc, createdAt desc côté
+  // RPC ; la fusion chronologique avec les tournois est faite à
+  // l'affichage (utils/journal.ts).
+  freeMatches: UserFreeMatchResult[];
+  // null si le joueur n'a aucun match libre (absence de ligne
+  // user_free_match_stats côté DB).
+  freeMatchStats: UserFreeMatchStats | null;
 }
 
 // --- Match libre (H2) ---

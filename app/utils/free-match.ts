@@ -40,15 +40,23 @@ export function playersOnSide(
   return players.filter(player => player.side === side)
 }
 
-// Format d'un match enregistré, déduit de l'effectif du camp A (la base
-// garantit des camps équilibrés). null si l'effectif ne correspond à aucun
-// format — impossible depuis la base, gardé pour ne pas mentir au typage.
-export function freeMatchFormatOf(players: FreeMatchPlayer[]): FreeMatchFormat | null {
-  const sideACount = playersOnSide(players, 'A').length
+// Format déduit de l'effectif d'UN camp (la base garantit des camps
+// équilibrés). null si l'effectif ne correspond à aucun format — cas d'une
+// entrée de journal non ouvrable (listes vidées), ou d'un effectif
+// impossible depuis la base, gardé pour ne pas mentir au typage.
+export function freeMatchFormatForSideCount(
+  playersOnOneSide: number,
+): FreeMatchFormat | null {
   const matchingFormat = FREE_MATCH_FORMATS.find(
-    format => playersPerSide(format) === sideACount,
+    format => playersPerSide(format) === playersOnOneSide,
   )
   return matchingFormat ?? null
+}
+
+// Variante pour un match complet (page de détail) : même règle, appliquée
+// à l'effectif du camp A.
+export function freeMatchFormatOf(players: FreeMatchPlayer[]): FreeMatchFormat | null {
+  return freeMatchFormatForSideCount(playersOnSide(players, 'A').length)
 }
 
 // --- Slots du formulaire de création ---
@@ -163,6 +171,34 @@ export function leadingSideOf(scoreA: number, scoreB: number): FreeMatchSide | n
 // même règle que le camp en tête, nommée pour l'intention.
 export function winnerSideOf(scoreA: number, scoreB: number): FreeMatchSide | null {
   return leadingSideOf(scoreA, scoreB)
+}
+
+// Point de vue d'un joueur sur un match : son camp et les scores des deux
+// camps — la forme minimale commune au FreeMatch complet et à l'entrée de
+// journal du bundle de profil (typage structurel).
+export type FreeMatchPerspective = {
+  side: FreeMatchSide
+  scoreA: number
+  scoreB: number
+}
+
+export type FreeMatchOutcome = {
+  won: boolean
+  pointsScored: number
+  pointsConceded: number
+}
+
+// Issue et points du point de vue d'un joueur : son camp gagne ssi c'est
+// le camp vainqueur (score le plus haut — jamais d'égalité en base).
+export function freeMatchOutcomeOf(
+  perspective: FreeMatchPerspective,
+): FreeMatchOutcome {
+  const playedOnSideA = perspective.side === 'A'
+  return {
+    won: winnerSideOf(perspective.scoreA, perspective.scoreB) === perspective.side,
+    pointsScored: playedOnSideA ? perspective.scoreA : perspective.scoreB,
+    pointsConceded: playedOnSideA ? perspective.scoreB : perspective.scoreA,
+  }
 }
 
 // --- Affichage ---

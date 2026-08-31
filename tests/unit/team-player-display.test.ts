@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Profile, Teammate, TeamPlayer } from '../../app/types'
 import {
+  formatOpponentsLine,
   formatTeammatesLine,
   getPlayerDisplayName,
   getTeammateDisplayName,
@@ -97,5 +98,19 @@ describe('formatTeammatesLine', () => {
     expect(formatTeammatesLine(['Marc', 'Julie', 'Paul'])).toBe(
       'avec Marc, Julie et Paul',
     )
+  })
+})
+
+describe('formatOpponentsLine', () => {
+  it('returns null when the opponents are unknown (non-openable entry)', () => {
+    expect(formatOpponentsLine([])).toBeNull()
+  })
+
+  it('formats a single opponent', () => {
+    expect(formatOpponentsLine(['Marc'])).toBe('contre Marc')
+  })
+
+  it('joins several opponents with « et »', () => {
+    expect(formatOpponentsLine(['Marc', 'Julie'])).toBe('contre Marc et Julie')
   })
 })
