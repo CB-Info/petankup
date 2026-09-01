@@ -15,8 +15,8 @@ import type {
 import {
   computeRanking,
   generateRoundRobinMatches,
-  validateScore,
 } from '../utils/tournament'
+import { validateMatchScore } from '../utils/score'
 import { useIdentityStore } from './identity'
 import { useProfileStore } from './profile'
 
@@ -393,7 +393,7 @@ export const useTournamentStore = defineStore('tournament', () => {
     // Les early returns (validation invalide, match introuvable) ne touchent
     // pas au repository — on n'enveloppe pas dans withLoading pour éviter
     // un toggle inutile sur un retour synchrone.
-    const validation = validateScore(scoreA, scoreB)
+    const validation = validateMatchScore(scoreA, scoreB)
     if (!validation.valid) return validation
 
     const matchIndex = matches.value.findIndex(match => match.id === matchId)

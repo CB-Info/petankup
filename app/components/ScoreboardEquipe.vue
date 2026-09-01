@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { BouleTone } from "./BouleAvatar.vue";
+import { clampScoreToInputBounds } from "../utils/score";
 
 // Bloc de score d'un match (Direction C), en deux modes :
 // - saisie : deux demi-cartes, gros chiffres Space Grotesk, boutons +/−,
@@ -8,7 +9,13 @@ import type { BouleTone } from "./BouleAvatar.vue";
 //   (bouton SCORE).
 // Zéro logique métier : qui mène / qui gagne est REÇU en props, jamais déduit.
 // Seule la forme « à jouer » dérive de scores null (forme des données, pas une
-// règle métier). Boutons : les steppers +/− restent natifs (fonds
+// règle métier). Exception assumée, côté mécanique d'input (pas une règle
+// métier) : en mode saisie, les steppers +/− calculent la prochaine valeur
+// bornée [0, 13] via clampScoreToInputBounds (utils/score, la source unique —
+// jamais dupliquée ici) et l'émettent par `set-score` ; la saisie clavier
+// reste purgée chiffres-only, la validation reste chez le parent à la
+// soumission, et les props d'affichage ne sont jamais clampées.
+// Boutons : les steppers +/− restent natifs (fonds
 // état-dépendants page/blanc/navy/corail selon le meneur, hors système
 // UButton) ; les actions standards (CTA Valider, SCORE) sont des UButton
 // (états hover/focus/disabled/loading natifs) — règle actée à l'audit boutons.
@@ -64,11 +71,13 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
-  increment: [side: TeamSide];
-  decrement: [side: TeamSide];
   validate: [];
   score: [];
-  /** Saisie clavier : string filtrée chiffres-only (peut être vide). */
+  /**
+   * Nouvelle valeur d'un score, toujours en string : saisie clavier
+   * filtrée chiffres-only (peut être vide) ou stepper +/− déjà borné
+   * [0, 13]. Le parent reste la source de vérité de la valeur.
+   */
   "set-score": [side: TeamSide, value: string];
 }>();
 
@@ -80,6 +89,16 @@ function onScoreInput(side: TeamSide, event: Event) {
   const filtered = input.value.replace(/\D/g, "");
   input.value = filtered;
   emit("set-score", side, filtered);
+}
+
+// Steppers +/− : le composant calcule lui-même la prochaine valeur, bornée
+// [0, 13] par clampScoreToInputBounds (util partagée, jamais dupliquée ici),
+// et l'émet sur le même canal que le clavier. Champ vide (score null) compté
+// comme 0. Mécanique d'input : la validation du score reste chez le parent,
+// à la soumission.
+function stepScore(side: TeamSide, delta: 1 | -1) {
+  const currentScore = (side === "A" ? props.scoreA : props.scoreB) ?? 0;
+  emit("set-score", side, String(clampScoreToInputBounds(currentScore + delta)));
 }
 
 // La carte d'un match joué n'est un vrai <button> que si la correction de
@@ -175,7 +194,7 @@ const isPlayed = computed(() => props.scoreA !== null && props.scoreB !== null);
                 : 'bg-(--pk-page) text-(--pk-subtle)'
             "
             :aria-label="`Retirer un point à ${entry.name}`"
-            @click="emit('decrement', entry.side)"
+            @click="stepScore(entry.side, -1)"
           >
             −
           </button>
@@ -184,7 +203,7 @@ const isPlayed = computed(() => props.scoreA !== null && props.scoreB !== null);
             class="h-11.5 flex-1 rounded-(--pk-r-md) font-disp text-2xl font-bold text-(--pk-cream)"
             :class="entry.isLeading ? 'bg-primary' : 'bg-(--pk-navy)'"
             :aria-label="`Ajouter un point à ${entry.name}`"
-            @click="emit('increment', entry.side)"
+            @click="stepScore(entry.side, 1)"
           >
             +
           </button>

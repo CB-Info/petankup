@@ -1,4 +1,4 @@
-import type { TournamentMatch, Ranking, Team, ScoreValidationResult } from "../types";
+import type { TournamentMatch, Ranking, Team } from "../types";
 
 const BYE_MARKER = "__bye__";
 
@@ -181,34 +181,4 @@ function findCompletedMatchBetween(
       match.teamAId === secondTeamId && match.teamBId === firstTeamId;
     return aVsB || bVsA;
   });
-}
-
-export function validateScore(
-  scoreA: number,
-  scoreB: number,
-): ScoreValidationResult {
-  const bothScoresAreIntegers =
-    Number.isInteger(scoreA) && Number.isInteger(scoreB);
-  if (!bothScoresAreIntegers) {
-    return { valid: false, error: "Les scores doivent être des entiers." };
-  }
-
-  const bothScoresArePositive = scoreA >= 0 && scoreB >= 0;
-  if (!bothScoresArePositive) {
-    return { valid: false, error: "Les scores doivent être positifs ou nuls." };
-  }
-
-  const highestScore = Math.max(scoreA, scoreB);
-  if (highestScore < 13) {
-    return {
-      valid: false,
-      error: "Au moins une équipe doit atteindre 13 points.",
-    };
-  }
-
-  if (scoreA === scoreB) {
-    return { valid: false, error: "Pas de match nul à la pétanque." };
-  }
-
-  return { valid: true };
 }

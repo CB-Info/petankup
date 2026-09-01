@@ -3,7 +3,6 @@ import {
   computeRanking,
   generateRoundRobinMatches,
   tieBreak,
-  validateScore,
 } from '../../app/utils/tournament'
 import type { TournamentMatch, Ranking, Team } from '../../app/types'
 
@@ -301,47 +300,5 @@ describe('tieBreak', () => {
       updatedAt: NOW,
     }
     expect(tieBreak(a, b, [pending])).toBe(0)
-  })
-})
-
-describe('validateScore', () => {
-  it.each([
-    [13, 7],
-    [15, 12],
-    [13, 0],
-    [13, 12],
-    [7, 13],
-  ])('accepts %d-%d', (a, b) => {
-    expect(validateScore(a, b)).toEqual({ valid: true })
-  })
-
-  it('rejects 12-11 (no team reached 13)', () => {
-    const r = validateScore(12, 11)
-    expect(r.valid).toBe(false)
-    expect(r.error).toBeTruthy()
-  })
-
-  it('rejects 13-13 (no draws in pétanque)', () => {
-    const r = validateScore(13, 13)
-    expect(r.valid).toBe(false)
-    expect(r.error).toBeTruthy()
-  })
-
-  it('rejects negative scores -1 vs 5', () => {
-    const r = validateScore(-1, 5)
-    expect(r.valid).toBe(false)
-    expect(r.error).toBeTruthy()
-  })
-
-  it('rejects non-integer scores 5.5 vs 3', () => {
-    const r = validateScore(5.5, 3)
-    expect(r.valid).toBe(false)
-    expect(r.error).toBeTruthy()
-  })
-
-  it('rejects 0-0 (no team reached 13)', () => {
-    const r = validateScore(0, 0)
-    expect(r.valid).toBe(false)
-    expect(r.error).toBeTruthy()
   })
 })
