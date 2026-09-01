@@ -1,8 +1,9 @@
 <script setup lang="ts">
 // Pattern d'erreurs : les actions du store throw ; on attrape ici et on
 // affiche un toast via useErrorToast (voir composables/useErrorToast).
-// La validation métier (entiers, ≥13, pas d'égalité) reste affichée
-// inline via errorMessage : c'est une erreur utilisateur, pas système.
+// La validation métier (vainqueur exactement 13, perdant 0–12, pas
+// d'égalité — utils/score) reste affichée inline via errorMessage : c'est
+// une erreur utilisateur, pas système.
 import type { TournamentMatch, ScoreValidationResult, Team } from "../types";
 
 type TeamSide = "A" | "B";
@@ -61,7 +62,7 @@ function parseScore(rawScore: string): number {
 }
 
 // Normalisation d'entrée : un champ resté vide vaut 0. La règle de
-// validation (entiers, ≥13, pas d'égalité) ne change pas.
+// validation (vainqueur exactement 13) ne change pas.
 function normalizedScoreInput(raw: string): string {
   return raw.trim() === "" ? "0" : raw;
 }
@@ -92,28 +93,15 @@ function setScoreInput(side: TeamSide, value: string) {
   else scoreBInput.value = value;
 }
 
-// Steppers +/− : même source de vérité que la saisie clavier. Clamp à 0
-// (reproduit le min="0" de l'ancien champ), champ vide compté comme 0.
-function stepScore(side: TeamSide, delta: 1 | -1) {
-  const currentRaw = side === "A" ? scoreAInput.value : scoreBInput.value;
-  const current = displayScore(currentRaw) ?? 0;
-  setScoreInput(side, String(Math.max(0, current + delta)));
-}
-
 async function onSubmit() {
   if (isSubmitting.value || !props.match) return;
 
   const scoreA = parseScore(normalizedScoreInput(scoreAInput.value));
   const scoreB = parseScore(normalizedScoreInput(scoreBInput.value));
 
-  if (Number.isNaN(scoreA) || Number.isNaN(scoreB)) {
-    errorMessage.value = "Les scores doivent être des entiers.";
-    return;
-  }
-
   isSubmitting.value = true;
   try {
-    // Le store appelle déjà validateScore en interne et nous renvoie
+    // Le store appelle déjà validateMatchScore en interne et nous renvoie
     // { valid, error } : on s'appuie sur ce retour plutôt que de
     // dupliquer la validation côté composant.
     const result: ScoreValidationResult = await tournamentStore.submitScore(
@@ -167,8 +155,6 @@ function close() {
             :leading-side="leadingSide"
             :validate-loading="isSubmitting"
             @set-score="setScoreInput"
-            @increment="stepScore($event, 1)"
-            @decrement="stepScore($event, -1)"
             @validate="onSubmit"
           >
             <template #before-validate>

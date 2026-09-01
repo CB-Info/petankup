@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import type { FreeMatchPlayer } from '../../app/types'
 import {
   FREE_MATCH_FORMATS,
-  FREE_MATCH_MAX_SCORE,
   emptySlot,
   freeMatchFormatForSideCount,
   freeMatchFormatOf,
@@ -14,7 +13,6 @@ import {
   playersPerSide,
   resizeSide,
   sortFreeMatchPlayers,
-  validateFreeMatchScore,
   winnerSideOf,
 } from '../../app/utils/free-match'
 import type { FreeMatchSidesLayout, FreeMatchSlot } from '../../app/utils/free-match'
@@ -153,49 +151,8 @@ describe('moveCreatorToSide', () => {
   })
 })
 
-describe('validateFreeMatchScore', () => {
-  it('caps a pétanque match at 13 points', () => {
-    expect(FREE_MATCH_MAX_SCORE).toBe(13)
-  })
-
-  it.each([
-    [13, 0],
-    [13, 12],
-    [0, 13],
-    [12, 13],
-  ])('accepts %i-%i (winner exactly 13, loser 0-12)', (scoreA, scoreB) => {
-    expect(validateFreeMatchScore(scoreA, scoreB)).toEqual({ valid: true })
-  })
-
-  it('rejects a draw (13-13)', () => {
-    expect(validateFreeMatchScore(13, 13)).toEqual({
-      valid: false,
-      error: 'Pas de match nul à la pétanque.',
-    })
-  })
-
-  it.each([
-    [12, 5],
-    [20, 0],
-    [14, 13],
-  ])('rejects %i-%i (the winner must have exactly 13)', (scoreA, scoreB) => {
-    expect(validateFreeMatchScore(scoreA, scoreB)).toEqual({
-      valid: false,
-      error: 'Le vainqueur doit avoir exactement 13 points.',
-    })
-  })
-
-  it.each([
-    [-1, 13],
-    [13.5, 2],
-    [Number.NaN, 13],
-  ])('rejects %s-%s (scores must be non-negative integers)', (scoreA, scoreB) => {
-    expect(validateFreeMatchScore(scoreA, scoreB)).toEqual({
-      valid: false,
-      error: 'Les scores doivent être des entiers positifs ou nuls.',
-    })
-  })
-})
+// La suite de la règle de score vit dans score.test.ts (source unique
+// partagée par les deux domaines : app/utils/score).
 
 describe('leadingSideOf / winnerSideOf', () => {
   it('returns the side ahead, or null on a tie', () => {

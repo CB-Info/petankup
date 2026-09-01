@@ -26,7 +26,6 @@ import type {
 import { FreeMatchError } from "../../types";
 import {
   FREE_MATCH_FORMAT_LABELS,
-  FREE_MATCH_MAX_SCORE,
   emptySlot,
   leadingSideOf,
   moveCreatorToSide,
@@ -276,16 +275,6 @@ function setScore(side: FreeMatchSide, value: string) {
   else state.scoreB = value;
 }
 
-function incrementScore(side: FreeMatchSide) {
-  const current = parseScore(side === "A" ? state.scoreA : state.scoreB);
-  setScore(side, String(Math.min(FREE_MATCH_MAX_SCORE, current + 1)));
-}
-
-function decrementScore(side: FreeMatchSide) {
-  const current = parseScore(side === "A" ? state.scoreA : state.scoreB);
-  setScore(side, String(Math.max(0, current - 1)));
-}
-
 // --- Validation & soumission ---
 
 function trimSlot(slot: FreeMatchSlot): FreeMatchSlot {
@@ -514,8 +503,6 @@ const FIELD_BASE_CLASS =
           :leading-side="leadingSide"
           validate-label="ENREGISTRER LE MATCH"
           :validate-loading="isSubmitting"
-          @increment="incrementScore"
-          @decrement="decrementScore"
           @set-score="setScore"
           @validate="submitForm"
         >

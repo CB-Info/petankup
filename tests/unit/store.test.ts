@@ -487,6 +487,21 @@ describe('useTournamentStore — matches', () => {
     expect(unchangedMatch.scoreA).toBeNull()
     expect(unchangedMatch.scoreB).toBeNull()
   })
+
+  it('submitScore: an out-of-bounds score (20-0) is rejected and leaves the match unchanged', async () => {
+    const { store } = await setupTournamentWithFourTeams()
+    await store.generateMatches()
+    const matchToScore = store.matches[0]!
+
+    const result = await store.submitScore(matchToScore.id, 20, 0)
+
+    expect(result.valid).toBe(false)
+    expect(result.error).toBeDefined()
+    const unchangedMatch = store.matches.find(match => match.id === matchToScore.id)!
+    expect(unchangedMatch.status).toBe('pending')
+    expect(unchangedMatch.scoreA).toBeNull()
+    expect(unchangedMatch.scoreB).toBeNull()
+  })
 })
 
 describe('useTournamentStore — completeTournament', () => {

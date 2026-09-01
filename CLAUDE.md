@@ -292,9 +292,18 @@ supportées en fallback mais à éviter.
 
 ### Validation des scores (pétanque)
 
+Règle STRICTE, exprimée une seule fois côté app dans `app/utils/score.ts`
+(`WINNING_SCORE`, `validateMatchScore`, `clampScoreToInputBounds`) et
+consommée par les deux domaines (tournoi et match libre) — les CHECK en
+base restent le filet, jamais la première ligne :
+
 - Les deux scores sont des entiers ≥ 0
-- `max(scoreA, scoreB) >= 13`
+- `max(scoreA, scoreB) === 13` : le vainqueur a exactement 13 points,
+  le perdant de 0 à 12
 - `scoreA !== scoreB` (pas de match nul à la pétanque)
+- Les steppers de saisie sont bornés [0, 13] nativement par
+  `ScoreboardEquipe` (jamais les props d'affichage) ; la saisie clavier
+  est validée à la soumission
 
 ### Équipe
 

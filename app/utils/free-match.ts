@@ -2,11 +2,11 @@ import type {
   FreeMatchFormat,
   FreeMatchPlayer,
   FreeMatchSide,
-  ScoreValidationResult,
 } from '../types'
 
 // Logique pure du match libre : formats, slots du formulaire de création,
-// règle de score stricte, camp en tête, ordre d'affichage des joueurs.
+// camp en tête, ordre d'affichage des joueurs. La règle de score vit dans
+// utils/score (source unique des deux domaines).
 // Aucun side effect, aucune date interne.
 
 // --- Formats ---
@@ -132,34 +132,6 @@ export function moveCreatorToSide(
 }
 
 // --- Score ---
-
-// Un match de pétanque se joue en 13 points : un score ne dépasse jamais 13.
-export const FREE_MATCH_MAX_SCORE = 13
-
-// Règle stricte du match libre (plus stricte que celle des tournois, qui
-// accepte « au moins 13 ») : le vainqueur a EXACTEMENT 13, le perdant de 0
-// à 12 — ce que garantissent ensemble « pas d'égalité » et « le plus haut
-// vaut 13 ». Miroir des CHECK de la table free_matches.
-export function validateFreeMatchScore(
-  scoreA: number,
-  scoreB: number,
-): ScoreValidationResult {
-  const bothAreNonNegativeIntegers
-    = Number.isInteger(scoreA)
-      && Number.isInteger(scoreB)
-      && scoreA >= 0
-      && scoreB >= 0
-  if (!bothAreNonNegativeIntegers) {
-    return { valid: false, error: 'Les scores doivent être des entiers positifs ou nuls.' }
-  }
-  if (scoreA === scoreB) {
-    return { valid: false, error: 'Pas de match nul à la pétanque.' }
-  }
-  if (Math.max(scoreA, scoreB) !== FREE_MATCH_MAX_SCORE) {
-    return { valid: false, error: 'Le vainqueur doit avoir exactement 13 points.' }
-  }
-  return { valid: true }
-}
 
 // Camp en tête pendant la saisie ; null à égalité.
 export function leadingSideOf(scoreA: number, scoreB: number): FreeMatchSide | null {

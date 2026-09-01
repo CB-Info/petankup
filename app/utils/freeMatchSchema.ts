@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import type { FreeMatchSide } from '../types'
-import { isSlotFilled, validateFreeMatchScore } from './free-match'
+import { isSlotFilled } from './free-match'
 import type { FreeMatchSlot } from './free-match'
+import { validateMatchScore } from './score'
 
 // Schéma Zod du formulaire de création d'un match libre. Factory pure :
 // l'identité du créateur et la date du jour sont injectées (pas de
@@ -106,7 +107,7 @@ function checkCreatorIsPlaying(
 }
 
 function checkScore(form: FreeMatchFormValues, addIssue: AddIssue) {
-  const validation = validateFreeMatchScore(form.scoreA, form.scoreB)
+  const validation = validateMatchScore(form.scoreA, form.scoreB)
   if (!validation.valid && validation.error !== undefined) {
     addIssue('score', validation.error)
   }
