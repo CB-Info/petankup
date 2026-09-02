@@ -277,8 +277,11 @@ export class SupabaseRepository implements TournamentRepository {
   // La table profiles est peuplée par le trigger DB au signup (cf.
   // migration C.1). Le repo ne fait ni insert ni delete : seulement
   // SELECT (un et batch) et UPDATE de display_name pour soi.
-  // RLS C.1 garantit que la visibilité est scopée par co-tournoi
-  // avec granularité fine, et que l'UPDATE n'autorise que self.
+  // Depuis A2 (20260902100000), la table est lisible par tout
+  // authentifié (colonnes id/display_name/created_at/updated_at — le
+  // réglage visibility n'est pas lisible en direct) : le pseudo est
+  // public, c'est le CONTENU du profil qui est protégé en base, dans
+  // get_user_profile. L'UPDATE n'autorise toujours que self.
 
   async getProfileById(id: string): Promise<Profile | undefined> {
     const { data, error } = await this.client

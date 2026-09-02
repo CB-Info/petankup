@@ -283,6 +283,16 @@ grant select on table pg_temp.fixture_profile to authenticated;
 
 select pg_temp.assert_eq_int((select count(*) from pg_temp.fixture_profile), 4, 'setup: 4 profils créés');
 
+-- Dépendance A2 (20260902100000) : les lectures croisées des cas 3-9
+-- supposent des profils PUBLICS (défaut) — sinon les bundles seraient
+-- restreints et les échecs seraient trompeurs.
+select pg_temp.assert_eq_int(
+  (select count(*) from public.profiles
+    where id in ('c3000000-0000-4000-8000-000000000001', 'c3000000-0000-4000-8000-000000000002',
+                 'c3000000-0000-4000-8000-000000000003', 'c3000000-0000-4000-8000-000000000004')
+      and visibility = 'public'),
+  4, 'setup: profils publics par défaut (dépendance A2)');
+
 create function pg_temp.pseudo(p_user uuid) returns text
 language sql
 as $$
@@ -461,7 +471,7 @@ begin
   perform pg_temp.assert_eq_text(v_m1->>'side', 'A', 'cas 4i: camp de U1 toujours présent');
   perform pg_temp.assert_eq_int(
     json_array_length(pg_temp.bundle('c3000000-0000-4000-8000-000000000001')->'free_matches'),
-    3, 'cas 4j: les trois matchs restent listés (journal sans gate)');
+    3, 'cas 4j: les trois matchs restent listés (pas de gate PAR ENTRÉE — la gate A2 est au niveau du profil, U1 est public ici)');
 end;
 $$;
 

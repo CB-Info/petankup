@@ -66,10 +66,12 @@ export interface TournamentRepository {
 
   // Profils utilisateurs. La table est peuplée par le trigger DB
   // au signup (cf. C.1), le repo ne fait ni création ni
-  // suppression. getProfileById retourne undefined si non visible
-  // via RLS (distingué d'une erreur réseau via .maybeSingle).
-  // getProfilesByIds est best-effort : les ids non visibles via
-  // RLS sont silencieusement absents du retour.
+  // suppression. Depuis A2, la table est lisible par tout utilisateur
+  // authentifié (le pseudo est public ; c'est le CONTENU du profil,
+  // stats et journal, qui est protégé en base via get_user_profile).
+  // getProfileById retourne undefined si l'id n'existe pas (distingué
+  // d'une erreur réseau via .maybeSingle) ; getProfilesByIds est
+  // best-effort : les ids inconnus sont silencieusement absents.
   getProfileById(id: string): Promise<Profile | undefined>
   getProfilesByIds(ids: string[]): Promise<Profile[]>
   updateMyProfile(userId: string, displayName: string): Promise<Profile>

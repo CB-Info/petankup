@@ -356,9 +356,17 @@ base restent le filet, jamais la première ligne :
   et aux espaces de bord), 1 à 50 caractères après trim (CHECK côté
   DB).
 - Le pseudo est modifiable à tout moment.
-- Les profils sont tous publics entre utilisateurs authentifiés en V1.
-  Une visibilité plus fine (système d'amis, profils détaillés pour les
-  amis) viendra plus tard — hors périmètre V1.
+- La page de profil est ouverte à tout utilisateur connecté, mais son
+  **contenu** est protégé **en base** : chaque profil est `public`
+  (défaut) ou `private` (colonne `profiles.visibility`), réglage
+  modifiable par son propriétaire seul, depuis la page de compte (C1 —
+  pas sur la page de profil). Le bundle complet (stats + journal) n'est
+  renvoyé que si le profil est public, si l'appelant est un ami
+  (relation `friendships` acceptée) ou s'il est le propriétaire ; sinon
+  la RPC renvoie le pseudo seul, accompagné du marqueur `restricted`
+  (règle partagée : `private.profile_content_is_visible_to_current_user`).
+  Le filtrage n'est jamais fait côté client. Le pseudo, lui, reste
+  toujours lisible (et déjà résoluble par recherche exacte).
 
 ### Statistiques pré-calculées (matérialisées)
 
@@ -490,7 +498,8 @@ PAS pour la concision ni pour la performance d'écriture.
 
 - Multi-format de tournoi (élimination directe, poules + finales,
   double-élimination)
-- Système d'amis et visibilité fine des profils (V2+)
+- Interface du système d'amis et du réglage de confidentialité (le socle
+  base existe — tickets d'interface en cours)
 - Statistiques avancées de confrontation, duos préférés, ELO,
   gamification (V2+)
 - Export PDF, partage social
