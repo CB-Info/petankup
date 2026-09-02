@@ -1,10 +1,12 @@
 import { FriendshipError } from "../types";
 import type { FriendshipErrorCode, FriendshipRequestOutcome } from "../types";
 import {
+  friendshipErrorMeansGoalAlreadyMet,
   friendshipErrorMessage,
   friendshipErrorTriggersRefresh,
   parseFriendshipErrorCode,
 } from "../utils/friendship-errors";
+import type { FriendshipAttemptedAction } from "../utils/friendship-errors";
 
 // Retours utilisateur des actions d'amitié, communs à l'écran des amis et à
 // la page de profil.
@@ -27,11 +29,32 @@ export function useFriendshipFeedback() {
     return "unknown";
   }
 
-  // Affiche l'erreur d'une action d'amitié. Retourne le code décodé pour
-  // que l'appelant puisse, s'il a un champ concerné (la recherche de
-  // l'écran des amis), préférer un affichage inline au toast.
-  function showFriendshipError(error: unknown): FriendshipErrorCode {
+  // Affiche l'erreur d'une action d'amitié. L'appelant déclare le geste
+  // tenté : la traduction dépend de l'action, pas seulement du code — une
+  // suppression dont la cible a déjà disparu est un objectif atteint, pas
+  // un échec. Retourne le code décodé pour que l'appelant puisse, s'il a
+  // un champ concerné (la recherche de l'écran des amis), préférer un
+  // affichage inline au toast.
+  function showFriendshipError(
+    error: unknown,
+    attemptedAction: FriendshipAttemptedAction,
+  ): FriendshipErrorCode {
     const code = decodeFriendshipErrorCode(error);
+
+    // Objectif déjà atteint (annuler/refuser une demande qui n'existe
+    // plus) : confirmation discrète — ton neutre avec coche, ni l'allure
+    // d'alerte du warning ni le vert de célébration — et recalage des
+    // listes sur l'état réel.
+    if (friendshipErrorMeansGoalAlreadyMet(attemptedAction, code)) {
+      toast.add({
+        title: "C'est fait.",
+        description: "La demande n'existait déjà plus.",
+        color: "neutral",
+        icon: "i-lucide-check",
+      });
+      void friendshipStore.refreshFriendships();
+      return code;
+    }
     if (code === "unknown") {
       // Une FriendshipError('unknown') porte « unknown » comme message
       // (super(code)) : showError l'afficherait tel quel. On sert le

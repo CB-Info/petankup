@@ -95,3 +95,22 @@ export function friendshipErrorTriggersRefresh(code: FriendshipErrorCode): boole
       return false
   }
 }
+
+// Le geste que l'utilisateur tentait quand l'erreur est survenue. Chaque
+// écran le déclare (c'est un fait, pas un choix) : la décision de
+// présentation reste dans le point unique (useFriendshipFeedback).
+export type FriendshipAttemptedAction = 'request' | 'accept' | 'refuse' | 'cancel' | 'remove'
+
+// Une action de SUPPRESSION qui ne trouve plus sa cible a atteint son
+// objectif (la demande n'existe plus) : la présenter comme un échec serait
+// trompeur — l'écran affiche une confirmation discrète. Ne vaut que pour
+// annuler et refuser. Accepter une demande disparue reste un échec signalé
+// (l'utilisateur voulait devenir ami et ne l'est pas), et already_friends
+// reste signalé tel quel (20260902150000 : il nomme un ami à retirer).
+export function friendshipErrorMeansGoalAlreadyMet(
+  attemptedAction: FriendshipAttemptedAction,
+  code: FriendshipErrorCode,
+): boolean {
+  if (code !== 'request_not_found') return false
+  return attemptedAction === 'cancel' || attemptedAction === 'refuse'
+}

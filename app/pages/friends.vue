@@ -118,7 +118,7 @@ async function onSearchSubmit() {
   } catch (error) {
     // find_account peut lever not_authenticated en Error nue : même
     // décodage que les actions, jamais de message brut.
-    showFriendshipError(error);
+    showFriendshipError(error, "request");
   } finally {
     isSearching.value = false;
   }
@@ -151,7 +151,7 @@ async function requestFromSearch(account: AccountMatch) {
       searchInlineError.value = friendshipErrorMessage(code);
       return;
     }
-    showFriendshipError(error);
+    showFriendshipError(error, "request");
   } finally {
     isSubmittingSearchRequest.value = false;
   }
@@ -163,7 +163,7 @@ async function acceptRequest(entry: FriendshipEntry) {
   try {
     await friendshipStore.acceptFriendship(entry.userId);
   } catch (error) {
-    showFriendshipError(error);
+    showFriendshipError(error, "accept");
   }
 }
 
@@ -171,7 +171,7 @@ async function refuseRequest(entry: FriendshipEntry) {
   try {
     await friendshipStore.refuseFriendship(entry.userId);
   } catch (error) {
-    showFriendshipError(error);
+    showFriendshipError(error, "refuse");
   }
 }
 
@@ -179,7 +179,7 @@ async function cancelSentRequest(entry: FriendshipEntry) {
   try {
     await friendshipStore.cancelFriendshipRequest(entry.userId);
   } catch (error) {
-    showFriendshipError(error);
+    showFriendshipError(error, "cancel");
   }
 }
 
@@ -201,7 +201,7 @@ async function confirmRemoval() {
     isRemovalModalOpen.value = false;
     friendPendingRemoval.value = null;
   } catch (error) {
-    showFriendshipError(error);
+    showFriendshipError(error, "remove");
   }
 }
 

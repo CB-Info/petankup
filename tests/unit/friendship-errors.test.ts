@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest'
 import type { FriendshipErrorCode } from '../../app/types'
 import {
   friendshipErrorField,
+  friendshipErrorMeansGoalAlreadyMet,
   friendshipErrorMessage,
   friendshipErrorTriggersRefresh,
   parseFriendshipErrorCode,
 } from '../../app/utils/friendship-errors'
+import type { FriendshipAttemptedAction } from '../../app/utils/friendship-errors'
 
 const ALL_CODES: FriendshipErrorCode[] = [
   'not_authenticated',
@@ -93,5 +95,35 @@ describe('friendshipErrorTriggersRefresh', () => {
     expect(friendshipErrorTriggersRefresh('self_request')).toBe(false)
     expect(friendshipErrorTriggersRefresh('not_authenticated')).toBe(false)
     expect(friendshipErrorTriggersRefresh('unknown')).toBe(false)
+  })
+})
+
+describe('friendshipErrorMeansGoalAlreadyMet', () => {
+  const ALL_ACTIONS: FriendshipAttemptedAction[] = [
+    'request',
+    'accept',
+    'refuse',
+    'cancel',
+    'remove',
+  ]
+
+  it('treats a vanished target as goal met for the deletion actions only', () => {
+    expect(friendshipErrorMeansGoalAlreadyMet('cancel', 'request_not_found')).toBe(true)
+    expect(friendshipErrorMeansGoalAlreadyMet('refuse', 'request_not_found')).toBe(true)
+  })
+
+  it('keeps accept (and request/remove) as signalled failures on a vanished target', () => {
+    expect(friendshipErrorMeansGoalAlreadyMet('accept', 'request_not_found')).toBe(false)
+    expect(friendshipErrorMeansGoalAlreadyMet('request', 'request_not_found')).toBe(false)
+    expect(friendshipErrorMeansGoalAlreadyMet('remove', 'request_not_found')).toBe(false)
+  })
+
+  it('never softens any other code, already_friends included', () => {
+    const otherCodes = ALL_CODES.filter(code => code !== 'request_not_found')
+    for (const action of ALL_ACTIONS) {
+      for (const code of otherCodes) {
+        expect(friendshipErrorMeansGoalAlreadyMet(action, code)).toBe(false)
+      }
+    }
   })
 })

@@ -99,7 +99,7 @@ async function requestFromProfile(displayName: string) {
       });
       return;
     }
-    showFriendshipError(error);
+    showFriendshipError(error, "request");
   } finally {
     isSubmittingFriendRequest.value = false;
   }
@@ -109,7 +109,7 @@ async function acceptFromProfile() {
   try {
     await friendshipStore.acceptFriendship(userId.value);
   } catch (error) {
-    showFriendshipError(error);
+    showFriendshipError(error, "accept");
   }
 }
 
@@ -117,7 +117,7 @@ async function refuseFromProfile() {
   try {
     await friendshipStore.refuseFriendship(userId.value);
   } catch (error) {
-    showFriendshipError(error);
+    showFriendshipError(error, "refuse");
   }
 }
 
@@ -125,7 +125,7 @@ async function cancelFromProfile() {
   try {
     await friendshipStore.cancelFriendshipRequest(userId.value);
   } catch (error) {
-    showFriendshipError(error);
+    showFriendshipError(error, "cancel");
   }
 }
 
@@ -136,7 +136,7 @@ async function confirmRemovalFromProfile() {
     await friendshipStore.removeFriendship(userId.value);
     isRemovalModalOpen.value = false;
   } catch (error) {
-    showFriendshipError(error);
+    showFriendshipError(error, "remove");
   }
 }
 
