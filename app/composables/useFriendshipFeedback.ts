@@ -8,6 +8,17 @@ import {
 } from "../utils/friendship-errors";
 import type { FriendshipAttemptedAction } from "../utils/friendship-errors";
 
+// La confirmation discrète partagée : « C'est fait. », titre seul, ton
+// neutre avec coche — ni l'allure d'alerte du warning, ni le vert de
+// célébration. Sert DEUX situations : le succès d'un retrait d'ami, et une
+// suppression dont l'objectif était déjà atteint — « C'est fait » est vrai
+// dans les deux.
+export const QUIET_CONFIRMATION_TOAST = {
+  title: "C'est fait.",
+  color: "neutral",
+  icon: "i-lucide-check",
+} as const;
+
 // Retours utilisateur des actions d'amitié, communs à l'écran des amis et à
 // la page de profil.
 //
@@ -46,12 +57,7 @@ export function useFriendshipFeedback() {
     // d'alerte du warning ni le vert de célébration — et recalage des
     // listes sur l'état réel.
     if (friendshipErrorMeansGoalAlreadyMet(attemptedAction, code)) {
-      toast.add({
-        title: "C'est fait.",
-        description: "La demande n'existait déjà plus.",
-        color: "neutral",
-        icon: "i-lucide-check",
-      });
+      toast.add(QUIET_CONFIRMATION_TOAST);
       void friendshipStore.refreshFriendships();
       return code;
     }
@@ -96,5 +102,19 @@ export function useFriendshipFeedback() {
     });
   }
 
-  return { decodeFriendshipErrorCode, showFriendshipError, showRequestOutcome };
+  // Accusé de réception d'un retrait d'ami : l'action est passée par une
+  // modale de confirmation — un succès silencieux ressemblerait à un raté.
+  // Même confirmation discrète que les suppressions à objectif déjà
+  // atteint ; c'est un SUCCÈS d'action, il ne relève pas de la règle sur
+  // les erreurs.
+  function showQuietConfirmation(): void {
+    toast.add(QUIET_CONFIRMATION_TOAST);
+  }
+
+  return {
+    decodeFriendshipErrorCode,
+    showFriendshipError,
+    showRequestOutcome,
+    showQuietConfirmation,
+  };
 }

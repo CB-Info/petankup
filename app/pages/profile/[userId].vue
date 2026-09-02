@@ -60,8 +60,12 @@ const isSelfProfile = computed(() => userId.value === myUserId.value);
 const friendshipStore = useFriendshipStore();
 const { friendshipBundle } = storeToRefs(friendshipStore);
 const { isActionPending } = friendshipStore;
-const { decodeFriendshipErrorCode, showFriendshipError, showRequestOutcome } =
-  useFriendshipFeedback();
+const {
+  decodeFriendshipErrorCode,
+  showFriendshipError,
+  showRequestOutcome,
+  showQuietConfirmation,
+} = useFriendshipFeedback();
 const toast = useToast();
 
 watch(
@@ -135,6 +139,7 @@ async function confirmRemovalFromProfile() {
   try {
     await friendshipStore.removeFriendship(userId.value);
     isRemovalModalOpen.value = false;
+    showQuietConfirmation();
   } catch (error) {
     showFriendshipError(error, "remove");
   }

@@ -29,8 +29,12 @@ const { isActionPending } = friendshipStore;
 const profileStore = useProfileStore();
 const identityStore = useIdentityStore();
 const { currentUserId } = storeToRefs(identityStore);
-const { decodeFriendshipErrorCode, showFriendshipError, showRequestOutcome } =
-  useFriendshipFeedback();
+const {
+  decodeFriendshipErrorCode,
+  showFriendshipError,
+  showRequestOutcome,
+  showQuietConfirmation,
+} = useFriendshipFeedback();
 
 // Rafraîchissement (pas le lazy) à chaque entrée : c'est l'écran qu'on
 // ouvre POUR les demandes — il doit voir celles arrivées en cours de
@@ -200,6 +204,7 @@ async function confirmRemoval() {
     await friendshipStore.removeFriendship(friend.userId);
     isRemovalModalOpen.value = false;
     friendPendingRemoval.value = null;
+    showQuietConfirmation();
   } catch (error) {
     showFriendshipError(error, "remove");
   }
