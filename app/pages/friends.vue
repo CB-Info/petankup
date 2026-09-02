@@ -174,6 +174,7 @@ async function acceptRequest(entry: FriendshipEntry) {
 async function refuseRequest(entry: FriendshipEntry) {
   try {
     await friendshipStore.refuseFriendship(entry.userId);
+    showQuietConfirmation();
   } catch (error) {
     showFriendshipError(error, "refuse");
   }
@@ -182,6 +183,7 @@ async function refuseRequest(entry: FriendshipEntry) {
 async function cancelSentRequest(entry: FriendshipEntry) {
   try {
     await friendshipStore.cancelFriendshipRequest(entry.userId);
+    showQuietConfirmation();
   } catch (error) {
     showFriendshipError(error, "cancel");
   }

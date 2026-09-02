@@ -101,16 +101,29 @@ export function friendshipErrorTriggersRefresh(code: FriendshipErrorCode): boole
 // présentation reste dans le point unique (useFriendshipFeedback).
 export type FriendshipAttemptedAction = 'request' | 'accept' | 'refuse' | 'cancel' | 'remove'
 
+// La famille des actions de SUPPRESSION : elles constatent une disparition
+// (la relation ou la demande n'existe plus après elles) — leur succès
+// s'accuse par la confirmation discrète partagée (« C'est fait. »), et
+// leur cible déjà disparue vaut objectif atteint. Demander et accepter
+// CRÉENT : ils gardent leurs messages propres (« Demande envoyée. »,
+// « Vous êtes maintenant amis. ») — ils annoncent, ils ne constatent pas.
+export function friendshipActionIsDeletion(
+  action: FriendshipAttemptedAction,
+): boolean {
+  return action === 'refuse' || action === 'cancel' || action === 'remove'
+}
+
 // Une action de SUPPRESSION qui ne trouve plus sa cible a atteint son
 // objectif (la demande n'existe plus) : la présenter comme un échec serait
-// trompeur — l'écran affiche une confirmation discrète. Ne vaut que pour
-// annuler et refuser. Accepter une demande disparue reste un échec signalé
-// (l'utilisateur voulait devenir ami et ne l'est pas), et already_friends
-// reste signalé tel quel (20260902150000 : il nomme un ami à retirer).
+// trompeur — l'écran affiche la confirmation discrète. Accepter une demande
+// disparue reste un échec signalé (l'utilisateur voulait devenir ami et ne
+// l'est pas), et already_friends reste signalé tel quel (20260902150000 :
+// il nomme un ami à retirer). NB : retirer ne peut pas produire
+// request_not_found (no-op idempotent côté base) — la règle le couvre par
+// cohérence de famille, pas par nécessité.
 export function friendshipErrorMeansGoalAlreadyMet(
   attemptedAction: FriendshipAttemptedAction,
   code: FriendshipErrorCode,
 ): boolean {
-  if (code !== 'request_not_found') return false
-  return attemptedAction === 'cancel' || attemptedAction === 'refuse'
+  return code === 'request_not_found' && friendshipActionIsDeletion(attemptedAction)
 }

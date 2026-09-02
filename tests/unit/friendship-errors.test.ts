@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FriendshipErrorCode } from '../../app/types'
 import {
+  friendshipActionIsDeletion,
   friendshipErrorField,
   friendshipErrorMeansGoalAlreadyMet,
   friendshipErrorMessage,
@@ -107,15 +108,18 @@ describe('friendshipErrorMeansGoalAlreadyMet', () => {
     'remove',
   ]
 
-  it('treats a vanished target as goal met for the deletion actions only', () => {
+  it('treats a vanished target as goal met for the deletion family', () => {
     expect(friendshipErrorMeansGoalAlreadyMet('cancel', 'request_not_found')).toBe(true)
     expect(friendshipErrorMeansGoalAlreadyMet('refuse', 'request_not_found')).toBe(true)
+    // remove ne peut pas produire request_not_found (no-op idempotent côté
+    // base) : couvert par cohérence de famille — une cible déjà disparue
+    // EST un objectif atteint pour toute suppression.
+    expect(friendshipErrorMeansGoalAlreadyMet('remove', 'request_not_found')).toBe(true)
   })
 
-  it('keeps accept (and request/remove) as signalled failures on a vanished target', () => {
+  it('keeps accept and request as signalled failures on a vanished target', () => {
     expect(friendshipErrorMeansGoalAlreadyMet('accept', 'request_not_found')).toBe(false)
     expect(friendshipErrorMeansGoalAlreadyMet('request', 'request_not_found')).toBe(false)
-    expect(friendshipErrorMeansGoalAlreadyMet('remove', 'request_not_found')).toBe(false)
   })
 
   it('never softens any other code, already_friends included', () => {
@@ -125,5 +129,18 @@ describe('friendshipErrorMeansGoalAlreadyMet', () => {
         expect(friendshipErrorMeansGoalAlreadyMet(action, code)).toBe(false)
       }
     }
+  })
+})
+
+describe('friendshipActionIsDeletion', () => {
+  it('names the deletion family: refuse, cancel, remove', () => {
+    expect(friendshipActionIsDeletion('refuse')).toBe(true)
+    expect(friendshipActionIsDeletion('cancel')).toBe(true)
+    expect(friendshipActionIsDeletion('remove')).toBe(true)
+  })
+
+  it('keeps the creating actions out — they announce, they do not observe a deletion', () => {
+    expect(friendshipActionIsDeletion('request')).toBe(false)
+    expect(friendshipActionIsDeletion('accept')).toBe(false)
   })
 })

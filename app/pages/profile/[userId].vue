@@ -120,6 +120,7 @@ async function acceptFromProfile() {
 async function refuseFromProfile() {
   try {
     await friendshipStore.refuseFriendship(userId.value);
+    showQuietConfirmation();
   } catch (error) {
     showFriendshipError(error, "refuse");
   }
@@ -128,6 +129,7 @@ async function refuseFromProfile() {
 async function cancelFromProfile() {
   try {
     await friendshipStore.cancelFriendshipRequest(userId.value);
+    showQuietConfirmation();
   } catch (error) {
     showFriendshipError(error, "cancel");
   }
