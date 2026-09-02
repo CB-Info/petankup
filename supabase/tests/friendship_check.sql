@@ -57,10 +57,14 @@
 --   10 tiers : remove no-op, accept/refuse → request_not_found, lignes des
 --      autres intactes ; remove ne touche pas une demande pending
 --      (= ticket 10).
---   11 annulation (A8/F8) : le destinataire ne peut pas annuler
---      (not_requester) ; annuler une amitié acceptée → request_not_found ;
---      le demandeur annule (ligne supprimée) et peut redemander ; un tiers
---      → request_not_found (ajout validé).
+--   11 annulation (A8/F8, issues distinguées par 20260902150000) : le
+--      destinataire ne peut pas annuler (not_requester) ; une relation
+--      devenue AMITIÉ → already_friends (l'utilisateur doit savoir qu'il
+--      a un ami à retirer) ; « plus rien » → request_not_found, INDISTINCT
+--      par décision — un tiers (11c), une demande REFUSÉE (11h) et une
+--      demande jamais envoyée donnent le même code (on ne révèle jamais
+--      qui a refusé) ; le demandeur annule (ligne supprimée) et peut
+--      redemander.
 --   12 retrait par l'un PUIS par l'autre (scénario recréé) : silencieux,
 --      supprimé des deux côtés, idempotent ; redemander après retrait
 --      (= ticket 9).
@@ -506,11 +510,13 @@ select pg_temp.assert_blocked(
   'P0001', 'not_requester', 'cas 11a: le destinataire ne peut pas annuler — il refuse');
 reset role;
 
--- Annuler une amitié acceptée est refusé (annuler ≠ retirer).
+-- Une relation devenue amitié est NOMMÉE (20260902150000) : l'appelant
+-- doit savoir qu'il a maintenant un ami à retirer, pas croire qu'il a
+-- annulé.
 select pg_temp.act_as('a1000000-0000-4000-8000-000000000001');
 select pg_temp.assert_blocked(
   $sql$ select public.cancel_friendship_request('a1000000-0000-4000-8000-000000000002') $sql$,
-  'P0001', 'request_not_found', 'cas 11b: annuler une amitié acceptée est refusé');
+  'P0001', 'already_friends', 'cas 11b: annuler une relation devenue amitié → already_friends');
 reset role;
 
 -- Un tiers ne peut structurellement rien annuler (sa paire n'existe pas).
@@ -537,6 +543,24 @@ reset role;
 select pg_temp.assert_eq_text(
   pg_temp.duo_state('a1000000-0000-4000-8000-000000000002', 'a1000000-0000-4000-8000-000000000003'),
   'pending/a1000000-0000-4000-8000-000000000002', 'cas 11f: nouvelle demande B→C en place');
+
+-- Preuve d'INDISTINCTION du refus (20260902150000) : une demande refusée
+-- puis annulée donne le même code qu'un tiers (11c) et qu'une demande
+-- jamais envoyée — le refus n'est pas révélé au demandeur.
+select pg_temp.act_as('a1000000-0000-4000-8000-000000000003');
+select public.refuse_friendship('a1000000-0000-4000-8000-000000000002');
+reset role;
+select pg_temp.assert_eq_int(
+  pg_temp.duo_count('a1000000-0000-4000-8000-000000000002', 'a1000000-0000-4000-8000-000000000003'),
+  0, 'cas 11g: décor — C a refusé la demande B→C');
+select pg_temp.act_as('a1000000-0000-4000-8000-000000000002');
+select pg_temp.assert_blocked(
+  $sql$ select public.cancel_friendship_request('a1000000-0000-4000-8000-000000000003') $sql$,
+  'P0001', 'request_not_found', 'cas 11h: annuler après un refus → request_not_found, indistinct du « jamais existé »');
+select pg_temp.assert_eq_text(
+  (select public.request_friendship(pg_temp.pseudo('a1000000-0000-4000-8000-000000000003'))::text),
+  'pending', 'cas 11i: B redemande — l''état B→C attendu par la suite est restauré');
+reset role;
 
 -- ----------------------------------------------------------------------------
 -- Cas 12 — retrait unilatéral, silencieux, idempotent ; redemander marche.
