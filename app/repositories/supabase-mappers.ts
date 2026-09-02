@@ -4,6 +4,8 @@ import type {
   CreateFreeMatchInput,
   FreeMatch,
   FreeMatchPlayer,
+  FriendshipBundle,
+  FriendshipEntry,
   Profile,
   UserFreeMatchResult,
   UserFreeMatchStats,
@@ -37,6 +39,10 @@ type MatchInsert = Database['public']['Tables']['tournament_matches']['Insert']
 type MatchUpdate = Database['public']['Tables']['tournament_matches']['Update']
 type TournamentMemberRow = Database['public']['Tables']['tournament_members']['Row']
 type ProfileRow = Database['public']['Tables']['profiles']['Row']
+// Colonnes de profiles réellement lisibles par authenticated depuis A2
+// (visibility est masquée du SELECT direct — grant par colonne) : le mapper
+// ne doit jamais exiger plus que ce que la base accepte de servir.
+type ProfileIdentityRow = Pick<ProfileRow, 'id' | 'display_name' | 'created_at' | 'updated_at'>
 type FreeMatchRow = Database['public']['Tables']['free_matches']['Row']
 type FreeMatchPlayerRow = Database['public']['Tables']['free_match_players']['Row']
 // free_matches est toujours lu avec ses joueurs embarqués
@@ -199,7 +205,7 @@ export function mapTournamentMemberRowToDomain(
 // création du compte (cf. migration C.1). Les updates côté app
 // n'écrivent que `display_name`, passé en littéral dans le repo.
 
-export function mapProfileRowToDomain(row: ProfileRow): Profile {
+export function mapProfileRowToDomain(row: ProfileIdentityRow): Profile {
   return {
     id: row.id,
     displayName: row.display_name,
@@ -433,5 +439,40 @@ export function mapCreateFreeMatchInputToRpcPayload(
       user_id: player.userId,
       display_name: player.displayName,
     })),
+  }
+}
+
+// --- Amitié (RPC get_friendships, A3) ---
+// Forme brute du JSON retourné par public.get_friendships. Chaque entrée
+// désigne L'AUTRE personne de la relation ; l'ordre de stockage du duo et
+// le demandeur brut ne sont jamais exposés. Exporté pour typer le cast du
+// retour RPC (typé Json dans database.types.ts).
+export interface RawFriendshipEntryJson {
+  user_id: string
+  display_name: string
+}
+
+export interface RawFriendshipsJson {
+  friends: RawFriendshipEntryJson[]
+  received: RawFriendshipEntryJson[]
+  sent: RawFriendshipEntryJson[]
+}
+
+export function mapFriendshipEntryJsonToDomain(raw: RawFriendshipEntryJson): FriendshipEntry {
+  return {
+    userId: raw.user_id,
+    displayName: raw.display_name,
+  }
+}
+
+// PAS de retri : l'ordre est garanti par la RPC (amis par pseudo insensible
+// à la casse, demandes de la plus récente à la plus ancienne) — même règle
+// que results/free_matches du bundle de profil. Le coalesce('[]') côté SQL
+// garantit des tableaux jamais nuls.
+export function mapFriendshipsJsonToDomain(raw: RawFriendshipsJson): FriendshipBundle {
+  return {
+    friends: raw.friends.map(mapFriendshipEntryJsonToDomain),
+    received: raw.received.map(mapFriendshipEntryJsonToDomain),
+    sent: raw.sent.map(mapFriendshipEntryJsonToDomain),
   }
 }

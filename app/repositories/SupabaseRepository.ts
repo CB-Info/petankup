@@ -4,6 +4,8 @@ import type {
   AccountMatch,
   CreateFreeMatchInput,
   FreeMatch,
+  FriendshipBundle,
+  FriendshipRequestOutcome,
   InviteMemberErrorCode,
   Profile,
   Team,
@@ -12,8 +14,9 @@ import type {
   TournamentMember,
   UserProfileBundle,
 } from '../types'
-import { FreeMatchError, InviteMemberError, ProfileError } from '../types'
+import { FreeMatchError, FriendshipError, InviteMemberError, ProfileError } from '../types'
 import { parseFreeMatchErrorCode } from '../utils/free-match-errors'
+import { parseFriendshipErrorCode } from '../utils/friendship-errors'
 import type { TournamentRepository } from './TournamentRepository'
 import {
   mapAccountMatchRowToDomain,
@@ -28,7 +31,9 @@ import {
   mapTournamentDomainToUpdate,
   mapTournamentMemberRowToDomain,
   mapTournamentRowToDomain,
+  mapFriendshipsJsonToDomain,
   mapUserProfileBundleJsonToDomain,
+  type RawFriendshipsJson,
   type RawUserProfileBundleJson,
 } from './supabase-mappers'
 
@@ -385,5 +390,60 @@ export class SupabaseRepository implements TournamentRepository {
     if (error !== null) throw new Error(error.message)
     const firstRow = (data ?? [])[0]
     return firstRow === undefined ? undefined : mapAccountMatchRowToDomain(firstRow)
+  }
+
+  // --- Amitié (A3) ---
+  // Toutes les erreurs de ces RPC sont remontées en FriendshipError typée
+  // (le message PostgREST est exactement le code) — jamais en Error nue :
+  // c'est ce qui garantit qu'aucun code brut n'atteint un toast.
+
+  async getFriendships(): Promise<FriendshipBundle> {
+    const { data, error } = await this.client.rpc('get_friendships')
+    if (error !== null) {
+      throw new FriendshipError(parseFriendshipErrorCode(error.message))
+    }
+    if (data === null) throw new FriendshipError('unknown')
+    // Retour typé Json (cf. database.types.ts) : cast vers la forme brute
+    // attendue par le mapper, comme pour get_user_profile.
+    return mapFriendshipsJsonToDomain(data as unknown as RawFriendshipsJson)
+  }
+
+  async requestFriendship(displayName: string): Promise<FriendshipRequestOutcome> {
+    const { data, error } = await this.client.rpc('request_friendship', {
+      p_display_name: displayName,
+    })
+    if (error !== null) {
+      throw new FriendshipError(parseFriendshipErrorCode(error.message))
+    }
+    if (data !== 'pending' && data !== 'accepted') throw new FriendshipError('unknown')
+    return data
+  }
+
+  async acceptFriendship(userId: string): Promise<void> {
+    const { error } = await this.client.rpc('accept_friendship', { p_user_id: userId })
+    if (error !== null) {
+      throw new FriendshipError(parseFriendshipErrorCode(error.message))
+    }
+  }
+
+  async refuseFriendship(userId: string): Promise<void> {
+    const { error } = await this.client.rpc('refuse_friendship', { p_user_id: userId })
+    if (error !== null) {
+      throw new FriendshipError(parseFriendshipErrorCode(error.message))
+    }
+  }
+
+  async cancelFriendshipRequest(userId: string): Promise<void> {
+    const { error } = await this.client.rpc('cancel_friendship_request', { p_user_id: userId })
+    if (error !== null) {
+      throw new FriendshipError(parseFriendshipErrorCode(error.message))
+    }
+  }
+
+  async removeFriendship(userId: string): Promise<void> {
+    const { error } = await this.client.rpc('remove_friendship', { p_user_id: userId })
+    if (error !== null) {
+      throw new FriendshipError(parseFriendshipErrorCode(error.message))
+    }
   }
 }

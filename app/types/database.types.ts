@@ -85,24 +85,57 @@ export type Database = {
         }
         Relationships: []
       }
+      friendships: {
+        Row: {
+          created_at: string
+          id: string
+          requester_id: string
+          status: Database["public"]["Enums"]["friendship_status"]
+          updated_at: string
+          user_high_id: string
+          user_low_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          requester_id: string
+          status?: Database["public"]["Enums"]["friendship_status"]
+          updated_at?: string
+          user_high_id: string
+          user_low_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          requester_id?: string
+          status?: Database["public"]["Enums"]["friendship_status"]
+          updated_at?: string
+          user_high_id?: string
+          user_low_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
           display_name: string
           id: string
           updated_at: string
+          visibility: Database["public"]["Enums"]["profile_visibility"]
         }
         Insert: {
           created_at?: string
           display_name: string
           id: string
           updated_at?: string
+          visibility?: Database["public"]["Enums"]["profile_visibility"]
         }
         Update: {
           created_at?: string
           display_name?: string
           id?: string
           updated_at?: string
+          visibility?: Database["public"]["Enums"]["profile_visibility"]
         }
         Relationships: []
       }
@@ -461,6 +494,11 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_friendship: { Args: { p_user_id: string }; Returns: undefined }
+      cancel_friendship_request: {
+        Args: { p_user_id: string }
+        Returns: undefined
+      }
       create_free_match: {
         Args: {
           p_played_on: string
@@ -482,6 +520,7 @@ export type Database = {
           user_id: string
         }[]
       }
+      get_friendships: { Args: never; Returns: Json }
       get_user_profile: { Args: { p_user_id: string }; Returns: Json }
       invite_tournament_member_by_display_name: {
         Args: { p_display_name: string; p_tournament_id: string }
@@ -500,9 +539,15 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      refuse_friendship: { Args: { p_user_id: string }; Returns: undefined }
+      remove_friendship: { Args: { p_user_id: string }; Returns: undefined }
       remove_tournament_member: {
         Args: { p_member_id: string }
         Returns: undefined
+      }
+      request_friendship: {
+        Args: { p_display_name: string }
+        Returns: Database["public"]["Enums"]["friendship_status"]
       }
       text_array_has_no_blank_values: {
         Args: { arr: string[] }
@@ -516,7 +561,9 @@ export type Database = {
     Enums: {
       free_match_side: "A" | "B"
       free_match_visibility: "private" | "public"
+      friendship_status: "pending" | "accepted"
       match_status: "pending" | "completed"
+      profile_visibility: "private" | "public"
       tournament_format: "round_robin"
       tournament_status: "draft" | "in_progress" | "completed"
       tournament_visibility: "private" | "public"
@@ -535,12 +582,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -564,11 +611,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -589,11 +636,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -614,11 +661,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -631,11 +678,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -649,7 +696,9 @@ export const Constants = {
     Enums: {
       free_match_side: ["A", "B"],
       free_match_visibility: ["private", "public"],
+      friendship_status: ["pending", "accepted"],
       match_status: ["pending", "completed"],
+      profile_visibility: ["private", "public"],
       tournament_format: ["round_robin"],
       tournament_status: ["draft", "in_progress", "completed"],
       tournament_visibility: ["private", "public"],

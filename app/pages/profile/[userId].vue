@@ -51,6 +51,95 @@ async function loadProfile(id: string): Promise<void> {
 const myUserId = currentUserId;
 const isSelfProfile = computed(() => userId.value === myUserId.value);
 
+// --- Statut d'amitié (A3) : dérivé du bundle du store friendship, chargé
+// LAZY (gratuit si l'écran des amis ou le compte l'ont déjà chargé). Le
+// bloc n'est rendu que bundle en place : statut inconnu → silence, pas
+// d'écran d'erreur pour un bloc secondaire. Sur son propre profil, la
+// branche v-if="isSelfProfile" du hero rend ce bloc structurellement
+// inatteignable.
+const friendshipStore = useFriendshipStore();
+const { friendshipBundle } = storeToRefs(friendshipStore);
+const { isActionPending } = friendshipStore;
+const { decodeFriendshipErrorCode, showFriendshipError, showRequestOutcome } =
+  useFriendshipFeedback();
+const toast = useToast();
+
+watch(
+  currentUserId,
+  (viewerId) => {
+    if (viewerId !== null) void friendshipStore.loadFriendships();
+  },
+  { immediate: true },
+);
+
+const friendshipStatus = computed(() =>
+  friendshipStore.friendshipStatusOf(userId.value),
+);
+
+// Demande depuis le profil : la RPC ne connaît que le PSEUDO (manque A1
+// consigné) — si la personne s'est renommée depuis le chargement du
+// bundle, display_name_not_found reçoit une copie dédiée à cet écran (le
+// message générique « Aucun compte ne porte ce pseudo » serait absurde sur
+// la page de la personne).
+const isSubmittingFriendRequest = ref(false);
+
+async function requestFromProfile(displayName: string) {
+  if (isSubmittingFriendRequest.value) return;
+  isSubmittingFriendRequest.value = true;
+  try {
+    const outcome = await friendshipStore.requestFriendship(displayName);
+    showRequestOutcome(outcome);
+  } catch (error) {
+    const code = decodeFriendshipErrorCode(error);
+    if (code === "display_name_not_found") {
+      toast.add({
+        title: "Ce joueur n'est plus joignable sous ce pseudo. Rechargez la page.",
+        color: "warning",
+        icon: "i-lucide-info",
+      });
+      return;
+    }
+    showFriendshipError(error);
+  } finally {
+    isSubmittingFriendRequest.value = false;
+  }
+}
+
+async function acceptFromProfile() {
+  try {
+    await friendshipStore.acceptFriendship(userId.value);
+  } catch (error) {
+    showFriendshipError(error);
+  }
+}
+
+async function refuseFromProfile() {
+  try {
+    await friendshipStore.refuseFriendship(userId.value);
+  } catch (error) {
+    showFriendshipError(error);
+  }
+}
+
+async function cancelFromProfile() {
+  try {
+    await friendshipStore.cancelFriendshipRequest(userId.value);
+  } catch (error) {
+    showFriendshipError(error);
+  }
+}
+
+const isRemovalModalOpen = ref(false);
+
+async function confirmRemovalFromProfile() {
+  try {
+    await friendshipStore.removeFriendship(userId.value);
+    isRemovalModalOpen.value = false;
+  } catch (error) {
+    showFriendshipError(error);
+  }
+}
+
 // Chargement gated par l'identité du viewer (shouldReloadProfile) : à froid
 // (F5, lien direct), l'identité n'est pas encore résolue au montage —
 // appeler le store trop tôt sortirait silencieusement (sa garde) et la page
@@ -180,7 +269,7 @@ function playerNamesFor(players: Teammate[]): string[] {
 // ouvre un nouvel onglet (modificateur ou bouton non principal) :
 // sessionStorage n'y est pas partagé, écrire ne ferait que polluer
 // l'onglet courant d'une origine jamais consommée.
-const { rememberOrigin } = useBackOrigin();
+const { rememberOrigin, readOrigin, clearOrigin } = useBackOrigin();
 
 function rememberJournalOrigin(event: MouseEvent, contextBasePath: string): void {
   const opensOutsideThisTab =
@@ -189,6 +278,31 @@ function rememberJournalOrigin(event: MouseEvent, contextBasePath: string): void
   rememberOrigin(contextBasePath, `/profile/${userId.value}`);
 }
 
+// Flèche retour contextuelle (A3) : arriver depuis l'écran des amis fait
+// ramener la flèche vers « Amis », sinon Accueil. Motif canonique des
+// pages tournoi et match libre : lecture au watch d'id (clear du contexte
+// précédent sur changement de param), consommation à la SORTIE du contexte
+// — la flèche ne ment jamais, quitte à retomber sur Accueil après un
+// détour profil → tournoi → retour.
+const DEFAULT_BACK_LINK = { label: "Accueil", to: "/" };
+const headerBackLink = ref(DEFAULT_BACK_LINK);
+
+watch(
+  userId,
+  (id, previousId) => {
+    if (previousId !== undefined) clearOrigin(`/profile/${previousId}`);
+    headerBackLink.value = readOrigin(`/profile/${id}`) ?? DEFAULT_BACK_LINK;
+  },
+  { immediate: true },
+);
+
+onBeforeRouteLeave((to) => {
+  const profileBasePath = `/profile/${userId.value}`;
+  if (!pathBelongsToContext(to.path, profileBasePath)) {
+    clearOrigin(profileBasePath);
+  }
+});
+
 // Config header. watchEffect pour suivre le pseudo (arrive après le mount).
 const { set: setHeader } = useAppHeader();
 watchEffect(() => {
@@ -196,7 +310,7 @@ watchEffect(() => {
     mode: "interne",
     kicker: "Profil",
     title: profile.value?.displayName ?? "Profil",
-    back: { label: "Accueil", to: "/" },
+    back: headerBackLink.value,
   });
 });
 
@@ -286,6 +400,86 @@ useHead({
         >
           Modifier mes infos
         </UButton>
+
+        <!-- Statut d'amitié + action (A3) — profil d'autrui seulement, et
+             seulement une fois le bundle d'amitié en place (statut inconnu
+             → silence). -->
+        <template v-else-if="friendshipBundle !== null">
+          <div
+            v-if="friendshipStatus === 'friends'"
+            class="flex items-center gap-2.5"
+          >
+            <span
+              class="inline-flex items-center gap-1.5 rounded-full bg-(--pk-cream) px-3 py-1.5 font-disp text-[11px] font-extrabold tracking-[0.06em] uppercase text-(--pk-subtle)"
+            >
+              <UIcon name="i-lucide-check" class="size-3.5" />
+              Amis
+            </span>
+            <UButton
+              variant="ghost"
+              color="error"
+              :loading="isActionPending(userId, 'remove')"
+              class="h-11 font-disp text-[11.5px] font-extrabold tracking-[0.03em] uppercase"
+              @click="isRemovalModalOpen = true"
+            >
+              Retirer
+            </UButton>
+          </div>
+
+          <div
+            v-else-if="friendshipStatus === 'request_sent'"
+            class="flex items-center gap-2.5"
+          >
+            <span class="font-sans text-sm text-(--pk-subtle)">Demande envoyée</span>
+            <UButton
+              variant="ghost"
+              color="neutral"
+              :loading="isActionPending(userId, 'cancel')"
+              class="h-11 font-disp text-[11.5px] font-extrabold tracking-[0.03em] uppercase"
+              @click="cancelFromProfile"
+            >
+              Annuler la demande
+            </UButton>
+          </div>
+
+          <div
+            v-else-if="friendshipStatus === 'request_received'"
+            class="flex flex-col items-center gap-2"
+          >
+            <span class="font-sans text-sm text-(--pk-subtle)">Vous a envoyé une demande</span>
+            <div class="flex gap-1.5">
+              <UButton
+                color="primary"
+                :loading="isActionPending(userId, 'accept')"
+                :disabled="isActionPending(userId)"
+                class="h-11 rounded-[12px] px-4 font-disp text-[11.5px] font-extrabold tracking-[0.03em] uppercase text-(--pk-cream)"
+                @click="acceptFromProfile"
+              >
+                Accepter
+              </UButton>
+              <UButton
+                variant="ghost"
+                color="neutral"
+                :loading="isActionPending(userId, 'refuse')"
+                :disabled="isActionPending(userId)"
+                class="h-11 font-disp text-[11.5px] font-extrabold tracking-[0.03em] uppercase"
+                @click="refuseFromProfile"
+              >
+                Refuser
+              </UButton>
+            </div>
+          </div>
+
+          <UButton
+            v-else-if="friendshipStatus === 'none'"
+            color="primary"
+            :loading="isSubmittingFriendRequest"
+            class="h-11 rounded-full px-4.5 font-disp text-[12.5px] font-extrabold tracking-[0.04em] uppercase text-(--pk-cream)"
+            @click="requestFromProfile(profile.displayName)"
+          >
+            Envoyer une demande
+          </UButton>
+        </template>
       </div>
 
       <ProfileStatsCards :stats="stats" :free-match-stats="freeMatchStats" />
@@ -369,6 +563,13 @@ useHead({
           {{ journalEmptyMessage }}
         </p>
       </section>
+
+      <FriendRemoveConfirmModal
+        v-model:open="isRemovalModalOpen"
+        :friend-display-name="profile.displayName"
+        :is-submitting="isActionPending(userId, 'remove')"
+        @confirmed="confirmRemovalFromProfile"
+      />
     </div>
   </div>
 </template>

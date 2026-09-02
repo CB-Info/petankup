@@ -283,3 +283,57 @@ export class FreeMatchError extends Error {
     this.name = "FreeMatchError";
   }
 }
+
+// --- Amitié (A3) ---
+
+// Une personne dans une relation d'amitié, vue depuis l'utilisateur
+// courant : toujours L'AUTRE personne du duo (la RPC get_friendships ne
+// révèle jamais l'ordre de stockage ni le demandeur brut).
+export interface FriendshipEntry {
+  userId: string;
+  displayName: string;
+}
+
+// Les trois listes de la RPC get_friendships. Tris garantis côté base :
+// amis par pseudo (insensible à la casse), demandes de la plus récente à
+// la plus ancienne. Jamais null — listes vides.
+export interface FriendshipBundle {
+  friends: FriendshipEntry[];
+  received: FriendshipEntry[];
+  sent: FriendshipEntry[];
+}
+
+// Issue d'une demande (request_friendship) : 'accepted' = demandes
+// croisées (A7) — l'autre avait déjà demandé, l'appel a accepté sa
+// demande, vous êtes amis immédiatement.
+export type FriendshipRequestOutcome = "pending" | "accepted";
+
+// Relation de l'utilisateur courant avec un profil, dérivée localement du
+// bundle (utils/friendship.ts). Vocabulaire de la spec : « statut
+// d'amitié ».
+export type FriendshipStatus =
+  | "self"
+  | "friends"
+  | "request_sent"
+  | "request_received"
+  | "none";
+
+// Codes levés par les RPC d'amitié (`raise exception '<code>'`). `unknown`
+// couvre tout le reste (réseau, panne) — jamais affiché tel quel.
+export type FriendshipErrorCode =
+  | "not_authenticated"
+  | "display_name_not_found"
+  | "self_request"
+  | "already_requested"
+  | "already_friends"
+  | "request_not_found"
+  | "not_addressee"
+  | "not_requester"
+  | "unknown";
+
+export class FriendshipError extends Error {
+  constructor(public readonly code: FriendshipErrorCode) {
+    super(code);
+    this.name = "FriendshipError";
+  }
+}

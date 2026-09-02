@@ -23,7 +23,12 @@ type TeamRowWithPlayers = TeamRow & { team_players: TeamPlayerRow[] }
 type MatchRow = Database['public']['Tables']['tournament_matches']['Row']
 type TournamentMemberRow
   = Database['public']['Tables']['tournament_members']['Row']
-type ProfileRow = Database['public']['Tables']['profiles']['Row']
+// Miroir de ProfileIdentityRow (supabase-mappers) : les colonnes de profiles
+// réellement lisibles par authenticated depuis A2 (visibility masquée).
+type ProfileRow = Pick<
+  Database['public']['Tables']['profiles']['Row'],
+  'id' | 'display_name' | 'created_at' | 'updated_at'
+>
 
 const NOW = '2026-01-01T00:00:00.000Z'
 const OWNER_ID = '11111111-1111-4111-8111-111111111111'

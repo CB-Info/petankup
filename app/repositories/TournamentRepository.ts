@@ -2,6 +2,8 @@ import type {
   AccountMatch,
   CreateFreeMatchInput,
   FreeMatch,
+  FriendshipBundle,
+  FriendshipRequestOutcome,
   Profile,
   Team,
   Tournament,
@@ -98,4 +100,20 @@ export interface TournamentRepository {
   createFreeMatch(input: CreateFreeMatchInput): Promise<string>
   deleteFreeMatch(id: string): Promise<void>
   findAccountByDisplayName(displayName: string): Promise<AccountMatch | undefined>
+
+  // Amitié (A3). Toutes les écritures passent par les RPC A1 (la table
+  // friendships est deny-total). requestFriendship prend le PSEUDO (la RPC
+  // fait le lookup et lève display_name_not_found) et retourne l'issue :
+  // 'pending' (demande envoyée) ou 'accepted' (demandes croisées — l'autre
+  // avait déjà demandé, vous êtes amis immédiatement). Les autres actions
+  // ciblent l'user_id de l'autre personne, fourni par les listes.
+  // Erreurs métier remontées en FriendshipError typée ; removeFriendship
+  // est idempotente côté base (cible absente = no-op silencieux).
+  // getFriendships retourne les trois listes déjà triées par la RPC.
+  getFriendships(): Promise<FriendshipBundle>
+  requestFriendship(displayName: string): Promise<FriendshipRequestOutcome>
+  acceptFriendship(userId: string): Promise<void>
+  refuseFriendship(userId: string): Promise<void>
+  cancelFriendshipRequest(userId: string): Promise<void>
+  removeFriendship(userId: string): Promise<void>
 }

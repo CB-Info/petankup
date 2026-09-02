@@ -46,6 +46,11 @@ describe('useBackOrigin', () => {
     expect(readOrigin(`/free-matches/${SHARED_ENTITY_ID}`)).toBeNull()
   })
 
+  it('reconnaît /friends comme origine d’un contexte de profil (A3)', () => {
+    rememberOrigin(PROFILE_PATH, '/friends')
+    expect(readOrigin(PROFILE_PATH)).toEqual({ label: 'Amis', to: '/friends' })
+  })
+
   it('épingle la forme de la clé de stockage (préfixe + chemin de base)', () => {
     rememberOrigin(TOURNAMENT_BASE, PROFILE_PATH)
     expect(
