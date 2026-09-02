@@ -23,11 +23,14 @@ const STORAGE_KEY_PREFIX = "petankup:back-origin:";
 
 // Registre des origines acceptables : uniquement des routes internes
 // connues, avec leur libellé de flèche. On ne navigue JAMAIS vers une
-// valeur arbitraire lue dans le stockage. Un seul endroit, extensible —
-// les chemins de base de contexte n'y figurent pas : bases et origines
-// sont des ensembles disjoints.
+// valeur arbitraire lue dans le stockage. Un seul endroit, extensible.
+// Depuis A3, une page de profil est à la fois une origine (pour les
+// tournois et matchs ouverts depuis son journal) et une base de contexte
+// (sa flèche peut ramener à l'écran des amis) : les clés par contexte
+// absorbent ce cumul sans collision.
 const KNOWN_ORIGINS: ReadonlyArray<{ pattern: RegExp; label: string }> = [
   { pattern: /^\/profile\/[A-Za-z0-9-]+$/, label: "Profil" },
+  { pattern: /^\/friends$/, label: "Amis" },
 ];
 
 // Forme consommée par le header (cf. AppHeaderState["back"]).

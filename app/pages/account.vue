@@ -34,11 +34,20 @@ const { showError } = useErrorToast();
 const toast = useToast();
 const client = useSupabaseClient();
 
-// Chargement gaté sur l'identité (cf. commentaire d'en-tête).
+const friendshipStore = useFriendshipStore();
+const { receivedRequestCount } = storeToRefs(friendshipStore);
+
+// Chargement gaté sur l'identité (cf. commentaire d'en-tête). Les listes
+// d'amis sont RAFRAÎCHIES (pas le lazy) pour que le compteur de demandes
+// reçues reflète la session en cours ; leur échec reste silencieux — un
+// compteur absent ne bloque pas la page de compte.
 watch(
   currentUserId,
   (userId) => {
-    if (userId !== null) void profileStore.loadCurrentProfile();
+    if (userId !== null) {
+      void profileStore.loadCurrentProfile();
+      void friendshipStore.refreshFriendships();
+    }
   },
   { immediate: true },
 );
@@ -240,6 +249,30 @@ const FIELD_BASE_CLASS =
           Enregistrer
         </UButton>
       </UForm>
+
+      <!-- Entrée « Amis » (A3) : navigation vers l'écran des amis, avec le
+           nombre de demandes reçues en attente — rien quand il n'y en a
+           pas. color="navy" (naviguer) pour la distinguer du dashed
+           « Se déconnecter » (agir). -->
+      <UButton
+        to="/friends"
+        color="navy"
+        block
+        trailing-icon="i-lucide-chevron-right"
+        class="mt-3 h-13 justify-between rounded-[13px] px-4 font-disp text-[13.5px] font-extrabold tracking-[0.04em] uppercase"
+      >
+        <span class="flex items-center gap-2">
+          Amis
+          <UBadge
+            v-if="receivedRequestCount > 0"
+            color="secondary"
+            variant="solid"
+            size="sm"
+          >
+            {{ receivedRequestCount }}
+          </UBadge>
+        </span>
+      </UButton>
 
       <UButton
         color="primary"
