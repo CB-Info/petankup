@@ -88,6 +88,8 @@ Et le produit a une vocation sociale : un parcours de joueur est fait de rencont
 
 **R5 — Exposition des tierces personnes** par le journal d'un profil public (§4). Assumé, à re-trancher à l'ouverture publique.
 
+**R6 — Les objets publics restent lisibles avec leurs participants.** La confidentialité du profil protège l'**agrégat** (la page de profil). Un match libre public ou un tournoi public reste lisible de tous, participants compris — même si l'un d'eux a un profil privé : un tiers peut donc reconstruire la part du journal d'un profil privé qui figure dans des objets publics. C'est le modèle de visibilité des objets, inchangé par ce chantier. Assumé (cohérent avec §4), à re-trancher à l'ouverture publique.
+
 **R3 (rappel, hors périmètre)** — l'enrôlement sans consentement dans un match libre reste possible. L'amitié fournit désormais le **matériau** pour le fermer, mais la restriction elle-même n'est **pas** dans ce chantier : elle empêcherait de lier un joueur rencontré au terrain, ce qui casserait le parcours de saisie rapide. À décider une fois l'amitié en usage, quand on saura si les amis dans l'application correspondent aux partenaires de jeu réels.
 
 ---

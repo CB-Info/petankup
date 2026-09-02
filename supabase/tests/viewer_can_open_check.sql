@@ -115,6 +115,13 @@ update public.tournaments set status = 'completed'
               'f2000000-0000-4000-8000-000000000002',
               'f2000000-0000-4000-8000-000000000003');
 
+-- Dépendance A2 (20260902100000) : les cas 1-3 font lire le bundle de A par
+-- B, non-ami — ils supposent A public (défaut).
+select pg_temp.assert_eq_int(
+  (select count(*) from public.profiles
+    where id = 'c0000000-0000-4000-8000-000000000001' and visibility = 'public'),
+  1, 'setup: A est public par défaut (dépendance A2)');
+
 -- ----------------------------------------------------------------------------
 -- Cas 1-3 — B visite le profil de A.
 -- ----------------------------------------------------------------------------
