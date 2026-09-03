@@ -10,17 +10,38 @@ import type { FriendshipAttemptedAction } from "../utils/friendship-errors";
 
 // La confirmation discrète partagée : « C'est fait. », titre seul, ton
 // neutre avec coche — ni l'allure d'alerte du warning, ni le vert de
-// célébration. Sert DEUX situations : le succès d'un retrait d'ami, et une
-// suppression dont l'objectif était déjà atteint — « C'est fait » est vrai
-// dans les deux.
+// célébration. Sert DEUX situations : le succès de toute SUPPRESSION
+// (refuser, annuler, retirer — la famille friendshipActionIsDeletion), et
+// une suppression dont l'objectif était déjà atteint — « C'est fait » est
+// vrai dans les deux.
 export const QUIET_CONFIRMATION_TOAST = {
   title: "C'est fait.",
   color: "neutral",
   icon: "i-lucide-check",
 } as const;
 
+// Les annonces des CRÉATIONS : elles nomment ce qui vient d'exister, en
+// vert de succès — jamais le « C'est fait » des suppressions.
+// FRIENDSHIP_ESTABLISHED sert les deux routes vers une amitié (demande
+// croisée acceptée d'office, acceptation explicite) : un seul message.
+export const FRIENDSHIP_ESTABLISHED_TOAST = {
+  title: "Vous êtes maintenant amis.",
+  color: "success",
+  icon: "i-lucide-check",
+} as const;
+
+export const REQUEST_SENT_TOAST = {
+  title: "Demande envoyée.",
+  color: "success",
+  icon: "i-lucide-check",
+} as const;
+
 // Retours utilisateur des actions d'amitié, communs à l'écran des amis et à
 // la page de profil.
+//
+// INVARIANT : aucune action d'amitié ne reste muette. Ce qui disparaît
+// confirme (« C'est fait. », neutre) ; ce qui apparaît nomme (« Demande
+// envoyée. », « Vous êtes maintenant amis. », succès).
 //
 // RÈGLE : on n'appelle JAMAIS showError avec un code d'amitié — le message
 // brut d'une FriendshipError EST le code (« not_addressee ») et le message
@@ -88,25 +109,27 @@ export function useFriendshipFeedback() {
     return code;
   }
 
+  // Une amitié existe désormais — quelle que soit la route qui y a mené
+  // (acceptation explicite, ou demande croisée acceptée d'office).
+  function showFriendshipEstablished(): void {
+    toast.add(FRIENDSHIP_ESTABLISHED_TOAST);
+  }
+
   // L'issue d'une demande, dite honnêtement : des demandes croisées rendent
   // amis immédiatement — l'écran le dit, il ne prétend pas qu'une demande
   // est partie (A7).
   function showRequestOutcome(outcome: FriendshipRequestOutcome): void {
-    toast.add({
-      title:
-        outcome === "accepted"
-          ? "Vous êtes maintenant amis."
-          : "Demande envoyée.",
-      color: "success",
-      icon: "i-lucide-check",
-    });
+    if (outcome === "accepted") {
+      showFriendshipEstablished();
+      return;
+    }
+    toast.add(REQUEST_SENT_TOAST);
   }
 
-  // Accusé de réception d'un retrait d'ami : l'action est passée par une
-  // modale de confirmation — un succès silencieux ressemblerait à un raté.
-  // Même confirmation discrète que les suppressions à objectif déjà
-  // atteint ; c'est un SUCCÈS d'action, il ne relève pas de la règle sur
-  // les erreurs.
+  // Accusé de réception du succès d'une SUPPRESSION (refuser, annuler,
+  // retirer) : un succès silencieux ressemblerait à un raté. Même
+  // confirmation discrète que les suppressions à objectif déjà atteint ;
+  // c'est un SUCCÈS d'action, il ne relève pas de la règle sur les erreurs.
   function showQuietConfirmation(): void {
     toast.add(QUIET_CONFIRMATION_TOAST);
   }
@@ -114,6 +137,7 @@ export function useFriendshipFeedback() {
   return {
     decodeFriendshipErrorCode,
     showFriendshipError,
+    showFriendshipEstablished,
     showRequestOutcome,
     showQuietConfirmation,
   };

@@ -63,6 +63,7 @@ const { isActionPending } = friendshipStore;
 const {
   decodeFriendshipErrorCode,
   showFriendshipError,
+  showFriendshipEstablished,
   showRequestOutcome,
   showQuietConfirmation,
 } = useFriendshipFeedback();
@@ -112,6 +113,7 @@ async function requestFromProfile(displayName: string) {
 async function acceptFromProfile() {
   try {
     await friendshipStore.acceptFriendship(userId.value);
+    showFriendshipEstablished();
   } catch (error) {
     showFriendshipError(error, "accept");
   }

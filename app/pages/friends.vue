@@ -32,6 +32,7 @@ const { currentUserId } = storeToRefs(identityStore);
 const {
   decodeFriendshipErrorCode,
   showFriendshipError,
+  showFriendshipEstablished,
   showRequestOutcome,
   showQuietConfirmation,
 } = useFriendshipFeedback();
@@ -166,6 +167,7 @@ async function requestFromSearch(account: AccountMatch) {
 async function acceptRequest(entry: FriendshipEntry) {
   try {
     await friendshipStore.acceptFriendship(entry.userId);
+    showFriendshipEstablished();
   } catch (error) {
     showFriendshipError(error, "accept");
   }
