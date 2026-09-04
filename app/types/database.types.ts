@@ -521,7 +521,20 @@ export type Database = {
         }[]
       }
       get_friendships: { Args: never; Returns: Json }
-      get_user_profile: { Args: { p_user_id: string }; Returns: Json }
+      get_my_profile: {
+        Args: never
+        Returns: {
+          created_at: string
+          display_name: string
+          id: string
+          updated_at: string
+          visibility: Database["public"]["Enums"]["profile_visibility"]
+        }[]
+      }
+      get_user_profile: {
+        Args: { p_as_stranger?: boolean; p_user_id: string }
+        Returns: Json
+      }
       invite_tournament_member_by_display_name: {
         Args: { p_display_name: string; p_tournament_id: string }
         Returns: {
