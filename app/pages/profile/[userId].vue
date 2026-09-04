@@ -60,8 +60,13 @@ const isSelfProfile = computed(() => userId.value === myUserId.value);
 const friendshipStore = useFriendshipStore();
 const { friendshipBundle } = storeToRefs(friendshipStore);
 const { isActionPending } = friendshipStore;
-const { decodeFriendshipErrorCode, showFriendshipError, showRequestOutcome } =
-  useFriendshipFeedback();
+const {
+  decodeFriendshipErrorCode,
+  showFriendshipError,
+  showFriendshipEstablished,
+  showRequestOutcome,
+  showQuietConfirmation,
+} = useFriendshipFeedback();
 const toast = useToast();
 
 watch(
@@ -99,7 +104,7 @@ async function requestFromProfile(displayName: string) {
       });
       return;
     }
-    showFriendshipError(error);
+    showFriendshipError(error, "request");
   } finally {
     isSubmittingFriendRequest.value = false;
   }
@@ -108,24 +113,27 @@ async function requestFromProfile(displayName: string) {
 async function acceptFromProfile() {
   try {
     await friendshipStore.acceptFriendship(userId.value);
+    showFriendshipEstablished();
   } catch (error) {
-    showFriendshipError(error);
+    showFriendshipError(error, "accept");
   }
 }
 
 async function refuseFromProfile() {
   try {
     await friendshipStore.refuseFriendship(userId.value);
+    showQuietConfirmation();
   } catch (error) {
-    showFriendshipError(error);
+    showFriendshipError(error, "refuse");
   }
 }
 
 async function cancelFromProfile() {
   try {
     await friendshipStore.cancelFriendshipRequest(userId.value);
+    showQuietConfirmation();
   } catch (error) {
-    showFriendshipError(error);
+    showFriendshipError(error, "cancel");
   }
 }
 
@@ -135,8 +143,9 @@ async function confirmRemovalFromProfile() {
   try {
     await friendshipStore.removeFriendship(userId.value);
     isRemovalModalOpen.value = false;
+    showQuietConfirmation();
   } catch (error) {
-    showFriendshipError(error);
+    showFriendshipError(error, "remove");
   }
 }
 
