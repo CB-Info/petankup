@@ -4,7 +4,10 @@ import type {
   FreeMatch,
   FriendshipBundle,
   FriendshipRequestOutcome,
+  MyProfile,
   Profile,
+  ProfileViewpoint,
+  ProfileVisibility,
   Team,
   Tournament,
   TournamentMatch,
@@ -71,21 +74,32 @@ export interface TournamentRepository {
   // suppression. Depuis A2, la table est lisible par tout utilisateur
   // authentifié (le pseudo est public ; c'est le CONTENU du profil,
   // stats et journal, qui est protégé en base via get_user_profile).
-  // getProfileById retourne undefined si l'id n'existe pas (distingué
-  // d'une erreur réseau via .maybeSingle) ; getProfilesByIds est
-  // best-effort : les ids inconnus sont silencieusement absents.
-  getProfileById(id: string): Promise<Profile | undefined>
+  // getMyProfile lit SA ligne avec son réglage de confidentialité via la
+  // RPC get_my_profile — la colonne visibility est masquée de toute
+  // lecture directe, c'est la seule voie ; undefined si la ligne manque
+  // (cas dégénéré). getProfilesByIds est best-effort : les ids inconnus
+  // sont silencieusement absents.
+  getMyProfile(): Promise<MyProfile | undefined>
   getProfilesByIds(ids: string[]): Promise<Profile[]>
   updateMyProfile(userId: string, displayName: string): Promise<Profile>
+  // Bascule SON réglage de confidentialité : UPDATE ciblé sans relecture
+  // (RETURNING exigerait le SELECT sur la colonne, masquée) mais avec le
+  // compte de lignes — un UPDATE filtré par la RLS à 0 ligne ressemble à
+  // un succès, il est remonté en erreur.
+  updateMyProfileVisibility(userId: string, visibility: ProfileVisibility): Promise<void>
 
-  // Récupère le bundle complet (profil + stats agrégées + journal de
-  // tournois) d'un user. Implémenté via la RPC SQL get_user_profile :
-  // la table user_tournament_results n'est jamais lue en direct.
+  // Récupère le bundle d'un profil (profil + stats agrégées + journal),
+  // sous l'une de ses trois formes (kind : full / restricted / not_found).
+  // Implémenté via la RPC SQL get_user_profile : la table
+  // user_tournament_results n'est jamais lue en direct. Le point de vue :
+  // 'viewer' = le visiteur réel (la base applique sa règle de contenu) ;
+  // 'stranger' = tel qu'un tiers le verrait (aperçu extérieur, réservé par
+  // la base au propriétaire — not_owner sinon).
   //
   // La RPC peut throw 'not_authenticated' si la session n'est pas
   // résolue ; remontée en Error standard (pas de classe typée, cf.
   // décision Phase J).
-  getUserProfile(userId: string): Promise<UserProfileBundle>
+  getUserProfile(userId: string, viewpoint: ProfileViewpoint): Promise<UserProfileBundle>
 
   // Matchs libres (H2). Lecture avec les joueurs embarqués
   // (free_match_players(*)) ; getFreeMatchById retourne undefined si le

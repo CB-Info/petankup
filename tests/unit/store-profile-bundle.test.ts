@@ -3,7 +3,10 @@ import { createPinia, setActivePinia } from 'pinia'
 import { flushPromises } from '@vue/test-utils'
 import type { TournamentRepository } from '../../app/repositories/TournamentRepository'
 import type {
+  FullUserProfileBundle,
+  MyProfile,
   Profile,
+  ProfileViewpoint,
   Teammate,
   Tournament,
   TournamentMember,
@@ -87,32 +90,26 @@ import { useIdentityStore } from '../../app/stores/identity'
 type BundleMockRepository = TournamentRepository & {
   __getUserProfileSpy: ReturnType<typeof vi.fn>
   __getProfilesByIdsSpy: ReturnType<typeof vi.fn>
-  __getProfileByIdSpy: ReturnType<typeof vi.fn>
+  __getMyProfileSpy: ReturnType<typeof vi.fn>
 }
 
 // Repo in-memory minimal : seules getUserProfile / getProfilesByIds /
-// getProfileById sont espionnées (les seules touchées par loadUserProfile et
+// getMyProfile sont espionnées (les seules touchées par loadUserProfile et
 // le flow de mount). Le reste reste no-op — ces tests n'en dépendent pas.
 function createMockRepository(overrides: Partial<{
-  getUserProfile: (userId: string) => Promise<UserProfileBundle>
+  getUserProfile: (userId: string, viewpoint: ProfileViewpoint) => Promise<UserProfileBundle>
   getProfilesByIds: (ids: string[]) => Promise<Profile[]>
-  getProfileById: (id: string) => Promise<Profile | undefined>
+  getMyProfile: () => Promise<MyProfile | undefined>
   getAllTournaments: () => Promise<Tournament[]>
   getMyMemberships: (userId: string) => Promise<TournamentMember[]>
 }> = {}): BundleMockRepository {
-  const defaultGetUserProfile = async (): Promise<UserProfileBundle> => ({
-    profile: null,
-    stats: null,
-    results: [],
-    freeMatches: [],
-    freeMatchStats: null,
-  })
+  const defaultGetUserProfile = async (): Promise<UserProfileBundle> => ({ kind: 'not_found' })
   const defaultGetProfilesByIds = async (): Promise<Profile[]> => []
-  const defaultGetProfileById = async (): Promise<Profile | undefined> => undefined
+  const defaultGetMyProfile = async (): Promise<MyProfile | undefined> => undefined
 
   const getUserProfileSpy = vi.fn(overrides.getUserProfile ?? defaultGetUserProfile)
   const getProfilesByIdsSpy = vi.fn(overrides.getProfilesByIds ?? defaultGetProfilesByIds)
-  const getProfileByIdSpy = vi.fn(overrides.getProfileById ?? defaultGetProfileById)
+  const getMyProfileSpy = vi.fn(overrides.getMyProfile ?? defaultGetMyProfile)
 
   const repo: BundleMockRepository = {
     getAllTournaments: overrides.getAllTournaments ?? (async () => []),
@@ -137,15 +134,16 @@ function createMockRepository(overrides: Partial<{
       throw new InviteMemberError('unknown')
     },
     removeMember: async () => {},
-    getProfileById: getProfileByIdSpy,
+    getMyProfile: getMyProfileSpy,
     getProfilesByIds: getProfilesByIdsSpy,
     updateMyProfile: async () => {
       throw new Error('Not implemented in this test mock')
     },
+    updateMyProfileVisibility: async () => {},
     getUserProfile: getUserProfileSpy,
     __getUserProfileSpy: getUserProfileSpy,
     __getProfilesByIdsSpy: getProfilesByIdsSpy,
-    __getProfileByIdSpy: getProfileByIdSpy,
+    __getMyProfileSpy: getMyProfileSpy,
   }
   return repo
 }
@@ -211,8 +209,11 @@ function makeFreeMatchResult(
   }
 }
 
-function makeBundle(overrides: Partial<UserProfileBundle> = {}): UserProfileBundle {
+// Forme COMPLÈTE par défaut ; les formes restreinte et inexistante sont
+// construites en clair dans leurs tests.
+function makeBundle(overrides: Partial<FullUserProfileBundle> = {}): FullUserProfileBundle {
   return {
+    kind: 'full',
     profile: makeProfile({ id: OTHER_USER_ID, displayName: 'Bob' }),
     stats: makeStats(),
     results: [makeResult()],
@@ -254,7 +255,7 @@ describe('useProfileStore — loadUserProfile', () => {
     const store = useProfileStore()
     await flushPromises()
 
-    await store.loadUserProfile(OTHER_USER_ID)
+    await store.loadUserProfile(OTHER_USER_ID, 'viewer')
 
     expect(repo.__getUserProfileSpy).not.toHaveBeenCalled()
     expect(store.currentProfileBundle).toBeNull()
@@ -269,10 +270,57 @@ describe('useProfileStore — loadUserProfile', () => {
     const store = useProfileStore()
     await flushPromises()
 
-    await store.loadUserProfile(OTHER_USER_ID)
+    await store.loadUserProfile(OTHER_USER_ID, 'viewer')
 
-    expect(repo.__getUserProfileSpy).toHaveBeenCalledWith(OTHER_USER_ID)
+    expect(repo.__getUserProfileSpy).toHaveBeenCalledWith(OTHER_USER_ID, 'viewer')
     expect(store.currentProfileBundle).toEqual(bundle)
+    expect(store.hasFetchedProfileBundle).toBe(true)
+    expect(store.lastLoadProfileBundleError).toBeNull()
+  })
+
+  it('forwards the stranger viewpoint to the repository (outside preview)', async () => {
+    const repo = createMockRepository({ getUserProfile: async () => makeBundle() })
+    mockRepositoryRef.current = repo
+
+    const store = useProfileStore()
+    await flushPromises()
+
+    await store.loadUserProfile(STUB_USER_ID, 'stranger')
+
+    expect(repo.__getUserProfileSpy).toHaveBeenCalledWith(STUB_USER_ID, 'stranger')
+  })
+
+  it('stores a restricted bundle as-is and pre-hydrates nothing (no journal to read)', async () => {
+    const restricted: UserProfileBundle = {
+      kind: 'restricted',
+      profile: makeProfile({ id: OTHER_USER_ID, displayName: 'Bob' }),
+    }
+    const repo = createMockRepository({ getUserProfile: async () => restricted })
+    mockRepositoryRef.current = repo
+
+    const store = useProfileStore()
+    await flushPromises()
+    repo.__getProfilesByIdsSpy.mockClear()
+
+    await store.loadUserProfile(OTHER_USER_ID, 'viewer')
+    await flushPromises()
+
+    expect(store.currentProfileBundle).toEqual(restricted)
+    expect(store.hasFetchedProfileBundle).toBe(true)
+    expect(store.lastLoadProfileBundleError).toBeNull()
+    expect(repo.__getProfilesByIdsSpy).not.toHaveBeenCalled()
+  })
+
+  it('stores a not_found bundle as a successful load (the page decides « introuvable »)', async () => {
+    const repo = createMockRepository()
+    mockRepositoryRef.current = repo
+
+    const store = useProfileStore()
+    await flushPromises()
+
+    await store.loadUserProfile(OTHER_USER_ID, 'viewer')
+
+    expect(store.currentProfileBundle).toEqual({ kind: 'not_found' })
     expect(store.hasFetchedProfileBundle).toBe(true)
     expect(store.lastLoadProfileBundleError).toBeNull()
   })
@@ -288,7 +336,7 @@ describe('useProfileStore — loadUserProfile', () => {
     const store = useProfileStore()
     await flushPromises()
 
-    await expect(store.loadUserProfile(OTHER_USER_ID)).resolves.toBeUndefined()
+    await expect(store.loadUserProfile(OTHER_USER_ID, 'viewer')).resolves.toBeUndefined()
 
     expect(store.currentProfileBundle).toBeNull()
     expect(store.hasFetchedProfileBundle).toBe(false)
@@ -312,16 +360,103 @@ describe('useProfileStore — loadUserProfile', () => {
     const store = useProfileStore()
     await flushPromises()
 
-    await store.loadUserProfile(OTHER_USER_ID)
+    await store.loadUserProfile(OTHER_USER_ID, 'viewer')
     expect(store.currentProfileBundle).toEqual(bundleA)
 
     // 2e load : doit vider le bundle AVANT la résolution de B.
-    const inflight = store.loadUserProfile(THIRD_USER_ID)
+    const inflight = store.loadUserProfile(THIRD_USER_ID, 'viewer')
     await Promise.resolve()
     expect(store.currentProfileBundle).toBeNull()
 
     resolveB(makeBundle({ profile: makeProfile({ id: THIRD_USER_ID, displayName: 'Carol' }) }))
     await inflight
+  })
+
+  it('refreshUserProfile keeps the current bundle on screen until the new one arrives', async () => {
+    const restricted: UserProfileBundle = {
+      kind: 'restricted',
+      profile: makeProfile({ id: OTHER_USER_ID, displayName: 'Bob' }),
+    }
+    const full = makeBundle()
+    let resolveRefresh!: (bundle: UserProfileBundle) => void
+    let callCount = 0
+    const repo = createMockRepository({
+      getUserProfile: () => {
+        callCount += 1
+        if (callCount === 1) return Promise.resolve(restricted)
+        return new Promise<UserProfileBundle>((resolve) => {
+          resolveRefresh = resolve
+        })
+      },
+    })
+    mockRepositoryRef.current = repo
+
+    const store = useProfileStore()
+    await flushPromises()
+
+    await store.loadUserProfile(OTHER_USER_ID, 'viewer')
+    expect(store.currentProfileBundle).toEqual(restricted)
+
+    // Ami accepté : le contenu s'ouvre — pendant le RTT, la page garde ce
+    // qu'elle affichait (pas de clear-at-start).
+    const inflight = store.refreshUserProfile(OTHER_USER_ID, 'viewer')
+    await Promise.resolve()
+    expect(store.currentProfileBundle).toEqual(restricted)
+    expect(repo.__getUserProfileSpy).toHaveBeenLastCalledWith(OTHER_USER_ID, 'viewer')
+
+    resolveRefresh(full)
+    await inflight
+    expect(store.currentProfileBundle).toEqual(full)
+    expect(store.lastLoadProfileBundleError).toBeNull()
+  })
+
+  it('refreshUserProfile reports success with true once the bundle is replaced', async () => {
+    const repo = createMockRepository({ getUserProfile: async () => makeBundle() })
+    mockRepositoryRef.current = repo
+
+    const store = useProfileStore()
+    await flushPromises()
+    await store.loadUserProfile(OTHER_USER_ID, 'viewer')
+
+    await expect(store.refreshUserProfile(OTHER_USER_ID, 'viewer')).resolves.toBe(true)
+  })
+
+  it('refreshUserProfile keeps the bundle AND stays silent on the navigation error channel when it fails', async () => {
+    // Un échec de rafraîchissement ne doit pas faire basculer la page sur
+    // l'écran d'erreur (qui passe avant le contenu) : le bundle reste, le
+    // canal de la navigation reste vide, l'appelant reçoit false.
+    const full = makeBundle()
+    let callCount = 0
+    mockRepositoryRef.current = createMockRepository({
+      getUserProfile: async () => {
+        callCount += 1
+        if (callCount === 1) return full
+        throw new Error('network down')
+      },
+    })
+
+    const store = useProfileStore()
+    await flushPromises()
+    await store.loadUserProfile(OTHER_USER_ID, 'viewer')
+
+    await expect(store.refreshUserProfile(OTHER_USER_ID, 'viewer')).resolves.toBe(false)
+
+    expect(store.currentProfileBundle).toEqual(full)
+    expect(store.lastLoadProfileBundleError).toBeNull()
+  })
+
+  it('refreshUserProfile resolves to false without an authenticated viewer', async () => {
+    stubUserRef.value = null
+    stubSessionRef.value = null
+    stubClaimsSub.value = null
+
+    const repo = createMockRepository()
+    mockRepositoryRef.current = repo
+    const store = useProfileStore()
+    await flushPromises()
+
+    await expect(store.refreshUserProfile(OTHER_USER_ID, 'viewer')).resolves.toBe(false)
+    expect(repo.__getUserProfileSpy).not.toHaveBeenCalled()
   })
 
   it('discards a late response from a superseded load (request-id guard)', async () => {
@@ -337,8 +472,8 @@ describe('useProfileStore — loadUserProfile', () => {
     const store = useProfileStore()
     await flushPromises()
 
-    const inflightA = store.loadUserProfile(OTHER_USER_ID)
-    const inflightB = store.loadUserProfile(THIRD_USER_ID)
+    const inflightA = store.loadUserProfile(OTHER_USER_ID, 'viewer')
+    const inflightB = store.loadUserProfile(THIRD_USER_ID, 'viewer')
     expect(pending).toHaveLength(2)
 
     const bundleB = makeBundle({ profile: makeProfile({ id: THIRD_USER_ID, displayName: 'Carol' }) })
@@ -370,7 +505,7 @@ describe('useProfileStore — loadUserProfile', () => {
     const store = useProfileStore()
     await flushPromises()
 
-    const inflight = store.loadUserProfile(OTHER_USER_ID)
+    const inflight = store.loadUserProfile(OTHER_USER_ID, 'viewer')
     await Promise.resolve()
 
     // Bump l'identité du viewer (resolvedUserId, ref Vue réactive).
@@ -402,7 +537,7 @@ describe('useProfileStore — loadUserProfile', () => {
     await flushPromises()
     repo.__getProfilesByIdsSpy.mockClear()
 
-    await store.loadUserProfile(OTHER_USER_ID)
+    await store.loadUserProfile(OTHER_USER_ID, 'viewer')
     await flushPromises()
 
     expect(repo.__getProfilesByIdsSpy).toHaveBeenCalledTimes(1)
@@ -420,7 +555,7 @@ describe('useProfileStore — loadUserProfile', () => {
     await flushPromises()
     repo.__getProfilesByIdsSpy.mockClear()
 
-    await store.loadUserProfile(OTHER_USER_ID)
+    await store.loadUserProfile(OTHER_USER_ID, 'viewer')
     await flushPromises()
 
     expect(repo.__getProfilesByIdsSpy).not.toHaveBeenCalled()
@@ -446,7 +581,7 @@ describe('useProfileStore — loadUserProfile', () => {
     await flushPromises()
     repo.__getProfilesByIdsSpy.mockClear()
 
-    await store.loadUserProfile(OTHER_USER_ID)
+    await store.loadUserProfile(OTHER_USER_ID, 'viewer')
     await flushPromises()
 
     expect(repo.__getProfilesByIdsSpy).toHaveBeenCalledTimes(1)
@@ -470,27 +605,11 @@ describe('useProfileStore — loadUserProfile', () => {
     await flushPromises()
     repo.__getProfilesByIdsSpy.mockClear()
 
-    await store.loadUserProfile(OTHER_USER_ID)
+    await store.loadUserProfile(OTHER_USER_ID, 'viewer')
     await flushPromises()
 
     expect(repo.__getProfilesByIdsSpy).toHaveBeenCalledTimes(1)
     expect(repo.__getProfilesByIdsSpy.mock.calls[0]![0]).toEqual([THIRD_USER_ID])
-  })
-
-  it('does not pre-hydrate when results is empty', async () => {
-    const repo = createMockRepository({
-      getUserProfile: async () => makeBundle({ results: [] }),
-    })
-    mockRepositoryRef.current = repo
-
-    const store = useProfileStore()
-    await flushPromises()
-    repo.__getProfilesByIdsSpy.mockClear()
-
-    await store.loadUserProfile(OTHER_USER_ID)
-    await flushPromises()
-
-    expect(repo.__getProfilesByIdsSpy).not.toHaveBeenCalled()
   })
 
   it('resolves even when teammate pre-hydration hangs (fire-and-forget)', async () => {
@@ -506,7 +625,7 @@ describe('useProfileStore — loadUserProfile', () => {
     const store = useProfileStore()
     await flushPromises()
 
-    await expect(store.loadUserProfile(OTHER_USER_ID)).resolves.toBeUndefined()
+    await expect(store.loadUserProfile(OTHER_USER_ID, 'viewer')).resolves.toBeUndefined()
     expect(store.currentProfileBundle).toEqual(bundle)
     expect(store.hasFetchedProfileBundle).toBe(true)
   })

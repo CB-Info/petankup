@@ -3,7 +3,14 @@ import { ref, watch } from 'vue'
 import { createRepository } from '../repositories'
 import type { TournamentRepository } from '../repositories'
 import type { Database } from '../types/database.types'
-import type { AccountMatch, Profile, UserProfileBundle } from '../types'
+import type {
+  AccountMatch,
+  Profile,
+  ProfileViewpoint,
+  ProfileVisibility,
+  UserProfileBundle,
+} from '../types'
+import { linkedPlayerUserIdsIn } from '../utils/profile-bundle'
 import { useIdentityStore } from './identity'
 
 // Domaine profil : profil du user authentifié, cache des profils visibles,
@@ -31,6 +38,12 @@ export const useProfileStore = defineStore('profile', () => {
   // dégénéré qui matérialise lastLoadCurrentProfileError).
   const currentProfile = ref<Profile | null>(null)
 
+  // Réglage de confidentialité du user authentifié (A4), tenu À CÔTÉ de
+  // l'identité : il arrive par la même requête (get_my_profile) mais
+  // n'entre jamais dans currentProfile ni dans profileById — un Profile ne
+  // porte jamais le réglage. Null tant que non chargé ; reset au logout.
+  const currentProfileVisibility = ref<ProfileVisibility | null>(null)
+
   // True dès qu'un loadCurrentProfile a terminé (succès OU échec)
   // pour la session courante. Permet à la UI (C.3) de distinguer
   // "en cours de chargement" de "résolu sans profil". Reset au
@@ -44,9 +57,11 @@ export const useProfileStore = defineStore('profile', () => {
   // décide de l'affichage.
   const lastLoadCurrentProfileError = ref<unknown>(null)
 
-  // Bundle du profil actuellement consulté (page /profile/[userId], Phase K) :
-  // { profile, stats, results }. Un seul slot — pas de cache par userId (cf.
-  // cadrage Phase J). Cleared au début de chaque loadUserProfile et au logout.
+  // Bundle du profil actuellement consulté (page /profile/[userId], Phase K),
+  // sous l'une de ses trois formes (kind : full / restricted / not_found —
+  // la base décide, le store stocke). Un seul slot — pas de cache par userId
+  // (cf. cadrage Phase J). Vidé au début de chaque loadUserProfile (pas de
+  // refreshUserProfile) et au logout.
   const currentProfileBundle = ref<UserProfileBundle | null>(null)
 
   // True dès qu'un loadUserProfile a réussi pour la session courante. Reste
@@ -120,10 +135,10 @@ export const useProfileStore = defineStore('profile', () => {
   // Pattern aligné sur loadTournaments.
   async function fetchCurrentProfile(userId: string): Promise<void> {
     try {
-      const profile = await repository.getProfileById(userId)
+      const myProfile = await repository.getMyProfile()
       if (identityStore.currentUserId !== userId) return
 
-      if (profile === undefined) {
+      if (myProfile === undefined) {
         // Cas dégénéré : le trigger ou le backfill ont raté pour ce
         // user. On signale via lastLoadCurrentProfileError mais on
         // ne bloque pas la session.
@@ -131,8 +146,14 @@ export const useProfileStore = defineStore('profile', () => {
         return
       }
 
-      currentProfile.value = profile
-      profileById.value[profile.id] = profile
+      // La RPC répond pour l'identité du JETON au moment de la requête, pas
+      // pour l'id demandé : un changement de compte en plein vol pourrait
+      // livrer la ligne d'un autre. On n'écrit que si c'est bien la sienne.
+      if (myProfile.profile.id !== userId) return
+
+      currentProfile.value = myProfile.profile
+      profileById.value[myProfile.profile.id] = myProfile.profile
+      currentProfileVisibility.value = myProfile.visibility
       lastLoadCurrentProfileError.value = null
     }
     catch (error) {
@@ -201,6 +222,21 @@ export const useProfileStore = defineStore('profile', () => {
     return updated
   }
 
+  // Bascule du réglage de confidentialité du user courant (A4). Même
+  // asymétrie que updateMyProfile : THROW en cas d'erreur — l'UI catch et
+  // affiche un toast, la sélection à l'écran ne bouge pas. Au succès, le
+  // réglage local suit ce qui vient d'être écrit (la colonne ne se relit
+  // pas : le repository a exigé une ligne affectée). Même garde
+  // anti-écriture tardive que updateMyProfile.
+  async function updateMyProfileVisibility(visibility: ProfileVisibility): Promise<void> {
+    const userId = identityStore.requireAuthenticatedUserId()
+    await repository.updateMyProfileVisibility(userId, visibility)
+
+    if (identityStore.currentUserId === userId) {
+      currentProfileVisibility.value = visibility
+    }
+  }
+
   // Recherche le compte portant EXACTEMENT ce pseudo (RPC
   // find_account_by_display_name : égalité sur lower(trim), 0 ou 1 compte).
   // Retourne null si aucun compte ne le porte — cas nominal (joueur libre),
@@ -215,68 +251,89 @@ export const useProfileStore = defineStore('profile', () => {
   }
 
   // Compteur monotone pour invalider les réponses tardives de
-  // loadUserProfile en cas de loads concurrents (navigation rapide entre
-  // deux profils). Pattern identique à lastLoadTournamentRequestId.
+  // fetchUserProfileBundle en cas de chargements concurrents (navigation
+  // rapide entre deux profils, entrée en aperçu). Pattern identique à
+  // lastLoadTournamentRequestId. Dernier appel gagnant : le point de vue
+  // n'a pas à entrer dans la clé.
   let lastLoadProfileBundleRequestId = 0
 
-  // Charge le bundle profil (profil + stats agrégées + journal de tournois)
-  // d'un user quelconque via la RPC get_user_profile. Capture les erreurs
-  // en interne (lastLoadProfileBundleError), ne throw JAMAIS — pattern
-  // aligné sur loadCurrentProfile.
-  //
+  // Charge le bundle profil (profil + stats agrégées + journal) d'un user
+  // quelconque via la RPC get_user_profile, sous le point de vue demandé
+  // (visiteur réel, ou tiers pour l'aperçu extérieur — cf. ProfileViewpoint).
+  // Deux intentions, deux actions, qui ne throw JAMAIS (pattern aligné sur
+  // loadCurrentProfile) :
+  //  - loadUserProfile : une NAVIGATION — le slot est vidé au départ (pas
+  //    de flash de l'ancien profil pendant le RTT) ; un échec s'écrit dans
+  //    lastLoadProfileBundleError, que la page rend en écran d'erreur ;
+  //  - refreshUserProfile : une mise à jour EN PLACE, quand le droit de
+  //    voir le contenu vient de changer (ami accepté, retiré) — le bundle
+  //    courant reste affiché jusqu'à l'arrivée du nouveau, et un échec ne
+  //    touche PAS lastLoadProfileBundleError (l'écran d'erreur de la page
+  //    passe avant le contenu : il masquerait un bundle encore affichable).
+  //    Retourne true si le bundle a été remplacé ; l'appelant décide d'un
+  //    signal discret sinon.
+  type ProfileBundleLoadIntent = 'navigation' | 'refresh'
+
+  async function loadUserProfile(userId: string, viewpoint: ProfileViewpoint): Promise<void> {
+    await fetchUserProfileBundle(userId, viewpoint, 'navigation')
+  }
+
+  async function refreshUserProfile(userId: string, viewpoint: ProfileViewpoint): Promise<boolean> {
+    return fetchUserProfileBundle(userId, viewpoint, 'refresh')
+  }
+
   // initialUserId = identité du VIEWER (pas du profil consulté), capturée
   // pour la garde anti-écriture tardive. userId = profil consulté (peut être
   // n'importe qui). Double garde avant toute écriture : token monotone
-  // (race load A/B) ET identité du viewer (logout/switch pendant le await).
-  async function loadUserProfile(userId: string): Promise<void> {
+  // (course entre chargements) ET identité du viewer (logout/switch pendant
+  // le await). Retourne true si le bundle a été écrit.
+  async function fetchUserProfileBundle(
+    userId: string,
+    viewpoint: ProfileViewpoint,
+    intent: ProfileBundleLoadIntent,
+  ): Promise<boolean> {
     const initialUserId = identityStore.currentUserId
-    if (initialUserId === null) return
+    if (initialUserId === null) return false
 
     const requestId = ++lastLoadProfileBundleRequestId
     return withLoading(async () => {
-      // Clear-at-start : pas de flash de l'ancien profil pendant le RTT.
-      currentProfileBundle.value = null
+      if (intent === 'navigation') {
+        currentProfileBundle.value = null
+      }
 
       try {
-        const bundle = await repository.getUserProfile(userId)
-        if (requestId !== lastLoadProfileBundleRequestId) return
-        if (identityStore.currentUserId !== initialUserId) return
+        const bundle = await repository.getUserProfile(userId, viewpoint)
+        if (requestId !== lastLoadProfileBundleRequestId) return false
+        if (identityStore.currentUserId !== initialUserId) return false
 
         currentProfileBundle.value = bundle
         hasFetchedProfileBundle.value = true
         lastLoadProfileBundleError.value = null
 
-        // Pré-hydratation best-effort des pseudos liés à un compte —
-        // coéquipiers de tournoi ET joueurs des matchs libres (teammates
-        // + opponents ; une entrée non ouvrable arrive avec des listes
-        // vides, rien à hydrater). UN SEUL tableau passé à l'unique appel
-        // batché : c'est cette fusion qui garantit « au plus un
+        // Pré-hydratation best-effort des pseudos liés à un compte du
+        // journal — forme complète seulement (une forme restreinte ou
+        // inexistante n'a pas de journal). UN SEUL tableau passé à l'unique
+        // appel batché : c'est cette fusion qui garantit « au plus un
         // getProfilesByIds » par chargement de profil. Fire-and-forget :
-        // pas d'await, ne bloque pas le retour de loadUserProfile.
-        // loadProfilesByIds dédupe et filtre le cache ; on exclut le
-        // profil consulté lui-même (déjà dans le bundle).
-        const linkedPlayerUserIds = [
-          ...bundle.results.flatMap(result => result.teammates),
-          ...bundle.freeMatches.flatMap(freeMatch => [
-            ...freeMatch.teammates,
-            ...freeMatch.opponents,
-          ]),
-        ]
-          .map(player => player.userId)
-          .filter(
-            (playerUserId): playerUserId is string =>
-              playerUserId !== null && playerUserId !== userId,
-          )
-        if (linkedPlayerUserIds.length > 0) {
-          void loadProfilesByIds(linkedPlayerUserIds)
+        // pas d'await, ne bloque pas le retour. loadProfilesByIds dédupe et
+        // filtre le cache.
+        if (bundle.kind === 'full') {
+          const linkedPlayerUserIds = linkedPlayerUserIdsIn(bundle, userId)
+          if (linkedPlayerUserIds.length > 0) {
+            void loadProfilesByIds(linkedPlayerUserIds)
+          }
         }
+        return true
       }
       catch (error) {
-        if (requestId !== lastLoadProfileBundleRequestId) return
-        if (identityStore.currentUserId !== initialUserId) return
+        if (requestId !== lastLoadProfileBundleRequestId) return false
+        if (identityStore.currentUserId !== initialUserId) return false
         // hasFetchedProfileBundle reste false : distingue "pas chargé" de
         // "chargé sans résultat".
-        lastLoadProfileBundleError.value = error
+        if (intent === 'navigation') {
+          lastLoadProfileBundleError.value = error
+        }
+        return false
       }
     })
   }
@@ -290,6 +347,7 @@ export const useProfileStore = defineStore('profile', () => {
       if (currentSession === null) {
         profileById.value = {}
         currentProfile.value = null
+        currentProfileVisibility.value = null
         hasFetchedCurrentProfile.value = false
         lastLoadCurrentProfileError.value = null
         ++lastLoadProfileBundleRequestId
@@ -304,6 +362,7 @@ export const useProfileStore = defineStore('profile', () => {
   return {
     profileById,
     currentProfile,
+    currentProfileVisibility,
     hasFetchedCurrentProfile,
     lastLoadCurrentProfileError,
     currentProfileBundle,
@@ -313,7 +372,9 @@ export const useProfileStore = defineStore('profile', () => {
     loadCurrentProfile,
     loadProfilesByIds,
     updateMyProfile,
+    updateMyProfileVisibility,
     findAccountByDisplayName,
     loadUserProfile,
+    refreshUserProfile,
   }
 })

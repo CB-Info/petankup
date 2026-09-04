@@ -271,11 +271,12 @@ function createMockRepository(): TournamentRepository {
     // touchent jamais aux actions profile — la couverture profile
     // vit dans tests/unit/store-profiles.test.ts. Si un nouveau
     // test ici dépend du profil, étendre ces stubs.
-    getProfileById: async () => undefined,
+    getMyProfile: async () => undefined,
     getProfilesByIds: async () => [],
     updateMyProfile: async () => {
       throw new Error('Not implemented in this test mock')
     },
+    updateMyProfileVisibility: async () => {},
   }
 }
 

@@ -126,12 +126,13 @@ function createMockRepository(overrides: Partial<{
       throw new InviteMemberError('unknown')
     },
     removeMember: async () => {},
-    getProfileById: async () => undefined,
+    getMyProfile: async () => undefined,
     getProfilesByIds: async () => [],
     updateMyProfile: async () => {
       throw new Error('Not implemented in this test mock')
     },
-    getUserProfile: async () => ({ profile: null, stats: null, results: [], freeMatches: [], freeMatchStats: null }),
+    updateMyProfileVisibility: async () => {},
+    getUserProfile: async () => ({ kind: 'not_found' as const }),
     getFreeMatchById: async () => undefined,
     createFreeMatch: async () => 'unused-match-id',
     deleteFreeMatch: async () => {},

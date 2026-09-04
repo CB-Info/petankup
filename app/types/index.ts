@@ -83,6 +83,22 @@ export interface Profile {
   updatedAt: string;
 }
 
+export type ProfileVisibility = "private" | "public";
+
+// Sa propre ligne de profil, la seule qui porte le réglage de
+// confidentialité (RPC get_my_profile — la colonne est masquée pour tout
+// autre lecteur). Le réglage est tenu À CÔTÉ de l'identité : il n'entre
+// jamais dans un Profile, donc jamais dans le cache des profils.
+export interface MyProfile {
+  profile: Profile;
+  visibility: ProfileVisibility;
+}
+
+// Point de vue demandé à la base pour composer un bundle de profil : le
+// visiteur réel (règle A2 : soi, profil public ou ami accepté), ou un tiers
+// quelconque (aperçu extérieur C6 — la base le réserve au propriétaire).
+export type ProfileViewpoint = "viewer" | "stranger";
+
 export type InviteMemberErrorCode =
   | "not_authenticated"
   | "not_owner"
@@ -180,10 +196,16 @@ export interface UserFreeMatchStats {
   pointsConceded: number;
 }
 
-export interface UserProfileBundle {
-  // null si la RPC ne trouve pas de ligne profiles pour le user (cas
-  // dégénéré : user supprimé, etc.).
-  profile: Profile | null;
+// Les trois formes de réponse de get_user_profile, deux à deux
+// distinguables par `kind` (même motif que JournalEntry) :
+//   - full : le contenu complet — ses cinq champs restent OBLIGATOIRES ;
+//   - restricted : profil privé consulté par un non-ami (A2) — le pseudo
+//     seul, la base n'a rien calculé d'autre (les clés de contenu sont
+//     absentes du JSON, pas vides) ;
+//   - not_found : aucune ligne profiles pour cet id.
+export interface FullUserProfileBundle {
+  kind: "full";
+  profile: Profile;
   // null si le user n'a aucun tournoi completed à son palmarès (absence
   // de ligne user_stats côté DB).
   stats: UserStats | null;
@@ -198,6 +220,20 @@ export interface UserProfileBundle {
   // user_free_match_stats côté DB).
   freeMatchStats: UserFreeMatchStats | null;
 }
+
+export interface RestrictedUserProfileBundle {
+  kind: "restricted";
+  profile: Profile;
+}
+
+export interface NotFoundUserProfileBundle {
+  kind: "not_found";
+}
+
+export type UserProfileBundle =
+  | FullUserProfileBundle
+  | RestrictedUserProfileBundle
+  | NotFoundUserProfileBundle;
 
 // --- Match libre (H2) ---
 // Une partie hors tournoi, notée après coup : deux camps A / B de même

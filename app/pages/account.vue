@@ -23,10 +23,14 @@
 // Header (mode interne) déclaré via useAppHeader, rendu une fois par le
 // layout. La déconnexion vit ici (bouton « Se déconnecter ») : le layout n'a
 // plus de header legacy ni d'icône logout, donc /account en est l'unique point.
-import { ProfileError, type ProfileErrorCode } from "../types";
+import {
+  ProfileError,
+  type ProfileErrorCode,
+  type ProfileVisibility,
+} from "../types";
 
 const profileStore = useProfileStore();
-const { currentProfile, hasFetchedCurrentProfile } =
+const { currentProfile, currentProfileVisibility, hasFetchedCurrentProfile } =
   storeToRefs(profileStore);
 const identityStore = useIdentityStore();
 const { currentUserId, identityUnavailable } = storeToRefs(identityStore);
@@ -134,6 +138,95 @@ async function onSubmit() {
     isSubmitting.value = false;
   }
 }
+
+// --- Confidentialité du profil (A4, C1/C5) ---
+// Deux cartes (le sélecteur des tournois et matchs libres), une modale qui
+// explique avant de confirmer, un toast qui nomme le nouvel état. Les
+// cartes ne sont liées qu'à SENS UNIQUE (:model-value + @update, pas de
+// v-model) : la carte active ne bouge qu'une fois la bascule persistée —
+// Annuler ne produit aucun aller-retour visuel. Deux invariants tiennent
+// cette garantie :
+//  1. la section n'est rendue (v-if INLINE, jamais v-show, jamais de
+//     `?? undefined`) que réglage connu : reka-ui fige son mode
+//     contrôlé/passif au montage sur `modelValue === undefined` — monté
+//     sans valeur, le groupe deviendrait autonome pour toute sa vie et la
+//     carte bougerait sur Annuler ;
+//  2. le sélecteur émet aussi au tap sur la carte DÉJÀ active : le handler
+//     ignore ce cas (règle pure visibilityChangeToConfirm, testée) — sans
+//     ce garde, retaper « Public » ouvrirait « Rendre mon profil privé ? »,
+//     le seul geste de l'écran qui ne doit jamais partir par accident.
+// La copie des cartes nomme le CONTENU, pas la page : la page reste ouverte
+// à tous (le pseudo est toujours visible), ce sont les statistiques et le
+// journal qui se protègent.
+const PROFILE_VISIBILITY_OPTIONS = [
+  {
+    value: "public",
+    label: "Public",
+    description: "Statistiques et journal visibles par tous",
+    icon: "i-lucide-globe",
+  },
+  {
+    value: "private",
+    label: "Privé",
+    description: "Statistiques et journal réservés à vos amis",
+    icon: "i-lucide-lock",
+  },
+];
+
+// La cible de la bascule en attente de confirmation — la carte tapée. Null
+// tant qu'aucune carte n'a été tapée : la modale n'est pas montée avant.
+const pendingVisibility = ref<ProfileVisibility | null>(null);
+const isVisibilityModalOpen = ref(false);
+const isSubmittingVisibility = ref(false);
+
+// Payload `string | undefined` : le modèle de CarteSelection est un string
+// non requis. La règle pure décide s'il y a une bascule à confirmer
+// (recadrage du type + filtre de la carte déjà active — invariant 2).
+function openVisibilityChangeConfirmation(tappedValue: string | undefined) {
+  const targetVisibility = visibilityChangeToConfirm(
+    tappedValue,
+    currentProfileVisibility.value,
+  );
+  if (targetVisibility === null) return;
+  pendingVisibility.value = targetVisibility;
+  isVisibilityModalOpen.value = true;
+}
+
+async function confirmVisibilityChange() {
+  const targetVisibility = pendingVisibility.value;
+  if (targetVisibility === null || isSubmittingVisibility.value) return;
+  isSubmittingVisibility.value = true;
+  try {
+    await profileStore.updateMyProfileVisibility(targetVisibility);
+    isVisibilityModalOpen.value = false;
+    // Une bascule de réglage NOMME le nouvel état dans les deux sens (choix
+    // assumé) : la doctrine des actions d'amitié — ce qui disparaît
+    // confirme, ce qui apparaît nomme — ne s'applique pas à un réglage, qui
+    // n'est ni une création ni une suppression.
+    toast.add({
+      title:
+        targetVisibility === "private"
+          ? "Votre profil est maintenant privé."
+          : "Votre profil est maintenant public.",
+      color: "success",
+      icon: "i-lucide-check",
+    });
+  } catch (error) {
+    // La modale reste ouverte, la carte active n'a pas bougé : l'état à
+    // l'écran est toujours celui de la base.
+    showError(error);
+  } finally {
+    isSubmittingVisibility.value = false;
+  }
+}
+
+// Aperçu extérieur (C6) : son profil, composé par la base comme pour un
+// tiers. Depuis le réglage, là où il prend son sens.
+const previewAsStrangerTo = computed(() =>
+  currentUserId.value
+    ? `/profile/${currentUserId.value}?preview=stranger`
+    : "/",
+);
 
 // Déconnexion : logique reprise telle quelle de l'ancien bandeau de
 // layout (signOut → /login, erreur en toast).
@@ -249,6 +342,45 @@ const FIELD_BASE_CLASS =
           Enregistrer
         </UButton>
       </UForm>
+
+      <!-- Confidentialité du profil (A4) — hors du UForm du pseudo : la
+           bascule ne dépend pas du formulaire. v-if INLINE sur l'élément qui
+           enveloppe CarteSelection (invariant 1, cf. script). -->
+      <section
+        v-if="currentProfileVisibility !== null"
+        class="mt-6 space-y-2.75"
+      >
+        <h2 :class="FIELD_LABEL_CLASS">Confidentialité du profil</h2>
+        <CarteSelection
+          :model-value="currentProfileVisibility"
+          :options="PROFILE_VISIBILITY_OPTIONS"
+          :columns="2"
+          name="profileVisibility"
+          @update:model-value="openVisibilityChangeConfirmation"
+        />
+        <p class="font-sans text-xs text-(--pk-muted)">
+          Votre pseudo reste toujours visible.
+        </p>
+        <UButton
+          :to="previewAsStrangerTo"
+          variant="ghost"
+          color="neutral"
+          icon="i-lucide-eye"
+          block
+          class="h-11 justify-start font-disp text-[12.5px] font-extrabold tracking-[0.03em] uppercase"
+          :ui="{ leadingIcon: 'size-4.5' }"
+        >
+          Voir mon profil comme un non-ami
+        </UButton>
+      </section>
+
+      <ProfileVisibilityToggleModal
+        v-if="pendingVisibility !== null"
+        v-model:open="isVisibilityModalOpen"
+        :target-visibility="pendingVisibility"
+        :is-submitting="isSubmittingVisibility"
+        @confirmed="confirmVisibilityChange"
+      />
 
       <!-- Entrée « Amis » (A3) : navigation vers l'écran des amis, avec le
            nombre de demandes reçues en attente — rien quand il n'y en a

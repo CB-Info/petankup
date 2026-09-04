@@ -27,9 +27,12 @@ const STORAGE_KEY_PREFIX = "petankup:back-origin:";
 // Depuis A3, une page de profil est à la fois une origine (pour les
 // tournois et matchs ouverts depuis son journal) et une base de contexte
 // (sa flèche peut ramener à l'écran des amis) : les clés par contexte
-// absorbent ce cumul sans collision.
+// absorbent ce cumul sans collision. Depuis A4, l'aperçu extérieur d'un
+// profil (`?preview=stranger`, la seule query admise) est une origine à
+// part entière : ouvrir une entrée du journal depuis l'aperçu, puis
+// revenir, ramène DANS l'aperçu — on n'en sort jamais par accident.
 const KNOWN_ORIGINS: ReadonlyArray<{ pattern: RegExp; label: string }> = [
-  { pattern: /^\/profile\/[A-Za-z0-9-]+$/, label: "Profil" },
+  { pattern: /^\/profile\/[A-Za-z0-9-]+(\?preview=stranger)?$/, label: "Profil" },
   { pattern: /^\/friends$/, label: "Amis" },
 ];
 

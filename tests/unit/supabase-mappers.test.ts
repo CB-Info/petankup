@@ -1,10 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import type { Database } from '../../app/types/database.types'
-import type { TournamentMatch, Profile, Team, TeamPlayer, Teammate, Tournament, TournamentMember, UserProfileBundle } from '../../app/types'
+import type {
+  FullUserProfileBundle,
+  MyProfile,
+  TournamentMatch,
+  Profile,
+  Team,
+  TeamPlayer,
+  Teammate,
+  Tournament,
+  TournamentMember,
+  UserProfileBundle,
+} from '../../app/types'
 import {
   mapMatchDomainToInsert,
   mapMatchDomainToUpdate,
   mapMatchRowToDomain,
+  mapMyProfileRowToDomain,
   mapProfileRowToDomain,
   mapTeamPlayerRowToDomain,
   mapTeamRowToDomain,
@@ -13,7 +25,8 @@ import {
   mapTournamentMemberRowToDomain,
   mapTournamentRowToDomain,
   mapUserProfileBundleJsonToDomain,
-  type RawUserProfileBundleJson,
+  type RawFullUserProfileBundleJson,
+  type RawRestrictedUserProfileBundleJson,
 } from '../../app/repositories/supabase-mappers'
 
 type TournamentRow = Database['public']['Tables']['tournaments']['Row']
@@ -450,10 +463,50 @@ describe('mapProfileRowToDomain', () => {
   })
 })
 
+describe('mapMyProfileRowToDomain', () => {
+  it('splits the get_my_profile row into a plain Profile and the visibility setting', () => {
+    const row: Database['public']['Functions']['get_my_profile']['Returns'][number] = {
+      id: OWNER_ID,
+      display_name: 'Alice',
+      created_at: NOW,
+      updated_at: NOW,
+      visibility: 'private',
+    }
+
+    expect(mapMyProfileRowToDomain(row)).toEqual<MyProfile>({
+      profile: { id: OWNER_ID, displayName: 'Alice', createdAt: NOW, updatedAt: NOW },
+      visibility: 'private',
+    })
+  })
+
+  it('never lets the setting leak into the Profile half', () => {
+    const myProfile = mapMyProfileRowToDomain({
+      id: OWNER_ID,
+      display_name: 'Alice',
+      created_at: NOW,
+      updated_at: NOW,
+      visibility: 'public',
+    })
+
+    expect(Object.keys(myProfile.profile).sort()).toEqual(
+      ['createdAt', 'displayName', 'id', 'updatedAt'],
+    )
+  })
+})
+
 describe('mapUserProfileBundleJsonToDomain', () => {
+  // Les tests du contenu lisent la forme COMPLÈTE : ce garde narrow et
+  // échoue clairement si le mapper a produit une autre forme.
+  function asFullBundle(bundle: UserProfileBundle): FullUserProfileBundle {
+    if (bundle.kind !== 'full') {
+      throw new Error(`expected a full bundle, got ${bundle.kind}`)
+    }
+    return bundle
+  }
+
   function makeRawBundle(
-    overrides: Partial<RawUserProfileBundleJson> = {},
-  ): RawUserProfileBundleJson {
+    overrides: Partial<RawFullUserProfileBundleJson> = {},
+  ): RawFullUserProfileBundleJson {
     return {
       profile: {
         id: OWNER_ID,
@@ -519,6 +572,7 @@ describe('mapUserProfileBundleJsonToDomain', () => {
     expect(
       mapUserProfileBundleJsonToDomain(makeRawBundle()),
     ).toEqual<UserProfileBundle>({
+      kind: 'full',
       profile: {
         id: OWNER_ID,
         displayName: 'Alice',
@@ -583,7 +637,7 @@ describe('mapUserProfileBundleJsonToDomain', () => {
     delete raw.free_matches
     delete raw.free_match_stats
 
-    const bundle = mapUserProfileBundleJsonToDomain(raw)
+    const bundle = asFullBundle(mapUserProfileBundleJsonToDomain(raw))
 
     expect(bundle.freeMatches).toEqual([])
     expect(bundle.freeMatchStats).toBeNull()
@@ -591,7 +645,7 @@ describe('mapUserProfileBundleJsonToDomain', () => {
 
   it('maps a null free_match_stats to null (player without free matches)', () => {
     expect(
-      mapUserProfileBundleJsonToDomain(makeRawBundle({ free_match_stats: null }))
+      asFullBundle(mapUserProfileBundleJsonToDomain(makeRawBundle({ free_match_stats: null })))
         .freeMatchStats,
     ).toBeNull()
   })
@@ -601,7 +655,7 @@ describe('mapUserProfileBundleJsonToDomain', () => {
     delete raw.free_matches?.[0]?.viewer_can_open
 
     expect(
-      mapUserProfileBundleJsonToDomain(raw).freeMatches[0]?.viewerCanOpen,
+      asFullBundle(mapUserProfileBundleJsonToDomain(raw)).freeMatches[0]?.viewerCanOpen,
     ).toBe(false)
   })
 
@@ -634,7 +688,7 @@ describe('mapUserProfileBundleJsonToDomain', () => {
     })
 
     expect(
-      mapUserProfileBundleJsonToDomain(raw).freeMatches.map(
+      asFullBundle(mapUserProfileBundleJsonToDomain(raw)).freeMatches.map(
         freeMatch => freeMatch.playedOn,
       ),
     ).toEqual(['2026-01-01', '2026-05-10'])
@@ -657,7 +711,7 @@ describe('mapUserProfileBundleJsonToDomain', () => {
       ],
     })
 
-    const freeMatch = mapUserProfileBundleJsonToDomain(raw).freeMatches[0]!
+    const freeMatch = asFullBundle(mapUserProfileBundleJsonToDomain(raw)).freeMatches[0]!
     expect(freeMatch.viewerCanOpen).toBe(false)
     expect(freeMatch.teammates).toEqual([])
     expect(freeMatch.opponents).toEqual([])
@@ -667,7 +721,7 @@ describe('mapUserProfileBundleJsonToDomain', () => {
     const raw = makeRawBundle()
     delete raw.results[0]?.viewer_can_open
 
-    const bundle = mapUserProfileBundleJsonToDomain(raw)
+    const bundle = asFullBundle(mapUserProfileBundleJsonToDomain(raw))
 
     expect(bundle.results[0]?.viewerCanOpen).toBe(false)
   })
@@ -711,27 +765,79 @@ describe('mapUserProfileBundleJsonToDomain', () => {
     })
 
     expect(
-      mapUserProfileBundleJsonToDomain(raw).results.map(
+      asFullBundle(mapUserProfileBundleJsonToDomain(raw)).results.map(
         result => result.tournamentName,
       ),
     ).toEqual(['Récent', 'Ancien'])
   })
 
-  it('maps a null profile to null', () => {
-    expect(
-      mapUserProfileBundleJsonToDomain(makeRawBundle({ profile: null })).profile,
-    ).toBeNull()
+  // --- Les trois formes de la base (A2), deux à deux distinguables ---
+
+  it('maps the historical empty shape (profile null, no marker) to not_found', () => {
+    const raw: RawFullUserProfileBundleJson = {
+      profile: null,
+      stats: null,
+      results: [],
+      free_matches: [],
+      free_match_stats: null,
+    }
+
+    expect(mapUserProfileBundleJsonToDomain(raw)).toEqual<UserProfileBundle>({
+      kind: 'not_found',
+    })
+  })
+
+  it('maps the restricted answer { profile, restricted: true } to restricted — without crashing on the ABSENT content keys', () => {
+    const raw: RawRestrictedUserProfileBundleJson = {
+      profile: {
+        id: OWNER_ID,
+        display_name: 'Alice',
+        created_at: NOW,
+        updated_at: NOW,
+      },
+      restricted: true,
+    }
+
+    expect(mapUserProfileBundleJsonToDomain(raw)).toEqual<UserProfileBundle>({
+      kind: 'restricted',
+      profile: { id: OWNER_ID, displayName: 'Alice', createdAt: NOW, updatedAt: NOW },
+    })
+  })
+
+  it('never carries any content key on a restricted bundle', () => {
+    const restricted = mapUserProfileBundleJsonToDomain({
+      profile: { id: OWNER_ID, display_name: 'Alice', created_at: NOW, updated_at: NOW },
+      restricted: true,
+    })
+
+    expect(Object.keys(restricted).sort()).toEqual(['kind', 'profile'])
+  })
+
+  it('treats a restricted answer without profile as not_found (impossible in SQL — fail-closed)', () => {
+    const malformed = { profile: null, restricted: true } as unknown as RawRestrictedUserProfileBundleJson
+
+    expect(mapUserProfileBundleJsonToDomain(malformed)).toEqual<UserProfileBundle>({
+      kind: 'not_found',
+    })
+  })
+
+  it('keeps a public profile with no games a FULL bundle (emptiness is not restriction)', () => {
+    const bundle = mapUserProfileBundleJsonToDomain(
+      makeRawBundle({ stats: null, results: [], free_matches: [], free_match_stats: null }),
+    )
+
+    expect(bundle.kind).toBe('full')
   })
 
   it('maps null stats to null', () => {
     expect(
-      mapUserProfileBundleJsonToDomain(makeRawBundle({ stats: null })).stats,
+      asFullBundle(mapUserProfileBundleJsonToDomain(makeRawBundle({ stats: null }))).stats,
     ).toBeNull()
   })
 
   it('maps empty results to []', () => {
     expect(
-      mapUserProfileBundleJsonToDomain(makeRawBundle({ results: [] })).results,
+      asFullBundle(mapUserProfileBundleJsonToDomain(makeRawBundle({ results: [] }))).results,
     ).toEqual([])
   })
 
@@ -758,7 +864,7 @@ describe('mapUserProfileBundleJsonToDomain', () => {
     })
 
     expect(
-      mapUserProfileBundleJsonToDomain(raw).results[0]!.teammates,
+      asFullBundle(mapUserProfileBundleJsonToDomain(raw)).results[0]!.teammates,
     ).toEqual<Teammate[]>([{ userId: null, displayName: 'Pierre' }])
   })
 
@@ -778,7 +884,7 @@ describe('mapUserProfileBundleJsonToDomain', () => {
     })
 
     expect(
-      mapUserProfileBundleJsonToDomain(raw).stats?.lastTournamentAt,
+      asFullBundle(mapUserProfileBundleJsonToDomain(raw)).stats?.lastTournamentAt,
     ).toBeNull()
   })
 })

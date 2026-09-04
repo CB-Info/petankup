@@ -51,6 +51,23 @@ describe('useBackOrigin', () => {
     expect(readOrigin(PROFILE_PATH)).toEqual({ label: 'Amis', to: '/friends' })
   })
 
+  it('reconnaît l’aperçu extérieur d’un profil comme origine — on revient DANS l’aperçu (A4)', () => {
+    const previewPath = `${PROFILE_PATH}?preview=stranger`
+    rememberOrigin(TOURNAMENT_BASE, previewPath)
+    expect(readOrigin(TOURNAMENT_BASE)).toEqual({ label: 'Profil', to: previewPath })
+  })
+
+  it('n’admet aucune autre query sur un profil que l’aperçu extérieur', () => {
+    for (const invalidValue of [
+      `${PROFILE_PATH}?preview=other`,
+      `${PROFILE_PATH}?preview=stranger&x=1`,
+      `${PROFILE_PATH}?`,
+    ]) {
+      sessionStorage.setItem(`petankup:back-origin:${TOURNAMENT_BASE}`, invalidValue)
+      expect(readOrigin(TOURNAMENT_BASE)).toBeNull()
+    }
+  })
+
   it('épingle la forme de la clé de stockage (préfixe + chemin de base)', () => {
     rememberOrigin(TOURNAMENT_BASE, PROFILE_PATH)
     expect(

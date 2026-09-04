@@ -6,6 +6,7 @@ import type {
   FreeMatchPlayer,
   FriendshipBundle,
   FriendshipEntry,
+  MyProfile,
   Profile,
   UserFreeMatchResult,
   UserFreeMatchStats,
@@ -214,18 +215,50 @@ export function mapProfileRowToDomain(row: ProfileIdentityRow): Profile {
   }
 }
 
+// --- MyProfile (RPC get_my_profile) ---
+// La seule lecture du réglage de confidentialité : sa propre ligne, avec
+// visibility. Coupée en deux à la traduction — l'identité (un Profile
+// ordinaire, 4 colonnes) et le réglage — pour que visibility ne se glisse
+// jamais dans un Profile, donc jamais dans le cache des profils.
+
+type MyProfileRow = Database['public']['Functions']['get_my_profile']['Returns'][number]
+
+export function mapMyProfileRowToDomain(row: MyProfileRow): MyProfile {
+  return {
+    profile: mapProfileRowToDomain(row),
+    visibility: row.visibility,
+  }
+}
+
 // --- UserProfileBundle (RPC get_user_profile) ---
-// Forme brute du JSON retourné par public.get_user_profile. Snake_case,
-// nullable strict, miroir exact du json_build_object côté SQL. Exporté car
-// le repository (et les tests) en ont besoin pour typer le cast du retour
-// RPC (typé Json dans database.types.ts).
-export type RawUserProfileBundleJson = {
-  profile: {
-    id: string
-    display_name: string
-    created_at: string
-    updated_at: string
-  } | null
+// Formes brutes du JSON retourné par public.get_user_profile. Snake_case,
+// nullable strict, miroir exact des json_build_object côté SQL. Exportées
+// car le repository (et les tests) en ont besoin pour typer le cast du
+// retour RPC (typé Json dans database.types.ts).
+
+// Le sous-objet profile, commun aux formes complète et restreinte : les 4
+// colonnes lisibles, jamais visibility.
+type RawProfileJson = {
+  id: string
+  display_name: string
+  created_at: string
+  updated_at: string
+}
+
+// Forme RESTREINTE (A2) : profil privé consulté par un non-ami — le pseudo
+// seul et le marqueur ; les clés de contenu sont ABSENTES du JSON, jamais
+// calculées côté base.
+export type RawRestrictedUserProfileBundleJson = {
+  profile: RawProfileJson
+  restricted: true
+}
+
+// Forme COMPLÈTE — ou inexistante : profile null, listes vides, sans
+// marqueur. `restricted` n'y figure jamais ; déclaré `false` optionnel pour
+// que TypeScript discrimine l'union sur cette clé.
+export type RawFullUserProfileBundleJson = {
+  profile: RawProfileJson | null
+  restricted?: false
   stats: {
     matches_played: number
     wins: number
@@ -279,15 +312,18 @@ export type RawUserProfileBundleJson = {
   } | null
 }
 
+export type RawUserProfileBundleJson
+  = RawRestrictedUserProfileBundleJson | RawFullUserProfileBundleJson
+
 // Sous-formes brutes dérivées par accès indexé : évite de redéclarer les
-// shapes et garde une source unique (RawUserProfileBundleJson).
-type RawUserStatsJson = NonNullable<RawUserProfileBundleJson['stats']>
-type RawUserTournamentResultJson = RawUserProfileBundleJson['results'][number]
+// shapes et garde une source unique (RawFullUserProfileBundleJson).
+type RawUserStatsJson = NonNullable<RawFullUserProfileBundleJson['stats']>
+type RawUserTournamentResultJson = RawFullUserProfileBundleJson['results'][number]
 type RawTeammateJson = RawUserTournamentResultJson['teammates'][number]
 type RawUserFreeMatchResultJson
-  = NonNullable<RawUserProfileBundleJson['free_matches']>[number]
+  = NonNullable<RawFullUserProfileBundleJson['free_matches']>[number]
 type RawUserFreeMatchStatsJson
-  = NonNullable<RawUserProfileBundleJson['free_match_stats']>
+  = NonNullable<RawFullUserProfileBundleJson['free_match_stats']>
 
 function mapUserStatsJsonToDomain(raw: RawUserStatsJson): UserStats {
   return {
@@ -367,13 +403,26 @@ function mapUserFreeMatchStatsJsonToDomain(
 // pas de tri (l'ordre des results et des free_matches est garanti côté
 // RPC — la fusion chronologique vit dans utils/journal.ts), pas
 // d'agrégation, pas de re-hydratation de pseudo (faite au render).
+//
+// Les trois formes sont reconnues aux discriminants que la base émet, dans
+// cet ordre : profil absent (forme inexistante — et, par sûreté, une
+// restreinte sans profil, impossible côté SQL : rien à traduire, fail-closed),
+// puis le marqueur restricted, sinon la forme complète — dont le contrat
+// n'est pas assoupli : ses clés restent exigées.
 export function mapUserProfileBundleJsonToDomain(
   raw: RawUserProfileBundleJson,
 ): UserProfileBundle {
+  if (raw.profile === null) {
+    return { kind: 'not_found' }
+  }
+  if (raw.restricted === true) {
+    return { kind: 'restricted', profile: mapProfileRowToDomain(raw.profile) }
+  }
   // ?? null : free_match_stats absent (décalage de déploiement) vaut null.
   const rawFreeMatchStats = raw.free_match_stats ?? null
   return {
-    profile: raw.profile === null ? null : mapProfileRowToDomain(raw.profile),
+    kind: 'full',
+    profile: mapProfileRowToDomain(raw.profile),
     stats: raw.stats === null ? null : mapUserStatsJsonToDomain(raw.stats),
     results: (raw.results ?? []).map(mapUserTournamentResultJsonToDomain),
     freeMatches: (raw.free_matches ?? []).map(mapUserFreeMatchResultJsonToDomain),
