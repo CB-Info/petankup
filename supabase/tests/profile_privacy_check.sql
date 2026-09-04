@@ -39,8 +39,9 @@
 --      la suppression des DEUX branches de l'ancienne règle.
 --   U5 inconnu total.
 --
--- Cas (numérotation du ticket A2 §6 ; le cas 13 « non-régression » = les 8
--- harnais existants rejoués SÉPARÉMENT, fichiers autonomes) :
+-- Cas (numérotation du ticket A2 §6 ; la « non-régression » d'A2 = les 8
+-- harnais existants rejoués SÉPARÉMENT, fichiers autonomes ; les cas 13-14
+-- couvrent la migration 20260904120000_profile_privacy_owner_access) :
 --   1  public / non-ami → contenu complet (5 clés, entrées réelles).
 --   2  privé / non-ami → { profile, restricted } EXACTEMENT (clés de
 --      contenu ABSENTES) ; le pseudo est celui À JOUR, pas le figé.
@@ -59,7 +60,17 @@
 --   11 chacun ne modifie que son réglage (et son pseudo — couverture
 --      héritée de l'ancien harnais) ; anon bloqué.
 --   12 le contenu autorisé est identique à avant (forme du bundle, clés
---      d'une entrée) ; not_authenticated / anon sur la RPC.
+--      d'une entrée) ; not_authenticated / anon sur la RPC ; l'ACL des
+--      fonctions recréées n'est pas retombée sur EXECUTE TO PUBLIC.
+--   13 get_my_profile : SA ligne avec SON réglage (public par défaut, puis
+--      privé après bascule), jamais celle d'autrui ; sans identité →
+--      not_authenticated ; anon bloqué.
+--   14 aperçu extérieur (p_as_stranger) : sur AUTRUI → not_owner, ami
+--      comme inconnu, profil public comme privé (la forme de la réponse
+--      ne révèle jamais le réglage d'un tiers) ; sur SOI : privé →
+--      restreint, public → complet avec l'ouvrabilité d'un tiers (un match
+--      privé du propriétaire n'est pas ouvrable, ses participants vidés ;
+--      un match public l'est) ; l'appel par défaut est inchangé.
 --   F  cas FRONTIÈRE (arbitrage du 2026-09-02, R6 de la spec) : la
 --      confidentialité protège l'AGRÉGAT — la participation d'un profil
 --      privé à un match PUBLIC reste lisible en direct (modèle de
@@ -201,11 +212,30 @@ as $$
   select id from pg_temp.created_matches where label = p_label;
 $$;
 
--- Bundle du profil consulté, vu par l'identité simulée courante.
+-- Bundle du profil consulté, vu par l'identité simulée courante. Appel
+-- positionnel à UN argument : c'est l'appel de l'application, il doit
+-- rester valide après l'ajout du paramètre à défaut (20260904120000).
 create function pg_temp.bundle(p_profile uuid) returns json
 language sql
 as $$
   select public.get_user_profile(p_profile);
+$$;
+
+-- Le même bundle, composé comme un tiers le recevrait (aperçu extérieur,
+-- 20260904120000) — réservé au propriétaire du profil consulté.
+create function pg_temp.stranger_bundle(p_profile uuid) returns json
+language sql
+as $$
+  select public.get_user_profile(p_profile, true);
+$$;
+
+-- Entrée du journal de matchs libres d'un bundle, par id de match.
+create function pg_temp.journal_entry(p_bundle json, p_match uuid) returns json
+language sql
+as $$
+  select entry
+    from json_array_elements(p_bundle->'free_matches') as entries(entry)
+   where (entry->>'match_id')::uuid = p_match;
 $$;
 
 -- Compare l'objet free_match_stats d'un bundle (lecture via le bundle, pas
@@ -570,6 +600,148 @@ select pg_temp.assert_blocked(
   $sql$ select public.get_user_profile('d2000000-0000-4000-8000-000000000001') $sql$,
   '42501', null, 'cas 12d: anon sans EXECUTE sur la RPC');
 reset role;
+-- Contrôle catalogue : un drop/create remet l'ACL à EXECUTE TO PUBLIC — les
+-- fonctions recréées par 20260904120000 doivent avoir réénoncé la leur.
+select pg_temp.assert_eq_int(
+  (select count(*) from (values
+     (has_function_privilege('anon', 'public.get_user_profile(uuid, boolean)', 'EXECUTE')),
+     (has_function_privilege('anon', 'private.get_user_profile(uuid, boolean)', 'EXECUTE')),
+     (has_function_privilege('anon', 'public.get_my_profile()', 'EXECUTE')),
+     (has_function_privilege('anon', 'private.get_my_profile()', 'EXECUTE')),
+     (has_function_privilege('anon', 'private.profile_content_is_visible_to_strangers(uuid)', 'EXECUTE'))
+   ) as privileges(anon_can_execute) where anon_can_execute),
+  0, 'cas 12e: aucune fonction recréée n''est exécutable par anon (ACL réénoncée après drop/create)');
+select pg_temp.assert_eq_int(
+  (select count(*) from pg_catalog.pg_proc p
+    join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+   where (n.nspname, p.proname) in (('public', 'get_user_profile'), ('public', 'get_my_profile'))
+     and obj_description(p.oid, 'pg_proc') is not null),
+  2, 'cas 12f: les wrappers publics recréés portent leur commentaire de catalogue');
+
+-- ----------------------------------------------------------------------------
+-- Cas 13 — get_my_profile : SA ligne avec SON réglage, jamais celle d'autrui.
+-- La seule lecture du réglage ouverte aux clients (la colonne reste masquée,
+-- cas F3).
+-- ----------------------------------------------------------------------------
+
+select pg_temp.act_as('d2000000-0000-4000-8000-000000000001');
+select pg_temp.assert_eq_int(
+  (select count(*) from public.get_my_profile()),
+  1, 'cas 13a: get_my_profile rend exactement une ligne');
+select pg_temp.assert_eq_text(
+  (select mine.id::text from public.get_my_profile() as mine),
+  'd2000000-0000-4000-8000-000000000001', 'cas 13b: la ligne est celle de l''appelant');
+select pg_temp.assert_eq_text(
+  (select mine.visibility::text from public.get_my_profile() as mine),
+  'public', 'cas 13c: U1 lit son réglage — public (défaut)');
+select pg_temp.assert_eq_text(
+  (select mine.display_name from public.get_my_profile() as mine),
+  pg_temp.pseudo('d2000000-0000-4000-8000-000000000001'),
+  'cas 13d: la ligne porte le pseudo à jour');
+select pg_temp.assert_row_count(
+  $sql$ update public.profiles set visibility = 'private'
+         where id = 'd2000000-0000-4000-8000-000000000001' $sql$,
+  1, 'cas 13e: U1 bascule en privé');
+select pg_temp.assert_eq_text(
+  (select mine.visibility::text from public.get_my_profile() as mine),
+  'private', 'cas 13f: U1 relit son réglage — privé, sans lire la colonne');
+select pg_temp.assert_row_count(
+  $sql$ update public.profiles set visibility = 'public'
+         where id = 'd2000000-0000-4000-8000-000000000001' $sql$,
+  1, 'cas 13g: U1 revient en public');
+reset role;
+select pg_temp.act_as('d2000000-0000-4000-8000-000000000002');
+select pg_temp.assert_eq_text(
+  (select mine.visibility::text from public.get_my_profile() as mine),
+  'private', 'cas 13h: U2 (privé) lit son propre réglage');
+reset role;
+select set_config('request.jwt.claims', '', true);
+set local role authenticated;
+select pg_temp.assert_blocked(
+  $sql$ select * from public.get_my_profile() $sql$,
+  'P0001', 'not_authenticated', 'cas 13i: sans identité — not_authenticated');
+reset role;
+set local role anon;
+select pg_temp.assert_blocked(
+  $sql$ select * from public.get_my_profile() $sql$,
+  '42501', null, 'cas 13j: anon sans EXECUTE sur get_my_profile');
+reset role;
+
+-- ----------------------------------------------------------------------------
+-- Cas 14 — aperçu extérieur (p_as_stranger). Sur AUTRUI : not_owner, quel que
+-- soit l'appelant et quel que soit le réglage de la cible — la FORME de la
+-- réponse ne doit jamais révéler le réglage d'un tiers. Sur SOI : la base
+-- compose la réponse comme un tiers la recevrait.
+-- ----------------------------------------------------------------------------
+
+select pg_temp.act_as('d2000000-0000-4000-8000-000000000003');
+select pg_temp.assert_blocked(
+  $sql$ select public.get_user_profile('d2000000-0000-4000-8000-000000000002', true) $sql$,
+  'P0001', 'not_owner', 'cas 14a: un AMI ne peut pas demander la vue « tiers » du profil de U2 (privé)');
+reset role;
+select pg_temp.act_as('d2000000-0000-4000-8000-000000000005');
+select pg_temp.assert_blocked(
+  $sql$ select public.get_user_profile('d2000000-0000-4000-8000-000000000002', true) $sql$,
+  'P0001', 'not_owner', 'cas 14b: un inconnu non plus (profil privé)');
+select pg_temp.assert_blocked(
+  $sql$ select public.get_user_profile('d2000000-0000-4000-8000-000000000001', true) $sql$,
+  'P0001', 'not_owner', 'cas 14c: ni sur un profil PUBLIC — la garde ne dépend pas du réglage de la cible');
+select pg_temp.assert_blocked(
+  $sql$ select public.get_user_profile('d2000000-0000-4000-8000-0000000000ff', true) $sql$,
+  'P0001', 'not_owner', 'cas 14d: ni sur un id inexistant — aucune sonde d''existence');
+reset role;
+
+-- Sur soi, profil PRIVÉ : la composition restreinte, exactement.
+select pg_temp.act_as('d2000000-0000-4000-8000-000000000002');
+select pg_temp.assert_keys(
+  pg_temp.stranger_bundle('d2000000-0000-4000-8000-000000000002'),
+  array['profile', 'restricted'],
+  'cas 14e: privé/soi en aperçu — { profile, restricted } comme pour un tiers');
+select pg_temp.assert_eq_text(
+  (pg_temp.stranger_bundle('d2000000-0000-4000-8000-000000000002')->'profile'->>'display_name'),
+  pg_temp.pseudo('d2000000-0000-4000-8000-000000000002'),
+  'cas 14f: l''aperçu restreint porte le pseudo à jour');
+select pg_temp.assert_keys(
+  pg_temp.bundle('d2000000-0000-4000-8000-000000000002'),
+  array['profile', 'stats', 'results', 'free_matches', 'free_match_stats'],
+  'cas 14g: l''appel par défaut sur soi reste complet (inchangé)');
+reset role;
+
+-- Sur soi, profil PUBLIC : la composition complète, avec l'ouvrabilité d'un
+-- tiers. U2 passe public le temps du cas (M1 public, M3 privé).
+update public.profiles
+   set visibility = 'public'
+ where id = 'd2000000-0000-4000-8000-000000000002';
+select pg_temp.act_as('d2000000-0000-4000-8000-000000000002');
+select pg_temp.assert_keys(
+  pg_temp.stranger_bundle('d2000000-0000-4000-8000-000000000002'),
+  array['profile', 'stats', 'results', 'free_matches', 'free_match_stats'],
+  'cas 14h: public/soi en aperçu — bundle complet');
+select pg_temp.assert_eq_int(
+  (select json_array_length(pg_temp.stranger_bundle('d2000000-0000-4000-8000-000000000002')->'free_matches')),
+  2, 'cas 14i: les 2 matchs figurent dans l''aperçu (le journal reste entier)');
+select pg_temp.assert_eq_text(
+  (pg_temp.journal_entry(pg_temp.stranger_bundle('d2000000-0000-4000-8000-000000000002'), pg_temp.match_id('M1'))->>'viewer_can_open'),
+  'true', 'cas 14j: aperçu — le match PUBLIC M1 est ouvrable par un tiers');
+select pg_temp.assert_eq_int(
+  (select json_array_length(pg_temp.journal_entry(pg_temp.stranger_bundle('d2000000-0000-4000-8000-000000000002'), pg_temp.match_id('M1'))->'opponents')),
+  1, 'cas 14k: aperçu — les adversaires du match public sont listés');
+select pg_temp.assert_eq_text(
+  (pg_temp.journal_entry(pg_temp.stranger_bundle('d2000000-0000-4000-8000-000000000002'), pg_temp.match_id('M3'))->>'viewer_can_open'),
+  'false', 'cas 14l: aperçu — le match PRIVÉ M3 n''est PAS ouvrable par un tiers (le propriétaire, lui, l''ouvre)');
+select pg_temp.assert_eq_int(
+  (select json_array_length(pg_temp.journal_entry(pg_temp.stranger_bundle('d2000000-0000-4000-8000-000000000002'), pg_temp.match_id('M3'))->'opponents')),
+  0, 'cas 14m: aperçu — les participants du match privé sont vidés');
+select pg_temp.assert_eq_text(
+  (pg_temp.journal_entry(pg_temp.bundle('d2000000-0000-4000-8000-000000000002'), pg_temp.match_id('M3'))->>'viewer_can_open'),
+  'true', 'cas 14n: appel par défaut — le propriétaire ouvre son match privé (inchangé)');
+select pg_temp.assert_free_stats_json(
+  pg_temp.stranger_bundle('d2000000-0000-4000-8000-000000000002')->'free_match_stats',
+  2, 2, 0, 26, 12, 'cas 14o: aperçu — les stats agrégées restent celles du profil');
+reset role;
+update public.profiles
+   set visibility = 'private'
+ where id = 'd2000000-0000-4000-8000-000000000002';
 
 -- ----------------------------------------------------------------------------
 -- Cas F — FRONTIÈRE des objets publics (arbitrage 2026-09-02, R6 spec) et
@@ -598,6 +770,6 @@ select pg_temp.assert_blocked(
   '42501', null, 'cas F4: anon ne lit pas la table profiles');
 reset role;
 
-select 'profile_privacy_check: OK — cas 1-12 + frontière verts (le cas 13 du ticket = les 8 harnais existants rejoués séparément)' as result;
+select 'profile_privacy_check: OK — cas 1-14 + frontière verts (non-régression A2 = les 8 harnais existants rejoués séparément)' as result;
 
 rollback;
