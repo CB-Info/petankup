@@ -367,6 +367,14 @@ base restent le filet, jamais la première ligne :
   (règle partagée : `private.profile_content_is_visible_to_current_user`).
   Le filtrage n'est jamais fait côté client. Le pseudo, lui, reste
   toujours lisible (et déjà résoluble par recherche exacte).
+- Son propre réglage ne se lit que par la RPC `get_my_profile` (la
+  colonne `visibility` est masquée de toute lecture directe, y compris en
+  `RETURNING` : l'écriture se fait sans relecture, avec le compte de
+  lignes). L'aperçu extérieur (« voir mon profil comme un non-ami ») est
+  composé **par la base** : `get_user_profile(p_user_id, p_as_stranger)`,
+  réservé au propriétaire, applique la règle d'un tiers
+  (`private.profile_content_is_visible_to_strangers`) — jamais une
+  simulation côté client.
 
 ### Statistiques pré-calculées (matérialisées)
 
@@ -392,6 +400,8 @@ tickets :
 - Organisateur (côté UI / produit), `owner` (côté technique / DB).
 - Joueur lié à un compte, Joueur libre.
 - Membre invité, Tournoi privé, Tournoi public.
+- Ami, Demande (reçue, envoyée), Profil public, Profil privé, Aperçu
+  extérieur.
 
 ## Structure du projet
 
@@ -498,8 +508,6 @@ PAS pour la concision ni pour la performance d'écriture.
 
 - Multi-format de tournoi (élimination directe, poules + finales,
   double-élimination)
-- Interface du système d'amis et du réglage de confidentialité (le socle
-  base existe — tickets d'interface en cours)
 - Statistiques avancées de confrontation, duos préférés, ELO,
   gamification (V2+)
 - Export PDF, partage social

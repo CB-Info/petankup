@@ -1,3 +1,5 @@
+import type { ProfileViewpoint } from '../types'
+
 // Décision de (re)chargement du bundle profil (page /profile/<id>).
 //
 // Au montage à froid (F5, lien direct), l'identité du viewer n'est pas
@@ -7,24 +9,34 @@
 // charge que lorsque le viewer est identifié, et seulement sur une
 // transition réelle — jamais de double requête quand une source d'identité
 // redondante arrive après coup avec la même valeur.
+// Le point de vue (visiteur réel / tiers, cf. ProfileViewpoint) fait partie
+// de l'identité du chargement : entrer ou sortir de l'aperçu extérieur
+// recharge, la base composant une réponse différente. Il est optionnel : la
+// page d'un match libre réutilise ce prédicat avec un simple couple
+// (id consulté, viewer), sans point de vue.
 // Les membres acceptent undefined : c'est le type réel des valeurs `previous`
 // de l'API watch multi-sources de Vue (premier déclenchement).
 export type ProfileLoadInputs = readonly [
   profileId: string | undefined,
   viewerId: string | null | undefined,
+  viewpoint?: ProfileViewpoint,
 ]
 
 export function shouldReloadProfile(
   current: ProfileLoadInputs,
   previous?: ProfileLoadInputs,
 ): boolean {
-  const [profileId, viewerId] = current
+  const [profileId, viewerId, viewpoint] = current
   const viewerIsIdentified = viewerId !== null && viewerId !== undefined
   if (!viewerIsIdentified || profileId === undefined) return false
 
   // Premier déclenchement avec identité déjà résolue (navigation interne).
   if (previous === undefined) return true
 
-  const [previousProfileId, previousViewerId] = previous
-  return profileId !== previousProfileId || viewerId !== previousViewerId
+  const [previousProfileId, previousViewerId, previousViewpoint] = previous
+  return (
+    profileId !== previousProfileId
+    || viewerId !== previousViewerId
+    || viewpoint !== previousViewpoint
+  )
 }

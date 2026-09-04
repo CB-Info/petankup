@@ -17,6 +17,9 @@ import { SupabaseRepository } from '../../app/repositories/SupabaseRepository'
 type ChainResult = {
   data: unknown
   error: { message: string, code?: string } | null
+  // Compte de lignes (Prefer: count=exact) — seules les mutations qui le
+  // demandent le lisent.
+  count?: number | null
 }
 
 type MockChain = {
@@ -774,39 +777,88 @@ function makeProfileRow(overrides: Partial<{ id: string, display_name: string }>
   }
 }
 
-describe('SupabaseRepository — getProfileById', () => {
-  it('returns the mapped profile when the row exists', async () => {
-    const chain = makeChainWithResult({ data: makeProfileRow(), error: null })
-    const { repo, from } = makeRepoWithChain(chain)
+describe('SupabaseRepository — getMyProfile', () => {
+  it('calls rpc(get_my_profile) without arguments and splits the row into profile + visibility', async () => {
+    const { repo, rpc } = makeRepoWithRpcResult({
+      data: [{ ...makeProfileRow(), visibility: 'private' }],
+      error: null,
+    })
 
-    const profile = await repo.getProfileById(OWNER_ID)
+    const myProfile = await repo.getMyProfile()
 
-    expect(from).toHaveBeenCalledWith('profiles')
-    expect(chain.eq).toHaveBeenCalledWith('id', OWNER_ID)
-    expect(chain.maybeSingle).toHaveBeenCalled()
-    expect(profile).toEqual({
-      id: OWNER_ID,
-      displayName: 'Alice',
-      createdAt: NOW,
-      updatedAt: NOW,
+    expect(rpc).toHaveBeenCalledWith('get_my_profile')
+    expect(myProfile).toEqual({
+      profile: { id: OWNER_ID, displayName: 'Alice', createdAt: NOW, updatedAt: NOW },
+      visibility: 'private',
     })
   })
 
-  it('returns undefined when the row is not visible (RLS) or absent', async () => {
-    const chain = makeChainWithResult({ data: null, error: null })
+  it('returns undefined when the RPC yields no row (missing profiles row)', async () => {
+    const { repo } = makeRepoWithRpcResult({ data: [], error: null })
+
+    expect(await repo.getMyProfile()).toBeUndefined()
+  })
+
+  it('returns undefined when data is null without error', async () => {
+    const { repo } = makeRepoWithRpcResult({ data: null, error: null })
+
+    expect(await repo.getMyProfile()).toBeUndefined()
+  })
+
+  it('throws when Supabase returns an error (not_authenticated relayed as a plain Error)', async () => {
+    const { repo } = makeRepoWithRpcResult({
+      data: null,
+      error: { message: 'not_authenticated' },
+    })
+
+    await expect(repo.getMyProfile()).rejects.toThrow('not_authenticated')
+  })
+})
+
+describe('SupabaseRepository — updateMyProfileVisibility', () => {
+  it('updates visibility for the given user with an exact row count and NEVER selects back', async () => {
+    const chain = makeChainWithResult({ data: null, error: null, count: 1 })
+    const { repo, from } = makeRepoWithChain(chain)
+
+    await repo.updateMyProfileVisibility(OWNER_ID, 'private')
+
+    expect(from).toHaveBeenCalledWith('profiles')
+    expect(chain.update).toHaveBeenCalledWith({ visibility: 'private' }, { count: 'exact' })
+    expect(chain.eq).toHaveBeenCalledWith('id', OWNER_ID)
+    // RETURNING lirait la colonne masquée (42501) : aucun select, jamais.
+    expect(chain.select).not.toHaveBeenCalled()
+    expect(chain.single).not.toHaveBeenCalled()
+  })
+
+  it('throws when no row was affected (RLS no-op) instead of pretending success', async () => {
+    const chain = makeChainWithResult({ data: null, error: null, count: 0 })
     const { repo } = makeRepoWithChain(chain)
 
-    expect(await repo.getProfileById('missing')).toBeUndefined()
+    await expect(repo.updateMyProfileVisibility(OWNER_ID, 'private')).rejects.toThrow(
+      'profile visibility update matched 0 row',
+    )
+  })
+
+  it('throws when the count is missing (no success signal at all)', async () => {
+    const chain = makeChainWithResult({ data: null, error: null, count: null })
+    const { repo } = makeRepoWithChain(chain)
+
+    await expect(repo.updateMyProfileVisibility(OWNER_ID, 'public')).rejects.toThrow(
+      'profile visibility update matched no row',
+    )
   })
 
   it('throws when Supabase returns an error', async () => {
     const chain = makeChainWithResult({
       data: null,
-      error: { message: 'profile fetch failed' },
+      error: { message: 'permission denied for table profiles' },
+      count: null,
     })
     const { repo } = makeRepoWithChain(chain)
 
-    await expect(repo.getProfileById(OWNER_ID)).rejects.toThrow('profile fetch failed')
+    await expect(repo.updateMyProfileVisibility(OWNER_ID, 'private')).rejects.toThrow(
+      'permission denied for table profiles',
+    )
   })
 })
 
@@ -1030,18 +1082,20 @@ describe('SupabaseRepository — getUserProfile', () => {
     }
   }
 
-  it('calls rpc(get_user_profile) with the user id and maps the JSON bundle', async () => {
+  it('calls rpc(get_user_profile) with the user id, an explicit viewpoint, and maps the JSON bundle', async () => {
     const { repo, rpc } = makeRepoWithRpcResult({
       data: makeRawProfileBundle(),
       error: null,
     })
 
-    const bundle = await repo.getUserProfile(INVITEE_USER_ID)
+    const bundle = await repo.getUserProfile(INVITEE_USER_ID, 'viewer')
 
     expect(rpc).toHaveBeenCalledWith('get_user_profile', {
       p_user_id: INVITEE_USER_ID,
+      p_as_stranger: false,
     })
     expect(bundle).toEqual<UserProfileBundle>({
+      kind: 'full',
       profile: {
         id: INVITEE_USER_ID,
         displayName: 'Bob',
@@ -1101,6 +1155,44 @@ describe('SupabaseRepository — getUserProfile', () => {
     })
   })
 
+  it('asks the base for the stranger composition when the viewpoint is stranger', async () => {
+    const { repo, rpc } = makeRepoWithRpcResult({
+      data: makeRawProfileBundle(),
+      error: null,
+    })
+
+    await repo.getUserProfile(INVITEE_USER_ID, 'stranger')
+
+    expect(rpc).toHaveBeenCalledWith('get_user_profile', {
+      p_user_id: INVITEE_USER_ID,
+      p_as_stranger: true,
+    })
+  })
+
+  it('maps a restricted answer (private profile, non-friend) to a restricted bundle', async () => {
+    const { repo } = makeRepoWithRpcResult({
+      data: {
+        profile: { id: INVITEE_USER_ID, display_name: 'Bob', created_at: NOW, updated_at: NOW },
+        restricted: true,
+      },
+      error: null,
+    })
+
+    expect(await repo.getUserProfile(INVITEE_USER_ID, 'viewer')).toEqual<UserProfileBundle>({
+      kind: 'restricted',
+      profile: { id: INVITEE_USER_ID, displayName: 'Bob', createdAt: NOW, updatedAt: NOW },
+    })
+  })
+
+  it('relays not_owner (stranger view of someone else) as a plain Error', async () => {
+    const { repo } = makeRepoWithRpcResult({
+      data: null,
+      error: { message: 'not_owner' },
+    })
+
+    await expect(repo.getUserProfile(INVITEE_USER_ID, 'stranger')).rejects.toThrow('not_owner')
+  })
+
   it('relays not_authenticated as a plain Error (no typed error class)', async () => {
     const { repo } = makeRepoWithRpcResult({
       data: null,
@@ -1109,7 +1201,7 @@ describe('SupabaseRepository — getUserProfile', () => {
 
     let caught: unknown
     try {
-      await repo.getUserProfile(INVITEE_USER_ID)
+      await repo.getUserProfile(INVITEE_USER_ID, 'viewer')
     }
     catch (error) {
       caught = error
@@ -1126,7 +1218,7 @@ describe('SupabaseRepository — getUserProfile', () => {
       error: { message: 'network down' },
     })
 
-    await expect(repo.getUserProfile(INVITEE_USER_ID)).rejects.toThrow(
+    await expect(repo.getUserProfile(INVITEE_USER_ID, 'viewer')).rejects.toThrow(
       'network down',
     )
   })
@@ -1134,7 +1226,7 @@ describe('SupabaseRepository — getUserProfile', () => {
   it('throws when the RPC returns null data without error', async () => {
     const { repo } = makeRepoWithRpcResult({ data: null, error: null })
 
-    await expect(repo.getUserProfile(INVITEE_USER_ID)).rejects.toThrow(
+    await expect(repo.getUserProfile(INVITEE_USER_ID, 'viewer')).rejects.toThrow(
       'get_user_profile returned null',
     )
   })

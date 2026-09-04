@@ -7,7 +7,10 @@ import type {
   FriendshipBundle,
   FriendshipRequestOutcome,
   InviteMemberErrorCode,
+  MyProfile,
   Profile,
+  ProfileViewpoint,
+  ProfileVisibility,
   Team,
   Tournament,
   TournamentMatch,
@@ -25,6 +28,7 @@ import {
   mapMatchDomainToInsert,
   mapMatchDomainToUpdate,
   mapMatchRowToDomain,
+  mapMyProfileRowToDomain,
   mapProfileRowToDomain,
   mapTeamRowToDomain,
   mapTournamentDomainToInsert,
@@ -280,22 +284,23 @@ export class SupabaseRepository implements TournamentRepository {
 
   // --- Profiles ---
   // La table profiles est peuplée par le trigger DB au signup (cf.
-  // migration C.1). Le repo ne fait ni insert ni delete : seulement
-  // SELECT (un et batch) et UPDATE de display_name pour soi.
+  // migration C.1). Le repo ne fait ni insert ni delete : SELECT batch,
+  // et pour soi la RPC get_my_profile (lecture) et deux UPDATE
+  // (display_name, visibility).
   // Depuis A2 (20260902100000), la table est lisible par tout
   // authentifié (colonnes id/display_name/created_at/updated_at — le
-  // réglage visibility n'est pas lisible en direct) : le pseudo est
-  // public, c'est le CONTENU du profil qui est protégé en base, dans
-  // get_user_profile. L'UPDATE n'autorise toujours que self.
+  // réglage visibility n'est PAS lisible en direct, ni en select ni en
+  // RETURNING : seule get_my_profile le rend, à son propriétaire) : le
+  // pseudo est public, c'est le CONTENU du profil qui est protégé en
+  // base, dans get_user_profile. L'UPDATE n'autorise toujours que self.
 
-  async getProfileById(id: string): Promise<Profile | undefined> {
-    const { data, error } = await this.client
-      .from('profiles')
-      .select('id, display_name, created_at, updated_at')
-      .eq('id', id)
-      .maybeSingle()
+  async getMyProfile(): Promise<MyProfile | undefined> {
+    const { data, error } = await this.client.rpc('get_my_profile')
     if (error !== null) throw new Error(error.message)
-    return data === null ? undefined : mapProfileRowToDomain(data)
+    // `returns table` : un tableau d'au plus une ligne — la sienne, résolue
+    // sur auth.uid(). Vide = pas de ligne profiles (cas dégénéré).
+    const myRow = data?.[0]
+    return myRow === undefined ? undefined : mapMyProfileRowToDomain(myRow)
   }
 
   async getProfilesByIds(ids: string[]): Promise<Profile[]> {
@@ -330,9 +335,29 @@ export class SupabaseRepository implements TournamentRepository {
     return mapProfileRowToDomain(data)
   }
 
-  async getUserProfile(userId: string): Promise<UserProfileBundle> {
+  // Pas de .select() : RETURNING lirait la colonne visibility, masquée
+  // (grant SELECT par colonne) — 42501. Le compte de lignes, lui, ne lit
+  // rien : c'est le seul signal de succès disponible, et il en faut un —
+  // sans lui, un UPDATE filtré par la RLS à 0 ligne (identité décalée,
+  // ligne absente) passerait pour un succès et l'écran confirmerait un
+  // réglage que la base n'a pas.
+  async updateMyProfileVisibility(userId: string, visibility: ProfileVisibility): Promise<void> {
+    const { error, count } = await this.client
+      .from('profiles')
+      .update({ visibility }, { count: 'exact' })
+      .eq('id', userId)
+    if (error !== null) throw new Error(error.message)
+    if (count !== 1) {
+      throw new Error(`profile visibility update matched ${count ?? 'no'} row`)
+    }
+  }
+
+  async getUserProfile(userId: string, viewpoint: ProfileViewpoint): Promise<UserProfileBundle> {
+    // Le booléen est toujours envoyé explicitement (jamais omis) : le
+    // point de vue fait partie du contrat de l'appel.
     const { data, error } = await this.client.rpc('get_user_profile', {
       p_user_id: userId,
+      p_as_stranger: viewpoint === 'stranger',
     })
     if (error !== null) throw new Error(error.message)
     if (data === null) {
@@ -341,7 +366,8 @@ export class SupabaseRepository implements TournamentRepository {
     // Le retour de la RPC est typé Json (cf. database.types.ts). On le cast
     // vers la forme brute attendue par le mapper avant traduction. Pas de
     // classe d'erreur typée (cf. décision Phase J) : 'not_authenticated'
-    // remonte tel quel dans le message de l'Error standard.
+    // et 'not_owner' remontent tels quels dans le message de l'Error
+    // standard.
     return mapUserProfileBundleJsonToDomain(data as RawUserProfileBundleJson)
   }
 

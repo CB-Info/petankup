@@ -1,6 +1,8 @@
 <script setup lang="ts">
 // Page profil joueur (Phase K). Consomme le bundle chargé par le store
-// (loadUserProfile, Phase J) : { profile, stats, results }.
+// (loadUserProfile, Phase J) sous l'une de ses trois formes (kind) : complet
+// (profil + stats + journal), restreint (profil privé vu par un non-ami : le
+// pseudo seul, A2/A4) ou inexistant.
 //
 // Chargement calqué sur tournaments/[tournamentId]/index.vue : flag local
 // isLoadingProfile + token de course. On NE dérive PAS l'état "chargement"
@@ -10,7 +12,12 @@
 //
 // Header (mode interne) déclaré via useAppHeader, rendu une fois par le layout.
 
-import type { Teammate, UserTournamentResult } from "../../types";
+import type { ButtonProps } from "@nuxt/ui";
+import type {
+  ProfileViewpoint,
+  Teammate,
+  UserTournamentResult,
+} from "../../types";
 import { buildUnifiedJournal, filterJournal } from "../../utils/journal";
 import type { JournalFilter } from "../../utils/journal";
 
@@ -25,6 +32,26 @@ const userId = computed(() => route.params.userId as string);
 
 const profileIdIsValid = computed(() => isUuid(userId.value));
 
+// Identité du viewer = identité canonique du store identity (user.sub, ou
+// getClaims en repli dans la fenêtre post-magic-link) : une seule
+// transition null → id, connue avant tout chargement de profil — sans elle,
+// son propre journal s'afficherait d'abord sans liens puis basculerait
+// sous le doigt.
+const myUserId = currentUserId;
+const isSelfProfile = computed(() => userId.value === myUserId.value);
+
+// Aperçu extérieur (A4, C6) : sur SON profil, `?preview=stranger` demande à
+// la base la composition qu'un tiers recevrait — c'est elle qui décide
+// (privé → pseudo seul, public → tout, entrées ouvrables si l'objet est
+// public), l'écran rend la forme reçue. Le paramètre est ignoré sur le
+// profil d'autrui (la base le refuserait de toute façon : not_owner).
+const viewpoint = computed<ProfileViewpoint>(() =>
+  isSelfProfile.value && route.query.preview === "stranger"
+    ? "stranger"
+    : "viewer",
+);
+const isPreviewingAsStranger = computed(() => viewpoint.value === "stranger");
+
 const isLoadingProfile = ref(true);
 
 // Token local : seul le dernier load déclenché a le droit de remettre
@@ -35,7 +62,10 @@ async function loadProfile(id: string): Promise<void> {
   const requestId = ++loadProfileRequestId;
   isLoadingProfile.value = true;
   try {
-    await profileStore.loadUserProfile(id);
+    // Le point de vue est lu ICI, source unique : le watcher, « Réessayer »
+    // et tout rechargement passent par loadProfile — un « Réessayer » en
+    // aperçu ne peut pas retomber sur la vue propriétaire.
+    await profileStore.loadUserProfile(id, viewpoint.value);
   } finally {
     if (requestId === loadProfileRequestId) {
       isLoadingProfile.value = false;
@@ -43,20 +73,33 @@ async function loadProfile(id: string): Promise<void> {
   }
 }
 
-// Identité du viewer = identité canonique du store identity (user.sub, ou
-// getClaims en repli dans la fenêtre post-magic-link) : une seule
-// transition null → id, connue avant tout chargement de profil — sans elle,
-// son propre journal s'afficherait d'abord sans liens puis basculerait
-// sous le doigt.
-const myUserId = currentUserId;
-const isSelfProfile = computed(() => userId.value === myUserId.value);
+// Rafraîchit le bundle EN PLACE après un geste qui change le droit de voir
+// le contenu (accepter un ami, le retirer) : la page ne se vide pas — le
+// store garde le bundle courant jusqu'à l'arrivée du nouveau, et
+// isLoadingProfile n'est pas touché. Le badge d'amitié, lui, a déjà changé
+// (mutation locale du store amitié). Un échec laisse le bundle affiché et
+// le dit discrètement : le geste, lui, a réussi.
+async function refreshProfile(): Promise<void> {
+  const refreshed = await profileStore.refreshUserProfile(
+    userId.value,
+    viewpoint.value,
+  );
+  if (!refreshed) {
+    toast.add({
+      title: "Le profil n'a pas pu être actualisé. Rechargez la page.",
+      color: "warning",
+      icon: "i-lucide-info",
+    });
+  }
+}
 
 // --- Statut d'amitié (A3) : dérivé du bundle du store friendship, chargé
 // LAZY (gratuit si l'écran des amis ou le compte l'ont déjà chargé). Le
 // bloc n'est rendu que bundle en place : statut inconnu → silence, pas
-// d'écran d'erreur pour un bloc secondaire. Sur son propre profil, la
-// branche v-if="isSelfProfile" du hero rend ce bloc structurellement
-// inatteignable.
+// d'écran d'erreur pour un bloc secondaire. Réservé au profil d'autrui,
+// garanti par le `!isSelfProfile` explicite de sa branche : le v-if du hero
+// (« Modifier mes infos ») ne suffit plus depuis l'aperçu extérieur, qui le
+// désactive sur son propre profil.
 const friendshipStore = useFriendshipStore();
 const { friendshipBundle } = storeToRefs(friendshipStore);
 const { isActionPending } = friendshipStore;
@@ -110,10 +153,13 @@ async function requestFromProfile(displayName: string) {
   }
 }
 
+// Accepter ouvre le contenu d'un profil privé (règle A2 : ami accepté) :
+// le bundle est rafraîchi en place pour que stats et journal apparaissent.
 async function acceptFromProfile() {
   try {
     await friendshipStore.acceptFriendship(userId.value);
     showFriendshipEstablished();
+    void refreshProfile();
   } catch (error) {
     showFriendshipError(error, "accept");
   }
@@ -139,11 +185,14 @@ async function cancelFromProfile() {
 
 const isRemovalModalOpen = ref(false);
 
+// Retirer peut refermer le contenu (profil privé) : même rafraîchissement
+// en place, la modale fermée d'abord.
 async function confirmRemovalFromProfile() {
   try {
     await friendshipStore.removeFriendship(userId.value);
     isRemovalModalOpen.value = false;
     showQuietConfirmation();
+    void refreshProfile();
   } catch (error) {
     showFriendshipError(error, "remove");
   }
@@ -154,15 +203,16 @@ async function confirmRemovalFromProfile() {
 // appeler le store trop tôt sortirait silencieusement (sa garde) et la page
 // afficherait « Profil introuvable » pour un simple état d'attente. On ne
 // charge que sur transition réelle : premier passage identifié, résolution
-// de l'identité, changement de profil ou de compte — jamais deux fois pour
-// la même paire. isLoadingProfile (init true) reste affiché tant qu'aucun
+// de l'identité, changement de profil, de compte ou de point de vue (entrée
+// ou sortie de l'aperçu) — jamais deux fois pour le même triplet.
+// isLoadingProfile (init true) reste affiché tant qu'aucun
 // chargement réel n'a tranché ; sans session, la redirection /login du
 // module fournit l'état terminal ; avec session mais identité indisponible
 // (résolution en échec), c'est la branche d'erreur qui tranche (watcher plus
 // bas). immediate : couvre le mount ET la réutilisation du composant sur
 // changement de param de route.
 watch(
-  [userId, myUserId],
+  [userId, myUserId, viewpoint],
   (current, previous) => {
     // Garde amont, distincte du prédicat de timing : un id qui n'a pas la
     // forme d'un UUID ne peut désigner personne — introuvable immédiat,
@@ -200,16 +250,24 @@ async function retryLoadProfile(): Promise<void> {
 
 // Accès dérivés non-null-safe : permettent à vue-tsc de narrower dans le
 // template (v-if="profile") sans assertions, et fournissent stats/results à
-// leur état par défaut quand le bundle est absent.
-const profile = computed(() => currentProfileBundle.value?.profile ?? null);
-const stats = computed(() => currentProfileBundle.value?.stats ?? null);
-const results = computed(() => currentProfileBundle.value?.results ?? []);
-const freeMatches = computed(
-  () => currentProfileBundle.value?.freeMatches ?? [],
+// leur état par défaut quand le bundle est absent ou restreint. Les trois
+// formes du bundle (kind) sont lues ici, une fois : `profile` existe dès
+// que la base a trouvé une ligne (forme complète ou restreinte), le
+// contenu n'existe que dans la forme complète.
+const profile = computed(() => {
+  const bundle = currentProfileBundle.value;
+  return bundle !== null && bundle.kind !== "not_found" ? bundle.profile : null;
+});
+const fullBundle = computed(() =>
+  currentProfileBundle.value?.kind === "full" ? currentProfileBundle.value : null,
 );
-const freeMatchStats = computed(
-  () => currentProfileBundle.value?.freeMatchStats ?? null,
+const contentIsRestricted = computed(
+  () => currentProfileBundle.value?.kind === "restricted",
 );
+const stats = computed(() => fullBundle.value?.stats ?? null);
+const results = computed(() => fullBundle.value?.results ?? []);
+const freeMatches = computed(() => fullBundle.value?.freeMatches ?? []);
+const freeMatchStats = computed(() => fullBundle.value?.freeMatchStats ?? null);
 
 // Journal unifié (S5) : tournois et matchs libres mêlés, triés par jour de
 // jeu (fusion à l'affichage, cf. utils/journal.ts), plus un filtre par
@@ -273,18 +331,25 @@ function playerNamesFor(players: Teammate[]): string[] {
 
 // Mémorise l'origine AVANT la navigation vers un tournoi ou un match
 // libre, pour que sa flèche retour ramène ici (et survive à un F5, cf.
-// useBackOrigin). Un seul handler, sans domaine : la branche du journal
-// passe le chemin de base du contexte de destination. Ignoré si le clic
-// ouvre un nouvel onglet (modificateur ou bouton non principal) :
-// sessionStorage n'y est pas partagé, écrire ne ferait que polluer
-// l'onglet courant d'une origine jamais consommée.
+// useBackOrigin) — ICI y compris l'aperçu extérieur s'il est actif : on
+// revient dans l'aperçu, on n'en sort pas par accident. Un seul handler,
+// sans domaine : la branche du journal passe le chemin de base du contexte
+// de destination. Ignoré si le clic ouvre un nouvel onglet (modificateur ou
+// bouton non principal) : sessionStorage n'y est pas partagé, écrire ne
+// ferait que polluer l'onglet courant d'une origine jamais consommée.
 const { rememberOrigin, readOrigin, clearOrigin } = useBackOrigin();
+
+const thisPagePath = computed(() =>
+  isPreviewingAsStranger.value
+    ? `/profile/${userId.value}?preview=stranger`
+    : `/profile/${userId.value}`,
+);
 
 function rememberJournalOrigin(event: MouseEvent, contextBasePath: string): void {
   const opensOutsideThisTab =
     event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0;
   if (opensOutsideThisTab) return;
-  rememberOrigin(contextBasePath, `/profile/${userId.value}`);
+  rememberOrigin(contextBasePath, thisPagePath.value);
 }
 
 // Flèche retour contextuelle (A3) : arriver depuis l'écran des amis fait
@@ -312,14 +377,27 @@ onBeforeRouteLeave((to) => {
   }
 });
 
+// En aperçu, le header dit qu'on est en aperçu et ramène au compte (d'où
+// l'on est venu) ; le bandeau de la page offre la même sortie.
+const PREVIEW_BACK_LINK = { label: "Compte", to: "/account" };
+const PREVIEW_EXIT_ACTIONS: ButtonProps[] = [
+  {
+    label: "Quitter l'aperçu",
+    to: "/account",
+    color: "neutral",
+    variant: "outline",
+    class: "h-11 justify-center font-disp text-[12.5px] font-extrabold tracking-[0.03em] uppercase",
+  },
+];
+
 // Config header. watchEffect pour suivre le pseudo (arrive après le mount).
 const { set: setHeader } = useAppHeader();
 watchEffect(() => {
   setHeader({
     mode: "interne",
-    kicker: "Profil",
+    kicker: isPreviewingAsStranger.value ? "Aperçu" : "Profil",
     title: profile.value?.displayName ?? "Profil",
-    back: headerBackLink.value,
+    back: isPreviewingAsStranger.value ? PREVIEW_BACK_LINK : headerBackLink.value,
   });
 });
 
@@ -384,7 +462,31 @@ useHead({
     </div>
 
     <div v-else-if="profile" class="space-y-6">
-      <!-- Hero : boule + pseudo + (soi uniquement) bouton Modifier -->
+      <!-- Aperçu extérieur (C6) : ce bundle a été composé par la base comme
+           pour un tiers. Le bandeau dit qu'on est en aperçu et permet d'en
+           sortir. « Modifier mes infos » est masqué (une affordance de
+           propriétaire n'a pas sa place dans la vue d'un tiers) ; le bloc
+           amitié ne s'applique pas à soi. -->
+      <UAlert
+        v-if="isPreviewingAsStranger"
+        icon="i-lucide-eye"
+        color="neutral"
+        variant="soft"
+        title="Aperçu extérieur"
+        description="Ce que voit un joueur qui n'est pas votre ami."
+        :actions="PREVIEW_EXIT_ACTIONS"
+        :ui="{
+          root: 'rounded-(--pk-r-card) bg-(--pk-card) px-3.5 py-3',
+          icon: 'size-5 text-primary',
+          title: 'font-disp text-[13px] font-extrabold text-(--pk-ink)',
+          description: 'font-sans text-[13px] text-(--pk-subtle) opacity-100',
+        }"
+      />
+
+      <!-- Hero : boule + pseudo + (soi uniquement, hors aperçu) bouton
+           Modifier. Rendu tel quel sur un profil masqué : le pseudo et
+           l'avatar restent visibles, et c'est ici qu'on demande la personne
+           en ami. -->
       <div class="flex flex-col items-center gap-3 pt-2 text-center">
         <BouleAvatar
           tone="gold"
@@ -399,7 +501,7 @@ useHead({
           {{ profile.displayName }}
         </h2>
         <UButton
-          v-if="isSelfProfile"
+          v-if="isSelfProfile && !isPreviewingAsStranger"
           to="/account"
           color="primary"
           variant="soft"
@@ -413,7 +515,7 @@ useHead({
         <!-- Statut d'amitié + action (A3) — profil d'autrui seulement, et
              seulement une fois le bundle d'amitié en place (statut inconnu
              → silence). -->
-        <template v-else-if="friendshipBundle !== null">
+        <template v-else-if="!isSelfProfile && friendshipBundle !== null">
           <div
             v-if="friendshipStatus === 'friends'"
             class="flex items-center gap-2.5"
@@ -491,9 +593,35 @@ useHead({
         </template>
       </div>
 
-      <ProfileStatsCards :stats="stats" :free-match-stats="freeMatchStats" />
+      <!-- Profil masqué (A2/C4) : la base n'a renvoyé que le pseudo. Une
+           explication remplace stats et journal (les deux blocs suivants
+           sont sous v-if="!contentIsRestricted") — page lisible, distincte
+           de « Profil introuvable » (branche séparée : ce profil existe). Le
+           mot « privé » est ici voulu par la spec ; la règle des entrées du
+           journal (ne pas signaler un objet privé) concerne les objets, pas
+           l'agrégat. -->
+      <UAlert
+        v-if="contentIsRestricted"
+        icon="i-lucide-lock"
+        color="neutral"
+        variant="soft"
+        title="Profil privé"
+        description="Seuls ses amis voient ses statistiques et son journal."
+        :ui="{
+          root: 'rounded-(--pk-r-card) bg-(--pk-card) px-3.5 py-3',
+          icon: 'size-5 text-primary',
+          title: 'font-disp text-[13px] font-extrabold text-(--pk-ink)',
+          description: 'font-sans text-[13px] text-(--pk-subtle) opacity-100',
+        }"
+      />
 
-      <section class="space-y-3">
+      <ProfileStatsCards
+        v-if="!contentIsRestricted"
+        :stats="stats"
+        :free-match-stats="freeMatchStats"
+      />
+
+      <section v-if="!contentIsRestricted" class="space-y-3">
         <h2
           class="font-disp text-[10px] font-extrabold tracking-widest uppercase text-(--pk-muted)"
         >

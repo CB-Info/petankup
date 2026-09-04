@@ -4,8 +4,10 @@ import { flushPromises } from '@vue/test-utils'
 import type { TournamentRepository } from '../../app/repositories/TournamentRepository'
 import type {
   AccountMatch,
+  MyProfile,
   TournamentMatch,
   Profile,
+  ProfileVisibility,
   Team,
   Tournament,
   TournamentMember,
@@ -86,9 +88,10 @@ import { useIdentityStore } from '../../app/stores/identity'
 
 type ProfileMockRepository = TournamentRepository & {
   __profiles: Profile[]
-  __getProfileByIdSpy: ReturnType<typeof vi.fn>
+  __getMyProfileSpy: ReturnType<typeof vi.fn>
   __getProfilesByIdsSpy: ReturnType<typeof vi.fn>
   __updateMyProfileSpy: ReturnType<typeof vi.fn>
+  __updateMyProfileVisibilitySpy: ReturnType<typeof vi.fn>
   __findAccountByDisplayNameSpy: ReturnType<typeof vi.fn>
 }
 
@@ -99,17 +102,27 @@ type ProfileMockRepository = TournamentRepository & {
 // fournit ses propres listes.
 function createMockRepository(overrides: Partial<{
   initialProfiles: Profile[]
-  getProfileById: (id: string) => Promise<Profile | undefined>
+  // Réglage de confidentialité servi par getMyProfile (public par défaut,
+  // comme la base).
+  initialVisibility: ProfileVisibility
+  getMyProfile: () => Promise<MyProfile | undefined>
   getProfilesByIds: (ids: string[]) => Promise<Profile[]>
   updateMyProfile: (userId: string, displayName: string) => Promise<Profile>
+  updateMyProfileVisibility: (userId: string, visibility: ProfileVisibility) => Promise<void>
   findAccountByDisplayName: (displayName: string) => Promise<AccountMatch | undefined>
   getAllTournaments: () => Promise<Tournament[]>
   getMyMemberships: (userId: string) => Promise<TournamentMember[]>
 }> = {}): ProfileMockRepository {
   const profiles: Profile[] = [...(overrides.initialProfiles ?? [])]
 
-  const defaultGetProfileById = async (id: string): Promise<Profile | undefined> =>
-    profiles.find(profile => profile.id === id)
+  // Comme la RPC : la ligne de l'identité du JETON (celle que voit la base),
+  // pas d'un id demandé — avec son réglage.
+  const defaultGetMyProfile = async (): Promise<MyProfile | undefined> => {
+    const tokenUserId = stubUserRef.value?.sub ?? stubClaimsSub.value
+    const mine = profiles.find(profile => profile.id === tokenUserId)
+    if (mine === undefined) return undefined
+    return { profile: mine, visibility: overrides.initialVisibility ?? 'public' }
+  }
 
   const defaultGetProfilesByIds = async (ids: string[]): Promise<Profile[]> => {
     const idSet = new Set(ids)
@@ -134,9 +147,12 @@ function createMockRepository(overrides: Partial<{
     return updated
   }
 
-  const getProfileByIdSpy = vi.fn(overrides.getProfileById ?? defaultGetProfileById)
+  const getMyProfileSpy = vi.fn(overrides.getMyProfile ?? defaultGetMyProfile)
   const getProfilesByIdsSpy = vi.fn(overrides.getProfilesByIds ?? defaultGetProfilesByIds)
   const updateMyProfileSpy = vi.fn(overrides.updateMyProfile ?? defaultUpdateMyProfile)
+  const updateMyProfileVisibilitySpy = vi.fn(
+    overrides.updateMyProfileVisibility ?? (async () => {}),
+  )
 
   // Recherche par pseudo exact : même normalisation que la base
   // (lower(trim)) sur les profils in-memory.
@@ -175,9 +191,10 @@ function createMockRepository(overrides: Partial<{
       throw new InviteMemberError('unknown')
     },
     removeMember: async () => {},
-    getProfileById: getProfileByIdSpy,
+    getMyProfile: getMyProfileSpy,
     getProfilesByIds: getProfilesByIdsSpy,
     updateMyProfile: updateMyProfileSpy,
+    updateMyProfileVisibility: updateMyProfileVisibilitySpy,
     findAccountByDisplayName: findAccountByDisplayNameSpy,
     getFriendships: async () => ({ friends: [], received: [], sent: [] }),
     requestFriendship: async () => 'pending' as const,
@@ -186,9 +203,10 @@ function createMockRepository(overrides: Partial<{
     cancelFriendshipRequest: async () => {},
     removeFriendship: async () => {},
     __profiles: profiles,
-    __getProfileByIdSpy: getProfileByIdSpy,
+    __getMyProfileSpy: getMyProfileSpy,
     __getProfilesByIdsSpy: getProfilesByIdsSpy,
     __updateMyProfileSpy: updateMyProfileSpy,
+    __updateMyProfileVisibilitySpy: updateMyProfileVisibilitySpy,
     __findAccountByDisplayNameSpy: findAccountByDisplayNameSpy,
   }
   return repo
@@ -202,6 +220,13 @@ function makeProfile(overrides: Partial<Profile> = {}): Profile {
     updatedAt: NOW,
     ...overrides,
   }
+}
+
+function makeMyProfile(
+  profileOverrides: Partial<Profile> = {},
+  visibility: ProfileVisibility = 'public',
+): MyProfile {
+  return { profile: makeProfile(profileOverrides), visibility }
 }
 
 beforeEach(() => {
@@ -238,7 +263,7 @@ describe('useProfileStore — loadCurrentProfile', () => {
 
     await store.loadCurrentProfile()
 
-    expect(repo.__getProfileByIdSpy).not.toHaveBeenCalled()
+    expect(repo.__getMyProfileSpy).not.toHaveBeenCalled()
     expect(store.currentProfile).toBeNull()
     expect(store.hasFetchedCurrentProfile).toBe(false)
   })
@@ -255,6 +280,62 @@ describe('useProfileStore — loadCurrentProfile', () => {
     expect(store.currentProfile).toEqual(profile)
     expect(store.profileById[STUB_USER_ID]).toEqual(profile)
     expect(store.hasFetchedCurrentProfile).toBe(true)
+    expect(store.lastLoadCurrentProfileError).toBeNull()
+  })
+
+  it('hydrates the privacy setting from the same request (public by default, private when set)', async () => {
+    mockRepositoryRef.current = createMockRepository({ initialProfiles: [makeProfile()] })
+    const store = useProfileStore()
+    await flushPromises()
+
+    await store.loadCurrentProfile()
+    expect(store.currentProfileVisibility).toBe('public')
+
+    setActivePinia(createPinia())
+    mockRepositoryRef.current = createMockRepository({
+      initialProfiles: [makeProfile()],
+      initialVisibility: 'private',
+    })
+    const privateStore = useProfileStore()
+    await flushPromises()
+
+    await privateStore.loadCurrentProfile()
+    expect(privateStore.currentProfileVisibility).toBe('private')
+  })
+
+  it('keeps the setting OUT of currentProfile and of the profile cache (a Profile never carries it)', async () => {
+    mockRepositoryRef.current = createMockRepository({
+      initialProfiles: [makeProfile()],
+      initialVisibility: 'private',
+    })
+    const store = useProfileStore()
+    await flushPromises()
+
+    await store.loadCurrentProfile()
+
+    expect(Object.keys(store.currentProfile!).sort()).toEqual(
+      ['createdAt', 'displayName', 'id', 'updatedAt'],
+    )
+    expect(Object.keys(store.profileById[STUB_USER_ID]!).sort()).toEqual(
+      ['createdAt', 'displayName', 'id', 'updatedAt'],
+    )
+  })
+
+  it('ignores a row that is not the requested identity (token switched mid-flight)', async () => {
+    // La RPC répond pour le jeton courant : si un changement de compte
+    // s'intercale, la ligne livrée peut être celle d'un autre — rien n'est
+    // écrit, pas même une erreur.
+    mockRepositoryRef.current = createMockRepository({
+      getMyProfile: async () => makeMyProfile({ id: OTHER_USER_ID, displayName: 'Bob' }),
+    })
+    const store = useProfileStore()
+    await flushPromises()
+
+    await store.loadCurrentProfile()
+
+    expect(store.currentProfile).toBeNull()
+    expect(store.currentProfileVisibility).toBeNull()
+    expect(store.profileById[OTHER_USER_ID]).toBeUndefined()
     expect(store.lastLoadCurrentProfileError).toBeNull()
   })
 
@@ -277,7 +358,7 @@ describe('useProfileStore — loadCurrentProfile', () => {
   it('captures the repo error in lastLoadCurrentProfileError without throwing', async () => {
     const repoError = new Error('boom')
     mockRepositoryRef.current = createMockRepository({
-      getProfileById: async () => {
+      getMyProfile: async () => {
         throw repoError
       },
     })
@@ -295,22 +376,21 @@ describe('useProfileStore — loadCurrentProfile', () => {
   it('discards a late SUCCESS write when identity (resolvedUserId) changed during the await', async () => {
     // On fait varier l'identité via switchIdentityTo (cf. helper) puis on
     // relance loadCurrentProfile pour le nouvel userId. Chaque appel au
-    // mock getProfileById capture {userId, resolvers} ; le test résout
+    // mock getMyProfile capture ses resolvers ; le test résout
     // spécifiquement la 1ère pending pour exercer la garde.
     stubUserRef.value = null
     stubSessionRef.value = { access_token: 'tok' }
     stubClaimsSub.value = STUB_USER_ID
 
     type PendingCall = {
-      userId: string
-      resolve: (value: Profile | undefined) => void
+      resolve: (value: MyProfile | undefined) => void
       reject: (reason: Error) => void
     }
     const pendingCalls: PendingCall[] = []
     mockRepositoryRef.current = createMockRepository({
-      getProfileById: (userId: string) =>
-        new Promise<Profile | undefined>((resolve, reject) => {
-          pendingCalls.push({ userId, resolve, reject })
+      getMyProfile: () =>
+        new Promise<MyProfile | undefined>((resolve, reject) => {
+          pendingCalls.push({ resolve, reject })
         }),
     })
 
@@ -319,7 +399,6 @@ describe('useProfileStore — loadCurrentProfile', () => {
     void store.loadCurrentProfile()
     await Promise.resolve()
     expect(pendingCalls).toHaveLength(1)
-    expect(pendingCalls[0]!.userId).toBe(STUB_USER_ID)
 
     // Bump l'identité vers OTHER_USER_ID, puis 2e loadCurrentProfile pour
     // ce nouvel userId (pending #2 — pas dédupliqué : autre user).
@@ -329,7 +408,7 @@ describe('useProfileStore — loadCurrentProfile', () => {
     expect(pendingCalls).toHaveLength(2)
 
     // Résoudre tardivement le 1er appel avec un profil legacy.
-    pendingCalls[0]!.resolve(makeProfile({ id: STUB_USER_ID }))
+    pendingCalls[0]!.resolve(makeMyProfile({ id: STUB_USER_ID }))
     await flushPromises()
 
     // Vue depuis l'extérieur : currentProfile est null, profileById
@@ -346,15 +425,14 @@ describe('useProfileStore — loadCurrentProfile', () => {
     stubClaimsSub.value = STUB_USER_ID
 
     type PendingCall = {
-      userId: string
-      resolve: (value: Profile | undefined) => void
+      resolve: (value: MyProfile | undefined) => void
       reject: (reason: Error) => void
     }
     const pendingCalls: PendingCall[] = []
     mockRepositoryRef.current = createMockRepository({
-      getProfileById: (userId: string) =>
-        new Promise<Profile | undefined>((resolve, reject) => {
-          pendingCalls.push({ userId, resolve, reject })
+      getMyProfile: () =>
+        new Promise<MyProfile | undefined>((resolve, reject) => {
+          pendingCalls.push({ resolve, reject })
         }),
     })
 
@@ -381,10 +459,10 @@ describe('useProfileStore — loadCurrentProfile', () => {
 
 describe('useProfileStore — loadCurrentProfile idempotence', () => {
   it('shares an in-flight request and never refetches a profile already loaded for the same user', async () => {
-    let resolveRepo!: (value: Profile | undefined) => void
+    let resolveRepo!: (value: MyProfile | undefined) => void
     const repo = createMockRepository({
-      getProfileById: () =>
-        new Promise<Profile | undefined>((resolve) => {
+      getMyProfile: () =>
+        new Promise<MyProfile | undefined>((resolve) => {
           resolveRepo = resolve
         }),
     })
@@ -398,15 +476,15 @@ describe('useProfileStore — loadCurrentProfile idempotence', () => {
     const first = store.loadCurrentProfile()
     const second = store.loadCurrentProfile()
     await Promise.resolve()
-    expect(repo.__getProfileByIdSpy).toHaveBeenCalledTimes(1)
+    expect(repo.__getMyProfileSpy).toHaveBeenCalledTimes(1)
 
-    resolveRepo(makeProfile())
+    resolveRepo(makeMyProfile())
     await Promise.all([first, second])
     expect(store.currentProfile?.id).toBe(STUB_USER_ID)
 
     // Profil en place pour ce user : plus aucune requête.
     await store.loadCurrentProfile()
-    expect(repo.__getProfileByIdSpy).toHaveBeenCalledTimes(1)
+    expect(repo.__getMyProfileSpy).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -585,6 +663,88 @@ describe('useProfileStore — updateMyProfile', () => {
   })
 })
 
+describe('useProfileStore — updateMyProfileVisibility', () => {
+  it('writes the setting for the authenticated user and mirrors it locally', async () => {
+    const repo = createMockRepository({ initialProfiles: [makeProfile()] })
+    mockRepositoryRef.current = repo
+
+    const store = useProfileStore()
+    await flushPromises()
+    await store.loadCurrentProfile()
+    expect(store.currentProfileVisibility).toBe('public')
+
+    await store.updateMyProfileVisibility('private')
+
+    expect(repo.__updateMyProfileVisibilitySpy).toHaveBeenCalledWith(STUB_USER_ID, 'private')
+    expect(store.currentProfileVisibility).toBe('private')
+    // L'identité et le cache ne bougent pas : un Profile ne porte pas le réglage.
+    expect(Object.keys(store.currentProfile!).sort()).toEqual(
+      ['createdAt', 'displayName', 'id', 'updatedAt'],
+    )
+  })
+
+  it('throws "Aucun utilisateur authentifié" when there is no auth and never calls the repo', async () => {
+    stubUserRef.value = null
+    stubSessionRef.value = null
+    stubClaimsSub.value = null
+
+    const repo = createMockRepository()
+    mockRepositoryRef.current = repo
+    const store = useProfileStore()
+    await flushPromises()
+
+    await expect(store.updateMyProfileVisibility('private')).rejects.toThrow(
+      'Aucun utilisateur authentifié',
+    )
+    expect(repo.__updateMyProfileVisibilitySpy).not.toHaveBeenCalled()
+  })
+
+  it('propagates a repo error and leaves the local setting untouched', async () => {
+    const repoError = new Error('profile visibility update matched 0 row')
+    mockRepositoryRef.current = createMockRepository({
+      initialProfiles: [makeProfile()],
+      updateMyProfileVisibility: async () => {
+        throw repoError
+      },
+    })
+
+    const store = useProfileStore()
+    await flushPromises()
+    await store.loadCurrentProfile()
+
+    await expect(store.updateMyProfileVisibility('private')).rejects.toBe(repoError)
+    expect(store.currentProfileVisibility).toBe('public')
+  })
+
+  it('discards the local mirror when identity changed during the await', async () => {
+    stubUserRef.value = null
+    stubSessionRef.value = { access_token: 'tok' }
+    stubClaimsSub.value = STUB_USER_ID
+
+    let resolveWrite!: () => void
+    mockRepositoryRef.current = createMockRepository({
+      initialProfiles: [makeProfile()],
+      updateMyProfileVisibility: () =>
+        new Promise<void>((resolve) => {
+          resolveWrite = resolve
+        }),
+    })
+
+    const store = useProfileStore()
+    await flushPromises()
+    await store.loadCurrentProfile()
+
+    const inflight = store.updateMyProfileVisibility('private')
+    await Promise.resolve()
+    await switchIdentityTo(OTHER_USER_ID)
+
+    resolveWrite()
+    await inflight
+
+    expect(store.currentProfileVisibility).toBe('public')
+  })
+})
+
 describe('useProfileStore — reset on logout', () => {
   // Note : la transition login → logout repose sur la réactivité de
   // session.value, qui passe par useSupabaseSession() — un POJO
@@ -608,6 +768,7 @@ describe('useProfileStore — reset on logout', () => {
     await flushPromises()
 
     expect(store.currentProfile).toBeNull()
+    expect(store.currentProfileVisibility).toBeNull()
     expect(store.profileById).toEqual({})
     expect(store.hasFetchedCurrentProfile).toBe(false)
     expect(store.lastLoadCurrentProfileError).toBeNull()
@@ -635,7 +796,7 @@ describe('useProfileStore — non-regression with tournaments loading', () => {
     const profileError = new Error('profile boom')
 
     mockRepositoryRef.current = createMockRepository({
-      getProfileById: async () => {
+      getMyProfile: async () => {
         throw profileError
       },
       getAllTournaments: async () => [tournament],
@@ -661,7 +822,7 @@ describe('useProfileStore — non-regression with tournaments loading', () => {
     const tournament = makeTournament()
 
     mockRepositoryRef.current = createMockRepository({
-      getProfileById: async () => {
+      getMyProfile: async () => {
         throw new Error('profile boom')
       },
       getAllTournaments: async () => [tournament],
