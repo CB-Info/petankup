@@ -38,7 +38,7 @@ C'est le modèle des réseaux sociaux grand public : n'importe qui peut ouvrir u
 
 **Écran dédié** : sa liste d'amis, les demandes reçues, les demandes envoyées. Accessible depuis la page de compte.
 
-**La recherche d'un joueur** se fait sur ce même écran, par un champ intégré : un seul endroit pour tout ce qui touche aux relations. C'est le **seul moyen d'entrer en relation** avec quelqu'un — sans elle, aucune première demande n'est possible.
+**La recherche d'un joueur** se fait sur ce même écran, par un champ intégré : un seul endroit pour tout ce qui touche aux relations. C'est le **seul moyen d'entrer en relation** avec un joueur qu'aucun tournoi ni match ne relie à soi — sans elle, cette première demande serait impossible.
 
 **Un compteur sur l'entrée « Amis »** de la page de compte signale les demandes reçues en attente. Pas de mécanisme d'alerte dédié : un simple nombre à côté du libellé. Sans lui, une demande resterait invisible — il n'existe aucune notification.
 
@@ -64,7 +64,7 @@ C'est le modèle des réseaux sociaux grand public : n'importe qui peut ouvrir u
 
 **Ce qui change** : l'accès à la page n'est plus restreint. Tout utilisateur connecté peut ouvrir n'importe quel profil ; il n'y verra que le pseudo si celui-ci est privé et qu'il n'est pas ami.
 
-⚠️ **Point ouvert** : l'accès devient libre, mais il n'existe **aucun annuaire** — on arrive sur un profil par un tournoi, un match ou un lien direct. Ouvrir l'accès rend les profils _ouvrables_, pas _trouvables_. Une recherche d'utilisateurs sera peut-être souhaitable — hors périmètre.
+⚠️ **Point ouvert** : l'accès devient libre, mais il n'existe **aucun annuaire**. Trois chemins mènent à un profil : un tournoi, un match, ou la recherche par pseudo exact (l'écran des amis, livré par ce chantier). Impossible de découvrir quelqu'un dont on ignore le pseudo : ouvrir l'accès rend les profils _ouvrables_, pas _trouvables_. Une recherche plus ouverte serait une capacité nouvelle, avec ses propres questions de confidentialité — hors périmètre.
 
 ---
 
@@ -101,7 +101,7 @@ Et le produit a une vocation sociale : un parcours de joueur est fait de rencont
 - **Blocage** d'un utilisateur (A6).
 - **Notifications** — aucune notification n'est prévue, ni pour une demande, ni pour une acceptation, ni pour un retrait.
 - **Système d'invitation généralisé** aux tournois et matchs libres — chantier distinct, qui pourra s'appuyer sur l'amitié.
-- **Recherche d'utilisateurs / annuaire** — la découverte des profils reste par lien, tournoi ou match.
+- **Annuaire / recherche ouverte** — la découverte des profils reste par tournoi, match ou pseudo exact (point ouvert du §3).
 
 ---
 
@@ -110,4 +110,4 @@ Et le produit a une vocation sociale : un parcours de joueur est fait de rencont
 1. **Conception du modèle de données** : la relation d'amitié et ses états, le réglage de confidentialité, et l'extension de la règle qui décide du contenu d'un profil.
 2. **Les tickets de base** puis **les tickets d'interface** : écran de gestion des amis, réglage dans le compte, aperçu extérieur, statut et demande depuis un profil.
 
-**Dette documentaire à corriger au passage** : `CLAUDE.md` affirme encore que les profils sont tous publics entre utilisateurs authentifiés. C'est faux depuis longtemps, et ce chantier le rend franchement trompeur.
+**Dette documentaire** — soldée par le ticket de base de la confidentialité : `CLAUDE.md` affirmait que les profils étaient tous publics entre utilisateurs authentifiés ; il décrit désormais la page ouverte et le contenu protégé.

@@ -1,8 +1,11 @@
 # Cahier des charges — Application de gestion de tournois de pétanque
 
 > Documents produit versionnés : `docs/roadmap.md` (source de vérité de
-> la trajectoire produit) · `docs/spec_match_individuel.md` (spec du
-> match libre, Horizon 2).
+> la trajectoire produit) · `docs/spec_match_individuel.md` et
+> `docs/conception_matchs_libres.md` (le match libre, Horizon 2) ·
+> `docs/spec_amitie_confidentialite.md` et
+> `docs/conception_amitie_confidentialite.md` (l'amitié et la
+> confidentialité du profil).
 
 ## 1. Contexte
 
@@ -62,13 +65,13 @@ Chaque joueur ayant un compte garde une trace persistante de ses
 tournois et de ses statistiques — sans que cela alourdisse
 l'expérience de l'organisateur.
 
-Au-delà du tournoi, la vision inclut le **match libre** *(spécifié,
-non construit — Horizon 2, voir `docs/spec_match_individuel.md`)* :
-une partie jouée hors tournoi, enregistrée par un participant à
-compte, avec des joueurs à compte et/ou libres, dans tous les formats
-(tête-à-tête, doublette, triplette). Les statistiques du profil
-distingueront alors « en tournoi » et « en match libre », avec un
-total combinable.
+Au-delà du tournoi, la vision inclut le **match libre** *(livré —
+Horizon 2, voir `docs/spec_match_individuel.md` et
+`docs/conception_matchs_libres.md`)* : une partie jouée hors tournoi,
+enregistrée par un participant à compte, avec des joueurs à compte
+et/ou libres, dans tous les formats (tête-à-tête, doublette,
+triplette). Les statistiques du profil distinguent « en tournoi » et
+« en match libre », avec un total combinable.
 
 ## 4. Périmètre fonctionnel
 
@@ -105,9 +108,8 @@ total combinable.
 
 - Ajout d'équipes (1 à 3 joueurs par équipe ; doublette par défaut).
 - Chaque joueur d'une équipe est soit :
-  - un **joueur lié à un compte** (son pseudo s'affiche ; le lien vers
-    son profil depuis l'équipe est *prévu, non construit* — roadmap
-    H1.d),
+  - un **joueur lié à un compte** (son pseudo s'affiche et renvoie vers
+    son profil),
   - un **joueur libre** (nom saisi à la main, pas de profil). Cette
     possibilité est **durable** : elle reste utile pour les joueurs
     occasionnels qui ne souhaitent pas créer de compte.
@@ -136,27 +138,63 @@ total combinable.
 - Récapitulatif du tournoi (date, lieu, nombre d'équipes).
 - Tableau du classement final.
 
+#### Match libre
+
+- Une partie jouée hors tournoi, enregistrée en une fois par un
+  participant à compte : deux camps de même effectif (1 à 3 joueurs,
+  avec ou sans compte), le score, la date de jeu (jamais future) et la
+  visibilité.
+- Le match naît terminé et reste immuable : une erreur se corrige en
+  supprimant le match (par son créateur seul) et en le ressaisissant.
+- Un match privé n'est visible que de ses participants à compte ; un
+  match public, de tout utilisateur connecté.
+- Les statistiques de match libre sont matérialisées à
+  l'enregistrement, séparément de celles des tournois, et combinées à
+  l'affichage.
+
 #### Historique et profil joueur
 
 - **Page d'accueil** segmentée en trois sections : « Tous les
   tournois » (les tournois de l'utilisateur), « Partagés avec moi »,
   « Tournois publics ».
-- **Profil joueur** consultable par tout utilisateur connecté,
-  affichant :
+- **Profil joueur** dont la page est ouverte à tout utilisateur
+  connecté ; son contenu s'affiche selon le réglage de confidentialité
+  du propriétaire et l'amitié (voir §8) — sinon le pseudo seul. Il
+  affiche :
   - le pseudo,
-  - les statistiques agrégées (tournois joués / gagnés / podiums ;
-    matchs joués / victoires / défaites ; points marqués /
-    encaissés / différentiel),
-  - le **journal de bord** (liste des tournois terminés auxquels il
-    a participé, avec son équipe, son rang final et le résumé du
-    score). Les coéquipiers sont fournis par la base et chargés par
-    l'application, mais **pas encore affichés** *(prévu — roadmap
-    H1.d)*,
-  - la date de son dernier tournoi.
-- Avatars cliquables comme points d'entrée vers les profils depuis la
-  modale « Gérer les invités ». L'extension aux équipes d'un tournoi
-  et au journal d'un profil est *prévue, non construite* (roadmap
-  H1.d).
+  - les statistiques agrégées, en tournoi et en match libre, avec le
+    total combiné (tournois joués / gagnés / podiums ; matchs joués /
+    victoires / défaites ; points marqués / encaissés / différentiel),
+  - le **journal de bord** unifié : tournois terminés et matchs libres
+    dans l'ordre chronologique, avec un filtre par type. Pour un
+    tournoi : son équipe, ses coéquipiers, son rang final et le résumé
+    du score ; pour un match libre : le score et les joueurs. Une
+    entrée n'est un lien que si le visiteur peut ouvrir le tournoi ou
+    le match.
+
+  La date de son dernier tournoi est conservée avec ses statistiques
+  mais n'est pas affichée.
+- Points d'entrée vers un profil : les avatars de la modale « Gérer
+  les invités », les joueurs liés à un compte sur les cartes d'équipe
+  d'un tournoi, les listes et le résultat de recherche de l'écran
+  « Amis ».
+
+#### Amis et confidentialité du profil
+
+- Relation d'amitié mutuelle : demandée par l'un (par pseudo exact
+  depuis l'écran « Amis », ou depuis le profil de la personne),
+  acceptée par l'autre. Refuser, annuler sa propre demande et retirer
+  un ami sont possibles à tout moment, sans trace ni notification.
+- Écran « Amis » : la liste des amis, les demandes reçues, les
+  demandes envoyées, et le champ de recherche par pseudo exact.
+  Accessible depuis « Mon compte », dont l'entrée affiche le nombre de
+  demandes reçues en attente.
+- Réglage de confidentialité du profil depuis « Mon compte » : public
+  (par défaut) ou privé, avec une explication de ce que chaque valeur
+  change ; et un aperçu du profil tel qu'un non-ami le voit.
+- Sur un profil privé, un non-ami voit le pseudo et l'avatar, une
+  explication à la place des statistiques et du journal, et peut
+  demander la personne en ami.
 
 ### 4.2 Hors scope V1
 
@@ -164,14 +202,11 @@ Ne font pas partie de la première version :
 
 - chat, notifications push,
 - export PDF, partage social,
-- multi-format de tournoi (élimination directe, poules + finales).
+- multi-format de tournoi (élimination directe, poules + finales),
+- blocage d'un utilisateur (reporté à l'Horizon 3).
 
-Le **match libre** (partie jouée hors tournoi) est *spécifié mais non
-construit* — Horizon 2, voir `docs/spec_match_individuel.md`.
-
-Une évolution communautaire (système d'amis, visibilité fine des
-profils, statistiques de confrontation, duos préférés, gamification)
-viendra plus tard, après le MVP.
+Une évolution communautaire plus large (statistiques de confrontation,
+duos préférés, gamification) viendra plus tard, après le MVP.
 
 ## 5. Hypothèses de départ
 
@@ -183,8 +218,10 @@ viendra plus tard, après le MVP.
 - Le besoin principal est la saisie rapide et le calcul automatique
   pendant le tournoi.
 - La priorité absolue est la lisibilité sur téléphone.
-- Les profils sont tous publics entre utilisateurs authentifiés en
-  V1 ; une visibilité plus fine viendra plus tard.
+- Un profil est **public par défaut** ; son propriétaire peut le passer
+  en **privé** depuis « Mon compte ». La page d'un profil est ouverte à
+  tout utilisateur connecté ; c'est son contenu (statistiques, journal)
+  qui est protégé, en base.
 
 ## 6. Utilisateurs cibles
 
@@ -204,7 +241,15 @@ peut être inscrite dans une équipe par l'organisateur.
 ### Utilisateur connecté
 
 Tout utilisateur authentifié peut consulter en lecture les tournois
-publics ainsi que les profils des autres joueurs.
+publics, les matchs libres publics, et la page de profil des autres
+joueurs — dont le contenu dépend de leur réglage de confidentialité et
+de l'amitié (§8).
+
+### Ami
+
+Utilisateur connecté lié à un autre par une relation d'amitié
+mutuelle : demandée par l'un, acceptée par l'autre. Voit le contenu
+complet du profil de son ami, même privé.
 
 ### Joueur libre
 
@@ -273,19 +318,23 @@ appartient à un utilisateur unique.
 
 ### Consulter un profil
 
-1. Depuis la liste des invités d'un tournoi (modale « Gérer les
-   invités »), l'utilisateur tape sur un avatar. (Les mêmes points
-   d'entrée depuis une équipe ou un coéquipier du journal sont
-   *prévus, non construits* — roadmap H1.d.)
-2. Il atterrit sur le profil et voit le pseudo, les statistiques et
-   le journal de bord du joueur.
+1. L'utilisateur tape sur un joueur : un avatar de la modale « Gérer
+   les invités », un joueur lié à un compte sur une carte d'équipe, ou
+   une entrée de l'écran « Amis » (ami, demande, résultat de
+   recherche).
+2. Il atterrit sur le profil et voit le pseudo, puis — si le profil
+   est public, s'il en est l'ami ou le propriétaire — les statistiques
+   et le journal de bord. Sinon une explication remplace le contenu,
+   et il peut demander la personne en ami.
 
 ## 8. Règles métier
 
 ### Validation des scores (pétanque)
 
 - Les deux scores sont des entiers ≥ 0.
-- Au moins l'une des deux équipes doit avoir atteint 13 points.
+- Le vainqueur marque **exactement 13** ; le perdant entre 0 et 12
+  (règle stricte, appliquée aux matchs de tournoi comme aux matchs
+  libres, en base comme dans le composant de saisie).
 - Les deux scores doivent être différents (pas de match nul à la
   pétanque).
 - Le vainqueur est déduit du score le plus élevé.
@@ -339,6 +388,23 @@ entre les deux implémentations.
 - 1 à 50 caractères, après trim.
 - Modifiable à tout moment.
 
+### Confidentialité du profil et amitié
+
+- La page d'un profil est ouverte à tout utilisateur connecté. Son
+  **contenu** (statistiques, journal) est visible si le profil est
+  public, si le visiteur est un ami, ou s'il est le propriétaire ;
+  sinon le pseudo seul. Le filtrage est appliqué en base, jamais côté
+  interface.
+- Le réglage (public par défaut, privé) se modifie depuis « Mon
+  compte », avec une explication de ce qu'il change ; le propriétaire
+  peut voir son profil tel qu'un non-ami le voit (aperçu extérieur).
+- L'amitié est une relation mutuelle : demandée par l'un, acceptée par
+  l'autre. Cinq actions : demander (par pseudo exact, ou depuis un
+  profil), accepter, refuser, annuler sa demande, retirer. Le refus,
+  l'annulation et le retrait effacent la relation sans trace ; deux
+  demandes croisées valent acceptation.
+- Le nombre d'amis n'est affiché nulle part.
+
 ### Intégrité des données
 
 - Une équipe ne peut pas être dupliquée dans un même tournoi (nom).
@@ -354,7 +420,12 @@ entre les deux implémentations.
 ### Écrans
 
 - **Connexion** : Google ou magic link.
-- **Mon compte** : édition du pseudo, accès au profil public.
+- **Mon compte** : édition du pseudo, réglage de confidentialité du
+  profil (public / privé, confirmé par une modale qui explique le
+  changement) et aperçu extérieur, entrée « Amis » avec le nombre de
+  demandes reçues en attente, déconnexion, accès à son profil.
+- **Amis** : liste des amis, demandes reçues, demandes envoyées, champ
+  de recherche par pseudo exact.
 - **Page d'accueil** : trois sections de tournois (Tous les tournois,
   Partagés avec moi, Tournois publics) + bouton de création.
 - **Création de tournoi** : formulaire.
@@ -362,8 +433,14 @@ entre les deux implémentations.
   modales de gestion (invités, visibilité, complétion, suppression).
 - **Résultats d'un tournoi terminé** : podium, récap, classement
   final.
+- **Création d'un match libre** : formulaire (joueurs par camp, score,
+  date de jeu, visibilité).
+- **Détail d'un match libre** : camps, score, date ; suppression par le
+  créateur.
 - **Profil joueur** : avatar, pseudo, statistiques agrégées, journal
-  de bord.
+  de bord ; sur le profil d'un autre joueur, le statut d'amitié et
+  l'action correspondante ; sur un profil privé vu par un non-ami, une
+  explication remplace le contenu.
 
 ## 10. Structure des données
 
@@ -373,6 +450,7 @@ entre les deux implémentations.
 
 - Identifiant.
 - Pseudo (unique, modifiable).
+- Visibilité : `public` (défaut), `privé`.
 - Dates de création et de mise à jour.
 
 ### Tournoi
@@ -425,6 +503,40 @@ entre les deux implémentations.
 - Tournois joués / gagnés / podiums.
 - Date du dernier tournoi.
 
+### Match libre
+
+- Identifiant, créateur (un participant à compte).
+- Date de jeu (jamais future), score par camp ; vainqueur déduit du
+  score.
+- Visibilité : `privé`, `public`.
+- Immuable après création : la seule écriture est la suppression, par
+  le créateur ; supprimé automatiquement quand son dernier participant
+  à compte disparaît.
+
+### Participant d'un match libre
+
+- Identifiant, match associé, camp (A ou B).
+- Soit un identifiant utilisateur (joueur lié à un compte), soit
+  `null` (joueur libre) ; snapshot du pseudo / nom au moment de
+  l'écriture.
+- Deux camps de même effectif, 1 à 3 participants chacun ; un même
+  compte n'apparaît qu'une fois par match.
+
+### Statistiques de match libre (global par joueur)
+
+- Matchs joués / victoires / défaites, points marqués / encaissés.
+- Source distincte des statistiques de tournoi ; le total combiné est
+  calculé à l'affichage, jamais stocké.
+
+### Relation d'amitié
+
+- Une ligne par duo, les deux identifiants rangés dans un ordre
+  déterministe ; le demandeur porté à part.
+- Statut : `en attente`, `acceptée`. Le refus, l'annulation et le
+  retrait suppriment la ligne.
+- Deux demandes croisées valent acceptation ; auto-amitié impossible ;
+  la suppression d'un compte efface ses relations.
+
 ## 11. Organisation technique
 
 ### Stack
@@ -458,10 +570,13 @@ dépôt.
 - Connexion.
 - Page d'accueil.
 - Mon compte.
+- Amis.
 - Profil d'un joueur.
 - Création de tournoi.
 - Détail d'un tournoi (Équipes / Matchs / Classement).
 - Résultats d'un tournoi terminé.
+- Création d'un match libre.
+- Détail d'un match libre.
 
 ## 13. Contraintes UX/UI
 
@@ -475,7 +590,9 @@ L'interface doit respecter les principes suivants :
 - **Pas d'emoji dans l'UI produit.**
 - Vocabulaire métier précis : Tournoi, Équipe, Match, Manche,
   Classement, Podium, Brouillon, En cours, Terminé, Vainqueur,
-  Pseudo, Profil, Journal de bord.
+  Pseudo, Profil, Journal de bord, Match libre, Joueur lié à un
+  compte, Joueur libre, Membre invité, Ami, Demande (reçue, envoyée),
+  Profil public, Profil privé, Aperçu extérieur.
 
 Le design doit être simple mais propre, avec une ambiance légère et
 conviviale (tons chauds, coins arrondis, espacement généreux).
@@ -500,7 +617,8 @@ L'application doit :
 - rester fluide pendant la saisie,
 - afficher le classement instantanément après chaque score,
 - consulter un profil joueur en un seul appel réseau (les
-  statistiques sont pré-calculées à la complétion d'un tournoi).
+  statistiques sont pré-calculées à la complétion d'un tournoi et à
+  l'enregistrement d'un match libre).
 
 ## 16. Critères de réussite
 
@@ -540,9 +658,10 @@ Le projet sera considéré comme réussi si :
 
 ### Au-delà du MVP
 
-Évolutions plausibles à plus long terme : système d'amis et
-visibilité fine des profils, statistiques de confrontation, duos
-préférés, multi-format de tournoi, gamification éventuelle.
+Évolutions plausibles à plus long terme : statistiques de
+confrontation, duos préférés, multi-format de tournoi, gamification
+éventuelle. (Le système d'amis et la confidentialité du profil, prévus
+ici, sont **livrés** — voir §4.1, §8 et §18.)
 
 ## 18. Roadmap
 
@@ -550,11 +669,16 @@ La source de vérité de la trajectoire produit est **`docs/roadmap.md`**.
 Synthèse :
 
 - **Horizon 1 — Fondations** : **livré** (gel des tournois terminés,
-  spec du match libre, vérité documentaire).
-- **Horizon 2 — Le match libre** : parties hors tournoi, selon
-  `docs/spec_match_individuel.md`.
-- **Horizon 3 — Ouverture grand public** : onboarding, confidentialité,
-  robustesse, internationalisation (phase de cadrage dédiée).
+  spec du match libre, vérité documentaire, navigation joueur).
+- **Horizon 2 — Le match libre** : **livré** (modèle dédié, recherche
+  de compte par pseudo, création et détail, journal unifié et
+  statistiques combinées) ; puis **Horizon 2.5 — Finitions** :
+  **livré** (règle de score stricte).
+- **Amitié & confidentialité** (chantier transversal) : **livré**, en
+  six lots.
+- **Horizon 3 — Ouverture grand public** : onboarding, confidentialité
+  par défaut re-validée, robustesse, internationalisation (phase de
+  cadrage dédiée).
 - **Horizon 4 — Clubs & associations** : entité organisation,
   multi-organisateurs.
 
@@ -572,6 +696,15 @@ Sans dates ni engagements de calendrier.
 - Gel des tournois terminés côté base, avec deux exceptions
   (visibilité, suppression) et réouverture possible vers `en cours`
   (voir §8).
+- Match libre : modèle dédié, création en une fois, page de détail,
+  journal unifié et statistiques combinées.
+- Règle de score stricte (vainqueur à exactement 13) sur les deux
+  types de match.
+- Amitié : relation mutuelle et ses cinq actions, écran de gestion
+  avec recherche par pseudo exact, compteur de demandes reçues,
+  statut et demande depuis un profil.
+- Confidentialité du profil : réglage public / privé, contenu protégé
+  en base, aperçu extérieur.
 
 ## 19. Cas limites à prévoir
 

@@ -157,6 +157,13 @@ complet généré séparément (Claude Design) :
 - `petankup-design/ui_kits/petankup-mobile/` — UI kit mobile
   pixel-perfect en JSX (référence pour la mise en page)
 
+⚠️ **Dette consignée (2026-09-09)** : le `README.md` du design system
+affirme que l'application est « privée … entre amis » et qu'elle n'a
+« pas de backend » (persistance localStorage). Les deux sont faux —
+application destinée au grand public, persistance Supabase. Fichier
+généré, non corrigé : `CLAUDE.md` et `references/cahier_des_charges.md`
+font foi sur le produit et la stack.
+
 ### Règles d'usage
 
 1. **Référence uniquement, pas de copier-coller.** Le code JSX du UI
@@ -171,7 +178,8 @@ complet généré séparément (Claude Design) :
    section "Content fundamentals".
 4. **Pas d'emoji dans l'UI produit.**
 5. **Aucun fichier ne doit être créé ou modifié dans `/references/`.**
-   C'est un dossier en lecture seule pour le développement.
+   C'est un dossier en lecture seule pour le développement. Seul le
+   cahier des charges s'y révise, par des tickets documentaires.
 
 ## Variables d'environnement
 
