@@ -21,7 +21,7 @@ Un **match libre** est une partie de pétanque jouée hors de tout tournoi, enre
 
 ## 3. Hypothèses par défaut `[HYPOTHÈSE — à valider]`
 
-- **H1 — Règles de score identiques aux matchs de tournoi** : scores ≥ 0, vainqueur à 13 minimum, pas d'égalité (mêmes CHECKs que `tournament_matches` aujourd'hui). ⚠️ **Amendé le 2026-08-28 (H2.a)** : règle stricte — le vainqueur marque exactement 13, le perdant entre 0 et 12 ; la règle « au moins 13 » des tournois est un défaut connu, à corriger séparément sur données existantes.
+- **H1 — Règles de score identiques aux matchs de tournoi** : scores ≥ 0, vainqueur à 13 minimum, pas d'égalité (mêmes CHECKs que `tournament_matches` aujourd'hui). ⚠️ **Amendé le 2026-08-28 (H2.a)** : règle stricte — le vainqueur marque exactement 13, le perdant entre 0 et 12 ; la règle « au moins 13 » des tournois était un défaut connu, corrigé depuis sur données existantes (Horizon 2.5).
 - **H2 — Date de jeu** : un champ « joué le » saisi par le créateur (défaut : aujourd'hui), pour pouvoir enregistrer une partie d'hier soir. Le journal trie dessus.
 - **H3 — Cycle de vie minimal** : `pending` → `completed`. Pas d'étape intermédiaire. L'owner peut supprimer son match ; si le match était complété, les stats des joueurs concernés sont recalculées (même logique que la suppression d'un tournoi terminé aujourd'hui).
 - **H4 — Pas de mènes/manches** : un score final par côté, point. (Le mène-par-mène reste hors scope, comme pour les tournois.)

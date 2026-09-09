@@ -80,13 +80,13 @@ Elle doit être réutilisable — la même question se posera pour d'autres écr
 
 ### 4.4 L'aperçu extérieur
 
-Le propriétaire dispose d'un moyen de voir son profil **tel qu'un non-ami le verrait**. C'est une bascule d'affichage : rien ne change en base, on demande simplement la vue restreinte.
+Le propriétaire dispose d'un moyen de voir son profil **tel qu'un non-ami le verrait**. Rien ne s'écrit en base : il lui demande la composition qu'un tiers recevrait — une demande réservée au propriétaire — et l'interface rend la forme reçue. Jamais une simulation côté client, qui reproduirait la règle de §4.2. Cette composition a sa propre règle, distincte de celle de §4.3 : le contenu complet est visible d'un tiers si le profil est public, et rien d'autre.
 
 ---
 
 ## 5. L'interface
 
-- **Écran de gestion des amis** : liste des amis, demandes reçues, demandes envoyées, et **un champ de recherche intégré** pour ajouter quelqu'un. Accessible depuis la page de compte. La recherche est le seul point d'entrée d'une relation — sans elle, aucune première demande n'est possible.
+- **Écran de gestion des amis** : liste des amis, demandes reçues, demandes envoyées, et **un champ de recherche intégré** pour ajouter quelqu'un. Accessible depuis la page de compte. La recherche est le seul point d'entrée d'une relation avec un joueur qu'aucun tournoi ni match ne relie à soi — sans elle, cette première demande serait impossible.
 - **Un compteur sur l'entrée « Amis »** de la page de compte signale les demandes en attente. Pas de mécanisme d'alerte dédié : un simple nombre à côté du libellé, que la future section notifications ne rendra pas obsolète.
 - **Depuis un profil** : le statut d'amitié est visible et la demande peut partir de là.
 - **Sur la page de compte** : le réglage de confidentialité, avec son explication.
@@ -100,17 +100,21 @@ Le propriétaire dispose d'un moyen de voir son profil **tel qu'un non-ami le ve
 
 **R5 — Exposition des tierces personnes** : le journal d'un profil public nomme ses partenaires, qui n'ont pas été consultés. Assumé (spec §4), à re-trancher à l'ouverture publique.
 
-**O1 — La découverte des profils.** L'accès devient libre, mais il n'existe **aucun annuaire** : on arrive sur un profil par un tournoi, un match ou un lien direct. Ouvrir l'accès rend les profils _ouvrables_, pas _trouvables_. Une recherche d'utilisateurs sera peut-être souhaitable — hors périmètre.
+**O1 — La découverte des profils.** L'accès devient libre, mais il n'existe **aucun annuaire**. Trois chemins mènent à un profil : un tournoi, un match, ou la recherche par pseudo exact (l'écran des amis, livré par ce chantier). Impossible de découvrir quelqu'un dont on ignore le pseudo : ouvrir l'accès rend les profils _ouvrables_, pas _trouvables_. Une recherche plus ouverte serait une capacité nouvelle, avec ses propres questions de confidentialité — hors périmètre.
 
 **R3 (rappel)** — l'enrôlement sans consentement reste possible. L'amitié fournit le matériau pour le fermer, mais la restriction n'est pas dans ce chantier.
 
 ---
 
-## 7. Découpage prévu
+## 7. Découpage
+
+Prévu en quatre lots, livré en six : un lot de base s'est intercalé avant l'interface de confidentialité, et une série de finitions n'était pas prévue.
 
 1. **Base — la relation d'amitié** : structure, contrainte d'unicité par duo, actions et leurs droits.
 2. **Base — la confidentialité** : réglage sur le profil, règle de visibilité du contenu, filtrage dans la fonction de profil, **suppression de l'ancienne règle d'accès**.
 3. **Interface — les amis** : écran de gestion, indicateur de demandes, statut et demande depuis un profil.
-4. **Interface — la confidentialité** : réglage sur la page de compte avec son explication, aperçu extérieur.
+4. **Finitions sur les messages** _(non prévu)_ : distinguer en base les issues d'une annulation, puis quatre corrections du retour des actions. Règle établie au passage : _ce qui disparaît confirme, ce qui apparaît nomme_ — aucune action d'amitié n'est muette.
+5. **Base — lecture de son propre réglage et composition « vue par un tiers »** _(intercalé)_ : l'inspection préalable de l'interface de confidentialité a établi que rien ne permettait ni de lire son réglage (colonne masquée) ni de demander la composition qu'un tiers reçoit.
+6. **Interface — la confidentialité** : réglage sur la page de compte avec son explication, aperçu extérieur.
 
-**Dette documentaire à corriger** : `CLAUDE.md` affirme encore que les profils sont tous publics entre utilisateurs authentifiés. Faux depuis longtemps, et franchement trompeur après ce chantier.
+**Dette documentaire** — soldée par le lot 2 : `CLAUDE.md` affirmait que les profils étaient tous publics entre utilisateurs authentifiés ; il décrit désormais la page ouverte et le contenu protégé.

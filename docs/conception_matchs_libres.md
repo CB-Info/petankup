@@ -41,7 +41,7 @@ Le match libre est un **objet distinct**, avec ses propres tables. Les matchs de
 ### 3.1 Le match
 
 - Porte son **créateur** (seul habilité à supprimer), sa **date de jeu**, son **score par camp**, sa **visibilité**.
-- Le vainqueur est déterminé par le score. **Règle stricte** (décision du 2026-08-28) : le vainqueur marque **exactement 13**, le perdant **entre 0 et 12** — on joue toujours en 13, la non-égalité en découle. Plus stricte que la règle actuelle des tournois (« au moins 13 », qui laisse passer un 20-0) : défaut connu, à corriger côté tournoi dans un ticket séparé sur données existantes ; le match libre n'a aucune donnée et part avec la règle juste.
+- Le vainqueur est déterminé par le score. **Règle stricte** (décision du 2026-08-28) : le vainqueur marque **exactement 13**, le perdant **entre 0 et 12** — on joue toujours en 13, la non-égalité en découle. Plus stricte que la règle des tournois d'alors (« au moins 13 », qui laissait passer un 20-0) — défaut corrigé depuis, sur données existantes (Horizon 2.5) : la règle stricte vaut désormais partout ; le match libre n'avait aucune donnée et est parti avec la règle juste.
 - La **date de jeu** ne peut pas être future (S11), en date de Paris.
 - **Immuable après création** (S3) : aucune mise à jour autorisée, seulement la suppression.
 - Le créateur doit être **participant** du match (spec H1.b).
@@ -95,10 +95,14 @@ Pour R3, le remède prévu n'est pas le retrait individuel mais un **système d'
 
 ---
 
-## 5. Ce que ce document débloque
+## 5. Découpage
 
-1. **Ticket H2.a** — migration : tables, contraintes, RLS, matérialisation des statistiques, suppression automatique (S8), correction du commentaire obsolète du prédicat de gel.
-2. **Ticket H2.b** — parcours de création rapide (« on est 4 au terrain, on note »).
-3. **Ticket H2.c** — journal unifié avec filtre (S5), statistiques combinées, accès aux matchs libres depuis le journal (S10 + motif `viewer_can_open`).
+Prévu en trois tickets, livré en cinq : la recherche de compte s'est intercalée, et le journal unifié s'est coupé en deux (base, puis interface).
 
-À réexaminer au démarrage de H2.a : le **découpage du store** (le store `tournament` porte déjà les profils ; le match libre y ajouterait une troisième famille).
+1. **H2.a** — migration : tables, contraintes, RLS, matérialisation des statistiques, suppression automatique (S8), correction du commentaire obsolète du prédicat de gel.
+2. **Recherche de compte par pseudo** _(intercalé)_ — prérequis du parcours de création : un pseudo exact résolu en compte, réutilisé par l'invitation à un tournoi.
+3. **H2.b** — parcours de création rapide (« on est 4 au terrain, on note ») et page de détail d'un match (S10).
+4. **H2.c-1** — les matchs libres dans le bundle de profil (base : journal et statistiques, motif `viewer_can_open`).
+5. **H2.c-2** — journal unifié avec filtre (S5) et statistiques combinées (interface).
+
+À réexaminer au démarrage de H2.a : le **découpage du store** (le store `tournament` porte déjà les profils ; le match libre y ajouterait une troisième famille). — Tranché en cours d'Horizon 2 : trois stores, tournoi, profil et identité.
