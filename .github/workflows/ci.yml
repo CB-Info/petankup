@@ -1,0 +1,92 @@
+# Intégration continue — les vérifications faites à la main, automatisées.
+#
+# Quatre jobs indépendants, un statut GitHub chacun : le verrou de merge se
+# règle vérification par vérification dans les paramètres du dépôt.
+#   lint       npx eslint .        — style (ESLint 10 via @nuxt/eslint)
+#   typecheck  npm run typecheck   — nuxt typecheck (vue-tsc). Ne couvre pas
+#                                    tests/unit : hors des tsconfig générés
+#                                    (signalé, non corrigé ici)
+#   test       npx vitest run      — la suite Vitest, en mode run explicite
+#                                    (`npm run test` lance le mode watch en TTY)
+#   build      npm run build       — nuxt build, qui embarque un contrôle de
+#                                    types (typescript.typeCheck est actif)
+#
+# Node 22 : la majeure locale — à aligner sur le réglage Vercel si elle en
+# diffère. `npm ci` : installation reproductible depuis package-lock.json ; son
+# postinstall (nuxt prepare) génère .nuxt/, dont les tsconfig et la config
+# ESLint que typecheck et lint consomment.
+#
+# Aucune variable d'environnement : @nuxtjs/supabase avertit seulement quand
+# NUXT_PUBLIC_SUPABASE_URL / _KEY manquent, et Vitest tourne sans runtime Nuxt.
+# Aucun filtre de chemins : un job ignoré sur une PR « docs » resterait
+# « attendu » et bloquerait le merge une fois obligatoire.
+# Les harnais SQL (supabase/tests) restent manuels : ils exigent une base et se
+# jouent avant chaque db push.
+
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, master]
+  push:
+    branches: [develop, master]
+
+# Une PR mise à jour annule le run précédent de la même branche.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NUXT_TELEMETRY_DISABLED: 1
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx eslint .
+
+  typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
