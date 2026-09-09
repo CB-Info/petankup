@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { flushPromises } from '@vue/test-utils'
+import { useIdentityStore } from '../../app/stores/identity'
 
 // Tests du store identity : résolution de l'identité de session (déplacée du
 // watcher du store tournament — bloc « auth context » — vers ce store,
@@ -16,6 +17,11 @@ import { flushPromises } from '@vue/test-utils'
 // l'écrit (chemin chaud : elle relit user.value.sub directement).
 
 const STUB_USER_ID = '99999999-9999-4999-8999-999999999999'
+
+// L'import du store reste en tête du fichier (règle de style import/first).
+// Vitest hisse les `vi.hoisted` et tous les imports avant le reste du
+// fichier : l'ordre textuel entre ces stubs et l'import est sans effet sur
+// l'exécution.
 
 const stubUserRef = vi.hoisted(() => ({
   value: { sub: '99999999-9999-4999-8999-999999999999' } as { sub: string } | null,
@@ -58,8 +64,6 @@ const supabaseClientStub = vi.hoisted(() => ({
 vi.stubGlobal('useSupabaseClient', () => supabaseClientStub)
 vi.stubGlobal('useSupabaseUser', () => stubUserRef)
 vi.stubGlobal('useSupabaseSession', () => stubSessionRef)
-
-import { useIdentityStore } from '../../app/stores/identity'
 
 function claimsFor(sub: string): GetClaimsResult {
   return {

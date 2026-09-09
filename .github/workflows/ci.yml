@@ -11,9 +11,10 @@
 #   build      npm run build       — nuxt build, qui embarque un contrôle de
 #                                    types (typescript.typeCheck est actif)
 #
-# Node 22 : la majeure locale — à aligner sur le réglage Vercel si elle en
-# diffère. `npm ci` : installation reproductible depuis package-lock.json ; son
-# postinstall (nuxt prepare) génère .nuxt/, dont les tsconfig et la config
+# Node 24 : la version avec laquelle Vercel compile — la CI prédit ainsi le
+# résultat d'un déploiement. La machine de développement reste en 22 (écart
+# consigné). `npm ci` : installation reproductible depuis package-lock.json ;
+# son postinstall (nuxt prepare) génère .nuxt/, dont les tsconfig et la config
 # ESLint que typecheck et lint consomment.
 #
 # Aucune variable d'environnement : @nuxtjs/supabase avertit seulement quand
@@ -50,7 +51,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
       - run: npm ci
       - run: npx eslint .
@@ -62,7 +63,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
       - run: npm ci
       - run: npm run typecheck
@@ -74,7 +75,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
       - run: npm ci
       - run: npx vitest run
@@ -86,7 +87,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
       - run: npm ci
       - run: npm run build

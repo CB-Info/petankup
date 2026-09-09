@@ -4,8 +4,15 @@ import { flushPromises } from '@vue/test-utils'
 import type { TournamentRepository } from '../../app/repositories/TournamentRepository'
 import type { TournamentMatch, Team, TeamPlayer, Tournament, TournamentMember } from '../../app/types'
 import { InviteMemberError } from '../../app/types'
+import { useTournamentStore } from '../../app/stores/tournament'
+import { useIdentityStore } from '../../app/stores/identity'
 
 const STUB_USER_ID = '99999999-9999-4999-8999-999999999999'
+
+// Les imports des stores restent en tête du fichier (règle de style
+// import/first). Vitest hisse `vi.mock`, les `vi.hoisted` et tous les
+// imports avant le reste du fichier : l'ordre textuel entre ces stubs et
+// les imports est sans effet sur l'exécution.
 
 // Référence mutable hissée avant l'évaluation du `vi.mock`. Permet de
 // régénérer un mock vierge dans chaque `beforeEach`, tout en laissant
@@ -76,11 +83,6 @@ vi.stubGlobal('useSupabaseSession', () => stubSessionRef)
 vi.mock('../../app/repositories', () => ({
   createRepository: () => mockRepositoryRef.current!,
 }))
-
-// Import APRÈS le `vi.mock` pour la lisibilité (vitest hisse les deux
-// de toute façon, donc l'ordre textuel est sans effet sur l'exécution).
-import { useTournamentStore } from '../../app/stores/tournament'
-import { useIdentityStore } from '../../app/stores/identity'
 
 const NOW = '2026-01-01T00:00:00.000Z'
 const UUID_V4_REGEX

@@ -3,6 +3,8 @@ import { createPinia, setActivePinia } from 'pinia'
 import type { TournamentRepository } from '../../app/repositories/TournamentRepository'
 import type { FriendshipBundle, FriendshipRequestOutcome } from '../../app/types'
 import { FriendshipError, InviteMemberError } from '../../app/types'
+import { useFriendshipStore } from '../../app/stores/friendship'
+import { useIdentityStore } from '../../app/stores/identity'
 
 // Tests du store friendship (A3). Setup aligné sur
 // tests/unit/store-free-match.test.ts : stubs hoisted pour
@@ -14,6 +16,11 @@ const OTHER_USER_ID = '88888888-8888-4888-8888-888888888888'
 const FRIEND_ID = '11111111-1111-4111-8111-111111111111'
 const RECEIVED_ID = '22222222-2222-4222-8222-222222222222'
 const SENT_ID = '33333333-3333-4333-8333-333333333333'
+
+// Les imports des stores restent en tête du fichier (règle de style
+// import/first). Vitest hisse `vi.mock`, les `vi.hoisted` et tous les
+// imports avant le reste du fichier : l'ordre textuel entre ces stubs et
+// les imports est sans effet sur l'exécution.
 
 const mockRepositoryRef = vi.hoisted(() => ({
   current: null as TournamentRepository | null,
@@ -60,9 +67,6 @@ vi.stubGlobal('useSupabaseSession', () => stubSessionRef)
 vi.mock('../../app/repositories', () => ({
   createRepository: () => mockRepositoryRef.current!,
 }))
-
-import { useFriendshipStore } from '../../app/stores/friendship'
-import { useIdentityStore } from '../../app/stores/identity'
 
 type FriendshipMockRepository = TournamentRepository & {
   __getFriendshipsSpy: ReturnType<typeof vi.fn>
@@ -425,7 +429,7 @@ describe('les actions ciblant une personne (mutations locales)', () => {
   })
 
   it('tracks the pending action per button and clears it after, even on failure', async () => {
-    const deferred = makeDeferred<void>()
+    const deferred = makeDeferred<undefined>()
     mockRepositoryRef.current = createMockRepository({
       acceptFriendship: () => deferred.promise,
       refuseFriendship: async () => {
@@ -441,7 +445,7 @@ describe('les actions ciblant une personne (mutations locales)', () => {
     expect(store.isActionPending(RECEIVED_ID, 'refuse')).toBe(false)
     expect(store.isActionPending(RECEIVED_ID)).toBe(true)
     expect(store.isActionPending(FRIEND_ID)).toBe(false)
-    deferred.resolve()
+    deferred.resolve(undefined)
     await accepting
     expect(store.pendingAction).toBeNull()
 

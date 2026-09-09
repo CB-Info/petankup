@@ -4,6 +4,8 @@ import { flushPromises } from '@vue/test-utils'
 import type { TournamentRepository } from '../../app/repositories/TournamentRepository'
 import type { CreateFreeMatchInput, FreeMatch } from '../../app/types'
 import { FreeMatchError, InviteMemberError } from '../../app/types'
+import { useFreeMatchStore } from '../../app/stores/free-match'
+import { useIdentityStore } from '../../app/stores/identity'
 
 // Tests du store free-match (H2.b). Setup aligné sur
 // tests/unit/store-profile-bundle.test.ts : stubs hoisted pour
@@ -16,6 +18,11 @@ const OTHER_USER_ID = '88888888-8888-4888-8888-888888888888'
 const MATCH_ID = '11111111-1111-4111-8111-111111111111'
 const OTHER_MATCH_ID = '22222222-2222-4222-8222-222222222222'
 const NOW = '2026-01-01T00:00:00.000Z'
+
+// Les imports des stores restent en tête du fichier (règle de style
+// import/first). Vitest hisse `vi.mock`, les `vi.hoisted` et tous les
+// imports avant le reste du fichier : l'ordre textuel entre ces stubs et
+// les imports est sans effet sur l'exécution.
 
 const mockRepositoryRef = vi.hoisted(() => ({
   current: null as TournamentRepository | null,
@@ -62,9 +69,6 @@ vi.stubGlobal('useSupabaseSession', () => stubSessionRef)
 vi.mock('../../app/repositories', () => ({
   createRepository: () => mockRepositoryRef.current!,
 }))
-
-import { useFreeMatchStore } from '../../app/stores/free-match'
-import { useIdentityStore } from '../../app/stores/identity'
 
 type FreeMatchMockRepository = TournamentRepository & {
   __getFreeMatchByIdSpy: ReturnType<typeof vi.fn>
