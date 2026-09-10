@@ -13,6 +13,9 @@ import type {
   TournamentMember,
 } from '../../app/types'
 import { InviteMemberError } from '../../app/types'
+import { useTournamentStore } from '../../app/stores/tournament'
+import { useProfileStore } from '../../app/stores/profile'
+import { useIdentityStore } from '../../app/stores/identity'
 
 // Tests des actions du store profile (extrait du store tournament, Phase C.2).
 //
@@ -31,6 +34,11 @@ const STUB_USER_ID = '99999999-9999-4999-8999-999999999999'
 const OTHER_USER_ID = '88888888-8888-4888-8888-888888888888'
 const THIRD_USER_ID = '77777777-7777-4777-8777-777777777777'
 const NOW = '2026-01-01T00:00:00.000Z'
+
+// Les imports des stores restent en tête du fichier (règle de style
+// import/first). Vitest hisse `vi.mock`, les `vi.hoisted` et tous les
+// imports avant le reste du fichier : l'ordre textuel entre ces stubs et
+// les imports est sans effet sur l'exécution.
 
 const mockRepositoryRef = vi.hoisted(() => ({
   current: null as TournamentRepository | null,
@@ -81,10 +89,6 @@ vi.stubGlobal('useSupabaseSession', () => stubSessionRef)
 vi.mock('../../app/repositories', () => ({
   createRepository: () => mockRepositoryRef.current!,
 }))
-
-import { useTournamentStore } from '../../app/stores/tournament'
-import { useProfileStore } from '../../app/stores/profile'
-import { useIdentityStore } from '../../app/stores/identity'
 
 type ProfileMockRepository = TournamentRepository & {
   __profiles: Profile[]
