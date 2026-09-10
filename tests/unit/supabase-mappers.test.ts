@@ -66,6 +66,7 @@ describe('mapTournamentRowToDomain', () => {
       owner_id: OWNER_ID,
       created_at: NOW,
       updated_at: NOW,
+      completed_at: null,
     }
 
     expect(mapTournamentRowToDomain(row)).toEqual<Tournament>({
@@ -96,6 +97,7 @@ describe('mapTournamentRowToDomain', () => {
       owner_id: OWNER_ID,
       created_at: NOW,
       updated_at: NOW,
+      completed_at: null,
     }
 
     const tournament = mapTournamentRowToDomain(row)
@@ -116,6 +118,7 @@ describe('mapTournamentRowToDomain', () => {
       owner_id: OWNER_ID,
       created_at: NOW,
       updated_at: NOW,
+      completed_at: null,
     }
 
     expect(mapTournamentRowToDomain(row).visibility).toBe('public')

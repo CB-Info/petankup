@@ -99,6 +99,13 @@ type ProfileMockRepository = TournamentRepository & {
   __findAccountByDisplayNameSpy: ReturnType<typeof vi.fn>
 }
 
+// Stub pour les méthodes de l'interface que les tests de ce fichier
+// n'atteignent jamais : le contrôle de types exige qu'elles existent, et un
+// appel accidentel doit échouer bruyamment.
+async function notImplementedInThisMock(): Promise<never> {
+  throw new Error('Not implemented in this test mock')
+}
+
 // Repo in-memory côté profiles + spies pour assertions d'appels.
 // Le reste des méthodes (tournaments, members, etc.) reste no-op /
 // liste vide — les tests profile n'en dépendent pas, sauf le test de
@@ -199,6 +206,11 @@ function createMockRepository(overrides: Partial<{
     getProfilesByIds: getProfilesByIdsSpy,
     updateMyProfile: updateMyProfileSpy,
     updateMyProfileVisibility: updateMyProfileVisibilitySpy,
+    // Bundle de profil et match libre : hors du périmètre de ces tests.
+    getUserProfile: notImplementedInThisMock,
+    getFreeMatchById: notImplementedInThisMock,
+    createFreeMatch: notImplementedInThisMock,
+    deleteFreeMatch: notImplementedInThisMock,
     findAccountByDisplayName: findAccountByDisplayNameSpy,
     getFriendships: async () => ({ friends: [], received: [], sent: [] }),
     requestFriendship: async () => 'pending' as const,

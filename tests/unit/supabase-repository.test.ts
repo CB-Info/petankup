@@ -14,6 +14,10 @@ import { SupabaseRepository } from '../../app/repositories/SupabaseRepository'
 // toutes les méthodes sont des `vi.fn()` espionnables, et dont le `then`
 // résout au { data, error } passé en paramètre.
 
+// Ligne brute de la table tournaments, telle que la lit le repository :
+// typer la fixture garantit qu'elle suit le schéma généré.
+type TournamentRow = Database['public']['Tables']['tournaments']['Row']
+
 type ChainResult = {
   data: unknown
   error: { message: string, code?: string } | null
@@ -113,7 +117,7 @@ function makeMemberRow() {
   }
 }
 
-function makeTournamentRow() {
+function makeTournamentRow(): TournamentRow {
   return {
     id: TOURNAMENT_ID,
     name: 'Tournoi',
@@ -126,6 +130,7 @@ function makeTournamentRow() {
     owner_id: OWNER_ID,
     created_at: NOW,
     updated_at: NOW,
+    completed_at: null,
   }
 }
 

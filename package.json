@@ -9,7 +9,7 @@
     "postinstall": "nuxt prepare",
     "generate": "nuxt generate",
     "test": "vitest",
-    "typecheck": "nuxt typecheck",
+    "typecheck": "nuxt typecheck && vue-tsc --noEmit -p tests/tsconfig.json",
     "gen:types": "npx supabase gen types typescript --project-id huypyznoomigdwopigem --schema public > app/types/database.types.ts"
   },
   "dependencies": {

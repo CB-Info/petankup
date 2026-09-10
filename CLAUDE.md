@@ -213,7 +213,9 @@ supportées en fallback mais à éviter.
 - `npm run dev` — serveur de développement
 - `npm run build` — build production
 - `npm run test` — tests Vitest
-- `npm run typecheck` — vérification TypeScript
+- `npm run typecheck` — vérification TypeScript : l'app (`nuxt typecheck`),
+  puis les tests unitaires (`tests/tsconfig.json`, projet dédié hors du
+  chemin de build)
 - `npm run gen:types` — régénère les types TS depuis le schéma Supabase
 
 ## Décisions d'architecture (ne pas remettre en cause sans demander)
