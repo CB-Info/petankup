@@ -1,0 +1,19 @@
+// Projet TypeScript des tests unitaires — vérifié par `npm run typecheck`
+// (vue-tsc --noEmit -p tests/tsconfig.json), APRÈS `nuxt typecheck`, qui
+// régénère .nuxt/ dont ce fichier hérite.
+//
+// Pourquoi un projet à part : les tsconfig générés par Nuxt n'incluent que
+// app/** et tests/nuxt/** — tests/unit en est exclu par construction. Ce
+// fichier n'est volontairement PAS référencé depuis le tsconfig.json racine :
+// avec typescript.typeCheck actif, tout ce que la racine référence est aussi
+// vérifié pendant `nuxt build` / `nuxt generate` (Vercel), et une erreur de
+// type dans un test ne doit pas casser un déploiement.
+//
+// Pièges : (1) passer par vue-tsc, pas tsc — la fermeture des tests importe
+// des types de composants .vue ; (2) les `paths` hérités (~, @, #imports)
+// sont acceptés ici mais inconnus de Vitest : dans les tests, imports
+// relatifs uniquement.
+{
+  "extends": "../.nuxt/tsconfig.app.json",
+  "include": ["../.nuxt/nuxt.d.ts", "./**/*.ts"]
+}

@@ -97,6 +97,13 @@ type BundleMockRepository = TournamentRepository & {
   __getMyProfileSpy: ReturnType<typeof vi.fn>
 }
 
+// Stub pour les méthodes de l'interface que les tests de ce fichier
+// n'atteignent jamais : le contrôle de types exige qu'elles existent, et un
+// appel accidentel doit échouer bruyamment.
+async function notImplementedInThisMock(): Promise<never> {
+  throw new Error('Not implemented in this test mock')
+}
+
 // Repo in-memory minimal : seules getUserProfile / getProfilesByIds /
 // getMyProfile sont espionnées (les seules touchées par loadUserProfile et
 // le flow de mount). Le reste reste no-op — ces tests n'en dépendent pas.
@@ -145,6 +152,18 @@ function createMockRepository(overrides: Partial<{
     },
     updateMyProfileVisibility: async () => {},
     getUserProfile: getUserProfileSpy,
+    // Match libre, recherche de compte et amitié : hors du périmètre de ces
+    // tests.
+    getFreeMatchById: notImplementedInThisMock,
+    createFreeMatch: notImplementedInThisMock,
+    deleteFreeMatch: notImplementedInThisMock,
+    findAccountByDisplayName: notImplementedInThisMock,
+    getFriendships: notImplementedInThisMock,
+    requestFriendship: notImplementedInThisMock,
+    acceptFriendship: notImplementedInThisMock,
+    refuseFriendship: notImplementedInThisMock,
+    cancelFriendshipRequest: notImplementedInThisMock,
+    removeFriendship: notImplementedInThisMock,
     __getUserProfileSpy: getUserProfileSpy,
     __getProfilesByIdsSpy: getProfilesByIdsSpy,
     __getMyProfileSpy: getMyProfileSpy,
@@ -191,6 +210,7 @@ function makeResult(teammates: Teammate[] = []): UserTournamentResult {
     finalRank: 1,
     isWinner: true,
     isPodium: true,
+    viewerCanOpen: true,
     teammates,
   }
 }

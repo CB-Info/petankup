@@ -3,9 +3,9 @@
 # Quatre jobs indépendants, un statut GitHub chacun : le verrou de merge se
 # règle vérification par vérification dans les paramètres du dépôt.
 #   lint       npx eslint .        — style (ESLint 10 via @nuxt/eslint)
-#   typecheck  npm run typecheck   — nuxt typecheck (vue-tsc). Ne couvre pas
-#                                    tests/unit : hors des tsconfig générés
-#                                    (signalé, non corrigé ici)
+#   typecheck  npm run typecheck   — nuxt typecheck (vue-tsc) sur l'app, puis
+#                                    vue-tsc sur tests/tsconfig.json : les tests
+#                                    unitaires, exclus des tsconfig générés
 #   test       npx vitest run      — la suite Vitest, en mode run explicite
 #                                    (`npm run test` lance le mode watch en TTY)
 #   build      npm run build       — nuxt build, qui embarque un contrôle de

@@ -121,6 +121,13 @@ function makeTournament(overrides: Partial<Tournament> = {}): Tournament {
   }
 }
 
+// Stub pour les méthodes de l'interface que les tests de ce fichier
+// n'atteignent jamais : le contrôle de types exige qu'elles existent, et un
+// appel accidentel doit échouer bruyamment.
+async function notImplementedInThisMock(): Promise<never> {
+  throw new Error('Not implemented in this test mock')
+}
+
 // Mock en mémoire qui respecte le contrat TournamentRepository, y compris
 // les cascades de suppression (tournament → teams + matches + members ;
 // team → matches où elle apparaît). Reproduit le comportement de
@@ -279,6 +286,21 @@ function createMockRepository(): TournamentRepository {
       throw new Error('Not implemented in this test mock')
     },
     updateMyProfileVisibility: async () => {},
+
+    // Bundle de profil, match libre, recherche de compte et amitié : ajoutés
+    // à l'interface après ce mock, jamais atteints par les tests de ce
+    // fichier (leur couverture vit dans les tests de store dédiés).
+    getUserProfile: notImplementedInThisMock,
+    getFreeMatchById: notImplementedInThisMock,
+    createFreeMatch: notImplementedInThisMock,
+    deleteFreeMatch: notImplementedInThisMock,
+    findAccountByDisplayName: notImplementedInThisMock,
+    getFriendships: notImplementedInThisMock,
+    requestFriendship: notImplementedInThisMock,
+    acceptFriendship: notImplementedInThisMock,
+    refuseFriendship: notImplementedInThisMock,
+    cancelFriendshipRequest: notImplementedInThisMock,
+    removeFriendship: notImplementedInThisMock,
   }
 }
 
