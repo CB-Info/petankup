@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '../../app/types/database.types'
 import type { TournamentMatch, Tournament, TournamentMember, UserProfileBundle } from '../../app/types'
-import { InviteMemberError, ProfileError } from '../../app/types'
+import { InviteMemberError, ProfileError, WriteRefusedError } from '../../app/types'
 import { SupabaseRepository } from '../../app/repositories/SupabaseRepository'
 
 // Mock du client Supabase. Le builder Supabase est un objet PromiseLike :
@@ -292,7 +292,7 @@ describe('SupabaseRepository — createTournament', () => {
 
 describe('SupabaseRepository — updateTournament', () => {
   it('updates only mutable columns and targets the row by id', async () => {
-    const chain = makeChainWithResult({ data: null, error: null })
+    const chain = makeChainWithResult({ data: null, error: null, count: 1 })
     const { repo, from } = makeRepoWithChain(chain)
 
     await repo.updateTournament(makeTournamentDomain())
@@ -304,6 +304,7 @@ describe('SupabaseRepository — updateTournament', () => {
         status: 'draft',
         visibility: 'private',
       }),
+      { count: 'exact' },
     )
     expect(chain.eq).toHaveBeenCalledWith('id', TOURNAMENT_ID)
     // Colonnes immutables / pilotées par la DB jamais émises.
@@ -320,17 +321,37 @@ describe('SupabaseRepository — updateTournament', () => {
 
     await expect(repo.updateTournament(makeTournamentDomain())).rejects.toThrow('update failed')
   })
+
+  // Une règle d'accès qui refuse ne lève pas : la base répond « succès,
+  // zéro ligne ». Le dépôt le rapporte en refus typé, jamais en succès.
+  it('throws WriteRefusedError(update_refused) when no row was affected', async () => {
+    const chain = makeChainWithResult({ data: null, error: null, count: 0 })
+    const { repo } = makeRepoWithChain(chain)
+
+    const refusal = repo.updateTournament(makeTournamentDomain())
+    await expect(refusal).rejects.toBeInstanceOf(WriteRefusedError)
+    await expect(refusal).rejects.toMatchObject({ code: 'update_refused' })
+  })
+
+  it('throws WriteRefusedError when the row count is missing (no success signal)', async () => {
+    const chain = makeChainWithResult({ data: null, error: null, count: null })
+    const { repo } = makeRepoWithChain(chain)
+
+    const refusal = repo.updateTournament(makeTournamentDomain())
+    await expect(refusal).rejects.toBeInstanceOf(WriteRefusedError)
+    await expect(refusal).rejects.toMatchObject({ code: 'update_refused' })
+  })
 })
 
 describe('SupabaseRepository — deleteTournament', () => {
   it('deletes the row by id (cascade handled by DB)', async () => {
-    const chain = makeChainWithResult({ data: null, error: null })
+    const chain = makeChainWithResult({ data: null, error: null, count: 1 })
     const { repo, from } = makeRepoWithChain(chain)
 
     await repo.deleteTournament(TOURNAMENT_ID)
 
     expect(from).toHaveBeenCalledWith('tournaments')
-    expect(chain.delete).toHaveBeenCalled()
+    expect(chain.delete).toHaveBeenCalledWith({ count: 'exact' })
     expect(chain.eq).toHaveBeenCalledWith('id', TOURNAMENT_ID)
   })
 
@@ -339,6 +360,26 @@ describe('SupabaseRepository — deleteTournament', () => {
     const { repo } = makeRepoWithChain(chain)
 
     await expect(repo.deleteTournament('any')).rejects.toThrow('delete failed')
+  })
+
+  // Zéro ligne sur une suppression : refusée par une règle d'accès OU déjà
+  // disparue — indistinguable ici, et jamais un succès.
+  it('throws WriteRefusedError(nothing_deleted) when no row was affected', async () => {
+    const chain = makeChainWithResult({ data: null, error: null, count: 0 })
+    const { repo } = makeRepoWithChain(chain)
+
+    const refusal = repo.deleteTournament(TOURNAMENT_ID)
+    await expect(refusal).rejects.toBeInstanceOf(WriteRefusedError)
+    await expect(refusal).rejects.toMatchObject({ code: 'nothing_deleted' })
+  })
+
+  it('throws WriteRefusedError when the row count is missing (no success signal)', async () => {
+    const chain = makeChainWithResult({ data: null, error: null, count: null })
+    const { repo } = makeRepoWithChain(chain)
+
+    const refusal = repo.deleteTournament(TOURNAMENT_ID)
+    await expect(refusal).rejects.toBeInstanceOf(WriteRefusedError)
+    await expect(refusal).rejects.toMatchObject({ code: 'nothing_deleted' })
   })
 })
 
@@ -454,13 +495,13 @@ describe('SupabaseRepository — updateTeam', () => {
 
 describe('SupabaseRepository — deleteTeam', () => {
   it('deletes the team by id (cascade handled by DB)', async () => {
-    const chain = makeChainWithResult({ data: null, error: null })
+    const chain = makeChainWithResult({ data: null, error: null, count: 1 })
     const { repo, from } = makeRepoWithChain(chain)
 
     await repo.deleteTeam(TEAM_A_ID)
 
     expect(from).toHaveBeenCalledWith('teams')
-    expect(chain.delete).toHaveBeenCalled()
+    expect(chain.delete).toHaveBeenCalledWith({ count: 'exact' })
     expect(chain.eq).toHaveBeenCalledWith('id', TEAM_A_ID)
   })
 
@@ -469,6 +510,26 @@ describe('SupabaseRepository — deleteTeam', () => {
     const { repo } = makeRepoWithChain(chain)
 
     await expect(repo.deleteTeam('any')).rejects.toThrow('team delete failed')
+  })
+
+  // Tournoi terminé ailleurs, équipe déjà supprimée, non-propriétaire : la
+  // règle d'accès filtre en silence — zéro ligne, jamais un succès.
+  it('throws WriteRefusedError(nothing_deleted) when no row was affected', async () => {
+    const chain = makeChainWithResult({ data: null, error: null, count: 0 })
+    const { repo } = makeRepoWithChain(chain)
+
+    const refusal = repo.deleteTeam(TEAM_A_ID)
+    await expect(refusal).rejects.toBeInstanceOf(WriteRefusedError)
+    await expect(refusal).rejects.toMatchObject({ code: 'nothing_deleted' })
+  })
+
+  it('throws WriteRefusedError when the row count is missing (no success signal)', async () => {
+    const chain = makeChainWithResult({ data: null, error: null, count: null })
+    const { repo } = makeRepoWithChain(chain)
+
+    const refusal = repo.deleteTeam(TEAM_A_ID)
+    await expect(refusal).rejects.toBeInstanceOf(WriteRefusedError)
+    await expect(refusal).rejects.toMatchObject({ code: 'nothing_deleted' })
   })
 })
 
@@ -498,7 +559,7 @@ describe('SupabaseRepository — getMatchesByTournament', () => {
 
 describe('SupabaseRepository — updateMatch', () => {
   it('updates only score/outcome columns and targets the row by id', async () => {
-    const chain = makeChainWithResult({ data: null, error: null })
+    const chain = makeChainWithResult({ data: null, error: null, count: 1 })
     const { repo, from } = makeRepoWithChain(chain)
 
     await repo.updateMatch(makeMatchDomain())
@@ -511,6 +572,7 @@ describe('SupabaseRepository — updateMatch', () => {
         winner_id: null,
         status: 'pending',
       }),
+      { count: 'exact' },
     )
     expect(chain.eq).toHaveBeenCalledWith('id', MATCH_ID)
     // Colonnes structurelles / pilotées par la DB jamais émises.
@@ -525,6 +587,27 @@ describe('SupabaseRepository — updateMatch', () => {
     const { repo } = makeRepoWithChain(chain)
 
     await expect(repo.updateMatch(makeMatchDomain())).rejects.toThrow('match update failed')
+  })
+
+  // Le score fantôme : un onglet périmé sur un tournoi terminé ailleurs — la
+  // règle de gel filtre l'UPDATE en silence. Zéro ligne = refus, jamais un
+  // succès que l'écran afficherait.
+  it('throws WriteRefusedError(update_refused) when no row was affected', async () => {
+    const chain = makeChainWithResult({ data: null, error: null, count: 0 })
+    const { repo } = makeRepoWithChain(chain)
+
+    const refusal = repo.updateMatch(makeMatchDomain())
+    await expect(refusal).rejects.toBeInstanceOf(WriteRefusedError)
+    await expect(refusal).rejects.toMatchObject({ code: 'update_refused' })
+  })
+
+  it('throws WriteRefusedError when the row count is missing (no success signal)', async () => {
+    const chain = makeChainWithResult({ data: null, error: null, count: null })
+    const { repo } = makeRepoWithChain(chain)
+
+    const refusal = repo.updateMatch(makeMatchDomain())
+    await expect(refusal).rejects.toBeInstanceOf(WriteRefusedError)
+    await expect(refusal).rejects.toMatchObject({ code: 'update_refused' })
   })
 })
 
@@ -835,22 +918,22 @@ describe('SupabaseRepository — updateMyProfileVisibility', () => {
     expect(chain.single).not.toHaveBeenCalled()
   })
 
-  it('throws when no row was affected (RLS no-op) instead of pretending success', async () => {
+  it('throws WriteRefusedError(update_refused) when no row was affected (RLS no-op) instead of pretending success', async () => {
     const chain = makeChainWithResult({ data: null, error: null, count: 0 })
     const { repo } = makeRepoWithChain(chain)
 
-    await expect(repo.updateMyProfileVisibility(OWNER_ID, 'private')).rejects.toThrow(
-      'profile visibility update matched 0 row',
-    )
+    const refusal = repo.updateMyProfileVisibility(OWNER_ID, 'private')
+    await expect(refusal).rejects.toBeInstanceOf(WriteRefusedError)
+    await expect(refusal).rejects.toMatchObject({ code: 'update_refused' })
   })
 
-  it('throws when the count is missing (no success signal at all)', async () => {
+  it('throws WriteRefusedError when the count is missing (no success signal at all)', async () => {
     const chain = makeChainWithResult({ data: null, error: null, count: null })
     const { repo } = makeRepoWithChain(chain)
 
-    await expect(repo.updateMyProfileVisibility(OWNER_ID, 'public')).rejects.toThrow(
-      'profile visibility update matched no row',
-    )
+    const refusal = repo.updateMyProfileVisibility(OWNER_ID, 'public')
+    await expect(refusal).rejects.toBeInstanceOf(WriteRefusedError)
+    await expect(refusal).rejects.toMatchObject({ code: 'update_refused' })
   })
 
   it('throws when Supabase returns an error', async () => {

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '../../app/types/database.types'
 import type { CreateFreeMatchInput } from '../../app/types'
-import { FreeMatchError } from '../../app/types'
+import { FreeMatchError, WriteRefusedError } from '../../app/types'
 import { SupabaseRepository } from '../../app/repositories/SupabaseRepository'
 
 // Méthodes « match libre » de SupabaseRepository (H2.b), fichier dédié.
@@ -13,6 +13,8 @@ import { SupabaseRepository } from '../../app/repositories/SupabaseRepository'
 type ChainResult = {
   data: unknown
   error: { message: string, code?: string } | null
+  // Compte de lignes (Prefer: count=exact) — seule la suppression le lit.
+  count?: number | null
 }
 
 type MockChain = {
@@ -182,14 +184,34 @@ describe('SupabaseRepository — createFreeMatch', () => {
 
 describe('SupabaseRepository — deleteFreeMatch', () => {
   it('deletes the free_matches row by id', async () => {
-    const chain = makeChainWithResult({ data: null, error: null })
+    const chain = makeChainWithResult({ data: null, error: null, count: 1 })
     const { repo, from } = makeRepoWithChain(chain)
 
     await repo.deleteFreeMatch(MATCH_ID)
 
     expect(from).toHaveBeenCalledWith('free_matches')
-    expect(chain.delete).toHaveBeenCalled()
+    expect(chain.delete).toHaveBeenCalledWith({ count: 'exact' })
     expect(chain.eq).toHaveBeenCalledWith('id', MATCH_ID)
+  })
+
+  // Non-créateur (la règle d'accès filtre), créateur disparu, match déjà
+  // supprimé : zéro ligne, jamais un « Match supprimé » à tort.
+  it('throws WriteRefusedError(nothing_deleted) when no row was affected', async () => {
+    const chain = makeChainWithResult({ data: null, error: null, count: 0 })
+    const { repo } = makeRepoWithChain(chain)
+
+    const refusal = repo.deleteFreeMatch(MATCH_ID)
+    await expect(refusal).rejects.toBeInstanceOf(WriteRefusedError)
+    await expect(refusal).rejects.toMatchObject({ code: 'nothing_deleted' })
+  })
+
+  it('throws WriteRefusedError when the row count is missing (no success signal)', async () => {
+    const chain = makeChainWithResult({ data: null, error: null, count: null })
+    const { repo } = makeRepoWithChain(chain)
+
+    const refusal = repo.deleteFreeMatch(MATCH_ID)
+    await expect(refusal).rejects.toBeInstanceOf(WriteRefusedError)
+    await expect(refusal).rejects.toMatchObject({ code: 'nothing_deleted' })
   })
 
   it('throws a standard Error on a query error', async () => {

@@ -17,7 +17,7 @@ import type {
   TournamentMember,
   UserProfileBundle,
 } from '../types'
-import { FreeMatchError, FriendshipError, InviteMemberError, ProfileError } from '../types'
+import { FreeMatchError, FriendshipError, InviteMemberError, ProfileError, WriteRefusedError } from '../types'
 import { parseFreeMatchErrorCode } from '../utils/free-match-errors'
 import { parseFriendshipErrorCode } from '../utils/friendship-errors'
 import type { TournamentRepository } from './TournamentRepository'
@@ -119,20 +119,36 @@ export class SupabaseRepository implements TournamentRepository {
     if (error !== null) throw new Error(error.message)
   }
 
+  // Écritures directes (UPDATE / DELETE) : le nombre de lignes touchées
+  // (Prefer: count=exact) est le seul signal de succès disponible sans
+  // relecture. Une règle d'accès qui refuse ne lève pas — elle filtre, et la
+  // base répond « succès, zéro ligne ». Zéro ligne n'est donc jamais un
+  // succès : c'est un refus (ou une ligne déjà disparue), rapporté en
+  // WriteRefusedError, distinct d'une panne (error !== null, levée avant).
+  // Un compte absent est traité comme zéro : sans signal, pas de succès.
+  private static requireOneRowAffected(
+    count: number | null,
+    code: WriteRefusedError['code'],
+  ): void {
+    if (count !== 1) throw new WriteRefusedError(code)
+  }
+
   async updateTournament(tournament: Tournament): Promise<void> {
-    const { error } = await this.client
+    const { error, count } = await this.client
       .from('tournaments')
-      .update(mapTournamentDomainToUpdate(tournament))
+      .update(mapTournamentDomainToUpdate(tournament), { count: 'exact' })
       .eq('id', tournament.id)
     if (error !== null) throw new Error(error.message)
+    SupabaseRepository.requireOneRowAffected(count, 'update_refused')
   }
 
   async deleteTournament(id: string): Promise<void> {
-    const { error } = await this.client
+    const { error, count } = await this.client
       .from('tournaments')
-      .delete()
+      .delete({ count: 'exact' })
       .eq('id', id)
     if (error !== null) throw new Error(error.message)
+    SupabaseRepository.requireOneRowAffected(count, 'nothing_deleted')
   }
 
   // --- Teams ---
@@ -196,8 +212,12 @@ export class SupabaseRepository implements TournamentRepository {
   }
 
   async deleteTeam(id: string): Promise<void> {
-    const { error } = await this.client.from('teams').delete().eq('id', id)
+    const { error, count } = await this.client
+      .from('teams')
+      .delete({ count: 'exact' })
+      .eq('id', id)
     if (error !== null) throw new Error(error.message)
+    SupabaseRepository.requireOneRowAffected(count, 'nothing_deleted')
   }
 
   // --- Matches ---
@@ -219,11 +239,12 @@ export class SupabaseRepository implements TournamentRepository {
   }
 
   async updateMatch(match: TournamentMatch): Promise<void> {
-    const { error } = await this.client
+    const { error, count } = await this.client
       .from('tournament_matches')
-      .update(mapMatchDomainToUpdate(match))
+      .update(mapMatchDomainToUpdate(match), { count: 'exact' })
       .eq('id', match.id)
     if (error !== null) throw new Error(error.message)
+    SupabaseRepository.requireOneRowAffected(count, 'update_refused')
   }
 
   // --- Tournament members ---
@@ -314,6 +335,9 @@ export class SupabaseRepository implements TournamentRepository {
     return (data ?? []).map(mapProfileRowToDomain)
   }
 
+  // Relu par .single() : zéro ligne y est une erreur PostgREST (PGRST116),
+  // pas un succès silencieux — pas de comptage ici. Son texte, technique,
+  // atteint encore le toast : chantier « unification des erreurs » (roadmap).
   async updateMyProfile(userId: string, displayName: string): Promise<Profile> {
     const { data, error } = await this.client
       .from('profiles')
@@ -337,19 +361,16 @@ export class SupabaseRepository implements TournamentRepository {
 
   // Pas de .select() : RETURNING lirait la colonne visibility, masquée
   // (grant SELECT par colonne) — 42501. Le compte de lignes, lui, ne lit
-  // rien : c'est le seul signal de succès disponible, et il en faut un —
-  // sans lui, un UPDATE filtré par la RLS à 0 ligne (identité décalée,
-  // ligne absente) passerait pour un succès et l'écran confirmerait un
-  // réglage que la base n'a pas.
+  // rien : c'est le seul signal de succès disponible (cf.
+  // requireOneRowAffected — ce cas a été le premier corrigé, avant que le
+  // défaut ne soit reconnu comme général).
   async updateMyProfileVisibility(userId: string, visibility: ProfileVisibility): Promise<void> {
     const { error, count } = await this.client
       .from('profiles')
       .update({ visibility }, { count: 'exact' })
       .eq('id', userId)
     if (error !== null) throw new Error(error.message)
-    if (count !== 1) {
-      throw new Error(`profile visibility update matched ${count ?? 'no'} row`)
-    }
+    SupabaseRepository.requireOneRowAffected(count, 'update_refused')
   }
 
   async getUserProfile(userId: string, viewpoint: ProfileViewpoint): Promise<UserProfileBundle> {
@@ -402,11 +423,12 @@ export class SupabaseRepository implements TournamentRepository {
   }
 
   async deleteFreeMatch(id: string): Promise<void> {
-    const { error } = await this.client
+    const { error, count } = await this.client
       .from('free_matches')
-      .delete()
+      .delete({ count: 'exact' })
       .eq('id', id)
     if (error !== null) throw new Error(error.message)
+    SupabaseRepository.requireOneRowAffected(count, 'nothing_deleted')
   }
 
   async findAccountByDisplayName(displayName: string): Promise<AccountMatch | undefined> {

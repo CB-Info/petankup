@@ -125,6 +125,22 @@ export class ProfileError extends Error {
   }
 }
 
+// Une écriture directe (UPDATE / DELETE) que la base a acceptée sans toucher
+// aucune ligne : une règle d'accès l'a filtrée (non-propriétaire, tournoi
+// terminé, identité changée) ou la ligne n'existe plus. Ce n'est pas une
+// panne — la requête a abouti — mais un refus, et l'écran ne reflète plus
+// la base. Deux présentations : une modification refusée, ou une
+// suppression qui n'a rien supprimé — refusée OU déjà faite, l'application
+// ne peut pas les distinguer, seul un rechargement le montre.
+export type WriteRefusedErrorCode = "update_refused" | "nothing_deleted";
+
+export class WriteRefusedError extends Error {
+  constructor(public readonly code: WriteRefusedErrorCode) {
+    super(code);
+    this.name = "WriteRefusedError";
+  }
+}
+
 export interface UserStats {
   matchesPlayed: number;
   wins: number;

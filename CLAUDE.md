@@ -258,6 +258,16 @@ supportées en fallback mais à éviter.
   (le mapper update n'inclut que les colonnes mutables).
 - Critère de complétude : `grep -R "\.upsert(" app/repositories/` doit
   retourner vide.
+- Toute écriture directe `UPDATE` / `DELETE` sans relecture demande le
+  nombre de lignes touchées (`{ count: 'exact' }`) et lève
+  `WriteRefusedError` si ce n'est pas exactement une : une règle d'accès
+  qui refuse ne lève pas, elle filtre, et la base répond « succès, zéro
+  ligne ». Les écrans annoncent ce refus via `useWriteRefusedFeedback`
+  (jamais `showError`) puis rechargent l'objet affiché. Pas de comptage
+  ailleurs : un `UPDATE … RETURNING` relu par `.single()` lève de lui-même
+  sur zéro ligne, les `INSERT` lèvent (`WITH CHECK`), les RPC lèvent leurs
+  codes typés ou sont idempotentes par conception (retrait d'un membre,
+  d'un ami).
 
 ## Auth
 

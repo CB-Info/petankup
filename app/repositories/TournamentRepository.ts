@@ -27,6 +27,12 @@ import type {
 // upsert). Tournois et matchs suivent ce pattern ; teams et members passent
 // par des RPCs dédiées, le profil par un update ciblé — l'ensemble est homogène.
 //
+// Refus : une écriture directe (UPDATE / DELETE) qu'une règle d'accès filtre
+// ne lève rien côté base — zéro ligne, pas d'erreur. L'implémentation la
+// rapporte en WriteRefusedError (update_refused / nothing_deleted), jamais
+// en succès ; les RPC lèvent leurs codes typés. Une suppression à zéro ligne
+// peut être un refus OU une ligne déjà disparue : indistinguable ici.
+//
 // Membres : les insertions passent par la RPC inviteMemberByDisplayName (la
 // DB y normalise le pseudo et applique les règles owner / self / doublon).
 // Le repository reste pass-through : aucune normalisation côté client.
@@ -85,7 +91,7 @@ export interface TournamentRepository {
   // Bascule SON réglage de confidentialité : UPDATE ciblé sans relecture
   // (RETURNING exigerait le SELECT sur la colonne, masquée) mais avec le
   // compte de lignes — un UPDATE filtré par la RLS à 0 ligne ressemble à
-  // un succès, il est remonté en erreur.
+  // un succès, il est remonté en WriteRefusedError (update_refused).
   updateMyProfileVisibility(userId: string, visibility: ProfileVisibility): Promise<void>
 
   // Récupère le bundle d'un profil (profil + stats agrégées + journal),
@@ -107,8 +113,9 @@ export interface TournamentRepository {
   // réseau. L'écriture passe EXCLUSIVEMENT par la RPC create_free_match
   // (match + joueurs atomiques, snapshot des pseudos côté DB, règles typées
   // remontées en FreeMatchError) et retourne l'id créé. deleteFreeMatch :
-  // DELETE ciblé ; 0 ligne (non créateur, déjà supprimé) reste silencieux,
-  // miroir de deleteTournament. findAccountByDisplayName : RPC d'égalité
+  // DELETE ciblé ; 0 ligne (non créateur, déjà supprimé) est remonté en
+  // WriteRefusedError (nothing_deleted), comme deleteTournament.
+  // findAccountByDisplayName : RPC d'égalité
   // exacte sur le pseudo, 0 ou 1 compte — undefined si aucun.
   getFreeMatchById(id: string): Promise<FreeMatch | undefined>
   createFreeMatch(input: CreateFreeMatchInput): Promise<string>

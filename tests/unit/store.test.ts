@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { flushPromises } from '@vue/test-utils'
 import type { TournamentRepository } from '../../app/repositories/TournamentRepository'
 import type { TournamentMatch, Team, TeamPlayer, Tournament, TournamentMember } from '../../app/types'
-import { InviteMemberError } from '../../app/types'
+import { InviteMemberError, WriteRefusedError } from '../../app/types'
 import { useTournamentStore } from '../../app/stores/tournament'
 import { useIdentityStore } from '../../app/stores/identity'
 import { createRepositoryDouble } from '../helpers/repository-double'
@@ -1307,5 +1307,90 @@ describe('useTournamentStore — setTournamentVisibility without the list', () =
     expect(store.currentTournament?.visibility).toBe('public')
     const persisted = await mockRepositoryRef.current!.getTournamentById(tournament.id)
     expect(persisted?.visibility).toBe('public')
+  })
+})
+
+describe('useTournamentStore — refused writes leave the local state untouched', () => {
+  // La base a filtré l'écriture (zéro ligne) : le dépôt lève
+  // WriteRefusedError, le store ne doit rien avoir modifié — l'écran reflète
+  // toujours la base, jusqu'au rechargement que la page déclenche.
+  async function setupTournamentWithTwoTeamsAndOneMatch() {
+    const store = useTournamentStore()
+    const created = await store.createTournament({
+      name: 'Tournoi',
+      date: NOW,
+      format: 'round_robin',
+    })
+    await store.loadTournament(created.id)
+    await store.addTeam({ name: 'Les Boulistes', players: [{ userId: null, displayName: 'Alice' }] })
+    await store.addTeam({ name: 'Les Pointus', players: [{ userId: null, displayName: 'Carla' }] })
+    await store.generateMatches()
+    return { store, tournamentId: created.id }
+  }
+
+  it('submitScore: the match and the ranking stay as they were', async () => {
+    const { store } = await setupTournamentWithTwoTeamsAndOneMatch()
+    const matchBefore = { ...store.matches[0]! }
+    const rankingBefore = store.ranking.map(entry => ({ ...entry }))
+    vi.spyOn(mockRepositoryRef.current!, 'updateMatch').mockRejectedValue(
+      new WriteRefusedError('update_refused'),
+    )
+
+    await expect(store.submitScore(matchBefore.id, 13, 7)).rejects.toBeInstanceOf(WriteRefusedError)
+
+    expect(store.matches[0]).toEqual(matchBefore)
+    expect(store.ranking).toEqual(rankingBefore)
+  })
+
+  it('completeTournament: the tournament stays in progress', async () => {
+    const { store } = await setupTournamentWithTwoTeamsAndOneMatch()
+    await store.submitScore(store.matches[0]!.id, 13, 7)
+    vi.spyOn(mockRepositoryRef.current!, 'updateTournament').mockRejectedValue(
+      new WriteRefusedError('update_refused'),
+    )
+
+    await expect(store.completeTournament()).rejects.toBeInstanceOf(WriteRefusedError)
+
+    expect(store.currentTournament?.status).toBe('in_progress')
+    expect(store.tournaments[0]?.status).toBe('in_progress')
+  })
+
+  it('setTournamentVisibility: the visibility stays private', async () => {
+    const { store, tournamentId } = await setupTournamentWithTwoTeamsAndOneMatch()
+    vi.spyOn(mockRepositoryRef.current!, 'updateTournament').mockRejectedValue(
+      new WriteRefusedError('update_refused'),
+    )
+
+    await expect(store.setTournamentVisibility(tournamentId, 'public')).rejects.toBeInstanceOf(WriteRefusedError)
+
+    expect(store.currentTournament?.visibility).toBe('private')
+    expect(store.tournaments[0]?.visibility).toBe('private')
+  })
+
+  it('deleteTournament: the tournament stays in the list and stays loaded', async () => {
+    const { store, tournamentId } = await setupTournamentWithTwoTeamsAndOneMatch()
+    vi.spyOn(mockRepositoryRef.current!, 'deleteTournament').mockRejectedValue(
+      new WriteRefusedError('nothing_deleted'),
+    )
+
+    await expect(store.deleteTournament(tournamentId)).rejects.toBeInstanceOf(WriteRefusedError)
+
+    expect(store.tournaments).toHaveLength(1)
+    expect(store.currentTournament?.id).toBe(tournamentId)
+    expect(store.teams).toHaveLength(2)
+    expect(store.matches).toHaveLength(1)
+  })
+
+  it('deleteTeam: the team stays in the list and the matches are untouched', async () => {
+    const { store } = await setupTournamentWithTwoTeamsAndOneMatch()
+    const teamId = store.teams[0]!.id
+    vi.spyOn(mockRepositoryRef.current!, 'deleteTeam').mockRejectedValue(
+      new WriteRefusedError('nothing_deleted'),
+    )
+
+    await expect(store.deleteTeam(teamId)).rejects.toBeInstanceOf(WriteRefusedError)
+
+    expect(store.teams).toHaveLength(2)
+    expect(store.matches).toHaveLength(1)
   })
 })

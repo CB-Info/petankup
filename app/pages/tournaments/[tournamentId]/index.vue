@@ -21,6 +21,7 @@ const {
 const profileStore = useProfileStore();
 const { profileById } = storeToRefs(profileStore);
 const { showError } = useErrorToast();
+const { announceWriteRefusal } = useWriteRefusedFeedback();
 
 // Alias local lisible : tout l'ownership conditionne des actions admin
 // dans le template, on ne le manipule jamais ailleurs.
@@ -82,6 +83,36 @@ onBeforeRouteLeave((to) => {
   }
 });
 
+// Chargement du détail (tournoi, puis membres en parallèle), protégé par le
+// token de course de la page. Sert au chargement initial et au rechargement
+// après un refus d'écriture.
+async function loadDetail(id: string): Promise<void> {
+  const requestId = ++loadDetailRequestId;
+  isLoadingDetail.value = true;
+  try {
+    await tournamentStore.loadTournament(id);
+    // Fire-and-forget : les membres alimentent le sélecteur de joueurs du
+    // TeamFormModal (et la modal "Gérer les invités"). loadTournamentMembers
+    // a son propre token de course, OK de l'appeler en parallèle sans await.
+    void tournamentStore.loadTournamentMembers(id);
+  } catch (error) {
+    if (requestId === loadDetailRequestId) showError(error);
+  } finally {
+    if (requestId === loadDetailRequestId) {
+      isLoadingDetail.value = false;
+    }
+  }
+}
+
+// Après un refus d'écriture (WriteRefusedError) : l'écran ne reflète plus
+// la base — le tournoi a été terminé, supprimé ou modifié ailleurs. Le
+// refus est annoncé par useWriteRefusedFeedback ; ici on recharge l'objet
+// en place, même chemin que le chargement initial, pour que l'écran
+// retrouve la réalité.
+async function reloadAfterRefusal(): Promise<void> {
+  await loadDetail(tournamentId.value);
+}
+
 // watch(tournamentId, immediate: true) : couvre le mount initial ET
 // la réutilisation de composant Nuxt sur changement de paramètre de
 // route (sans cela, onMounted ne refire pas et l'état reste bloqué).
@@ -98,22 +129,7 @@ watch(
       return;
     }
     headerBackLink.value = readOrigin(`/tournaments/${id}`) ?? DEFAULT_BACK_LINK;
-
-    const requestId = ++loadDetailRequestId;
-    isLoadingDetail.value = true;
-    try {
-      await tournamentStore.loadTournament(id);
-      // Fire-and-forget : les membres alimentent le sélecteur de joueurs du
-      // TeamFormModal (et la modal "Gérer les invités"). loadTournamentMembers
-      // a son propre token de course, OK de l'appeler en parallèle sans await.
-      void tournamentStore.loadTournamentMembers(id);
-    } catch (error) {
-      if (requestId === loadDetailRequestId) showError(error);
-    } finally {
-      if (requestId === loadDetailRequestId) {
-        isLoadingDetail.value = false;
-      }
-    }
+    await loadDetail(id);
   },
   { immediate: true },
 );
@@ -231,7 +247,11 @@ async function confirmDelete() {
     try {
       await tournamentStore.deleteTeam(teamPendingDeletion.value.id);
     } catch (error) {
-      showError(error);
+      if (announceWriteRefusal(error)) {
+        await reloadAfterRefusal();
+      } else {
+        showError(error);
+      }
     }
   }
   teamPendingDeletion.value = null;
@@ -308,7 +328,11 @@ async function startTournament() {
       tabItems.findIndex((tab) => tab.slot === "matches"),
     );
   } catch (error) {
-    showError(error);
+    if (announceWriteRefusal(error)) {
+      await reloadAfterRefusal();
+    } else {
+      showError(error);
+    }
   } finally {
     isGeneratingMatches.value = false;
   }
@@ -371,7 +395,11 @@ async function confirmCompleteTournament() {
   try {
     await tournamentStore.completeTournament();
   } catch (error) {
-    showError(error);
+    if (announceWriteRefusal(error)) {
+      await reloadAfterRefusal();
+    } else {
+      showError(error);
+    }
   } finally {
     isCompletingTournament.value = false;
     completeModalOpen.value = false;
@@ -401,7 +429,17 @@ async function confirmTournamentDelete() {
     tournamentDeleteModalOpen.value = false;
     await navigateTo("/");
   } catch (error) {
-    showError(error);
+    if (announceWriteRefusal(error)) {
+      // Rien n'a été supprimé : on reste sur la page et on la recharge —
+      // le tournoi est toujours là (refus), ou introuvable (déjà parti ;
+      // la liste de l'accueil, chargée une fois par session, le garde
+      // jusqu'au prochain chargement — comportement préexistant à toute
+      // suppression faite ailleurs).
+      tournamentDeleteModalOpen.value = false;
+      await reloadAfterRefusal();
+    } else {
+      showError(error);
+    }
   } finally {
     isDeletingTournament.value = false;
   }
@@ -459,7 +497,12 @@ async function confirmVisibilityToggle() {
     );
     visibilityToggleModalOpen.value = false;
   } catch (error) {
-    showError(error);
+    if (announceWriteRefusal(error)) {
+      visibilityToggleModalOpen.value = false;
+      await reloadAfterRefusal();
+    } else {
+      showError(error);
+    }
   } finally {
     isTogglingVisibility.value = false;
   }
@@ -783,6 +826,7 @@ useHead(() => ({
         :match="matchBeingScored"
         :team-a="matchBeingScoredTeamA"
         :team-b="matchBeingScoredTeamB"
+        @refused="reloadAfterRefusal"
       />
 
       <TournamentCompleteConfirmModal
