@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import type { TournamentRepository } from '../../app/repositories/TournamentRepository'
-import type { FriendshipBundle, FriendshipRequestOutcome } from '../../app/types'
-import { FriendshipError, InviteMemberError } from '../../app/types'
+import type { FriendshipBundle } from '../../app/types'
+import { FriendshipError } from '../../app/types'
 import { useFriendshipStore } from '../../app/stores/friendship'
 import { useIdentityStore } from '../../app/stores/identity'
+import { createRepositoryDouble } from '../helpers/repository-double'
 
 // Tests du store friendship (A3). Setup aligné sur
 // tests/unit/store-free-match.test.ts : stubs hoisted pour
@@ -86,16 +87,18 @@ function makeBundle(overrides: Partial<FriendshipBundle> = {}): FriendshipBundle
   }
 }
 
-// Repo in-memory minimal : seules les méthodes « amitié » sont espionnées.
-// Le reste reste no-op — ces tests n'en dépendent pas.
-function createMockRepository(overrides: Partial<{
-  getFriendships: () => Promise<FriendshipBundle>
-  requestFriendship: (displayName: string) => Promise<FriendshipRequestOutcome>
-  acceptFriendship: (userId: string) => Promise<void>
-  refuseFriendship: (userId: string) => Promise<void>
-  cancelFriendshipRequest: (userId: string) => Promise<void>
-  removeFriendship: (userId: string) => Promise<void>
-}> = {}): FriendshipMockRepository {
+// Seules les six méthodes « amitié » sont configurées (et espionnées) :
+// ce sont les seules que ces tests atteignent. Toute autre méthode appelée
+// échoue bruyamment (cf. tests/helpers/repository-double.ts).
+function createMockRepository(overrides: Partial<Pick<
+  TournamentRepository,
+  | 'getFriendships'
+  | 'requestFriendship'
+  | 'acceptFriendship'
+  | 'refuseFriendship'
+  | 'cancelFriendshipRequest'
+  | 'removeFriendship'
+>> = {}): FriendshipMockRepository {
   const getFriendshipsSpy = vi.fn(overrides.getFriendships ?? (async () => makeBundle()))
   const requestFriendshipSpy = vi.fn(
     overrides.requestFriendship ?? (async () => 'pending' as const),
@@ -108,45 +111,14 @@ function createMockRepository(overrides: Partial<{
   const removeFriendshipSpy = vi.fn(overrides.removeFriendship ?? (async () => {}))
 
   return {
-    getAllTournaments: async () => [],
-    getTournamentById: async () => undefined,
-    createTournament: async () => {},
-    updateTournament: async () => {},
-    deleteTournament: async () => {},
-    getTeamsByTournament: async () => [],
-    createTeam: async () => {
-      throw new Error('Not implemented in this test mock')
-    },
-    updateTeam: async () => {
-      throw new Error('Not implemented in this test mock')
-    },
-    deleteTeam: async () => {},
-    getMatchesByTournament: async () => [],
-    createMatches: async () => {},
-    updateMatch: async () => {},
-    getMembersByTournament: async () => [],
-    getMyMemberships: async () => [],
-    inviteMemberByDisplayName: async () => {
-      throw new InviteMemberError('unknown')
-    },
-    removeMember: async () => {},
-    getMyProfile: async () => undefined,
-    getProfilesByIds: async () => [],
-    updateMyProfile: async () => {
-      throw new Error('Not implemented in this test mock')
-    },
-    updateMyProfileVisibility: async () => {},
-    getUserProfile: async () => ({ kind: 'not_found' as const }),
-    getFreeMatchById: async () => undefined,
-    createFreeMatch: async () => 'unused-match-id',
-    deleteFreeMatch: async () => {},
-    findAccountByDisplayName: async () => undefined,
-    getFriendships: getFriendshipsSpy,
-    requestFriendship: requestFriendshipSpy,
-    acceptFriendship: acceptFriendshipSpy,
-    refuseFriendship: refuseFriendshipSpy,
-    cancelFriendshipRequest: cancelFriendshipRequestSpy,
-    removeFriendship: removeFriendshipSpy,
+    ...createRepositoryDouble({
+      getFriendships: getFriendshipsSpy,
+      requestFriendship: requestFriendshipSpy,
+      acceptFriendship: acceptFriendshipSpy,
+      refuseFriendship: refuseFriendshipSpy,
+      cancelFriendshipRequest: cancelFriendshipRequestSpy,
+      removeFriendship: removeFriendshipSpy,
+    }),
     __getFriendshipsSpy: getFriendshipsSpy,
     __requestFriendshipSpy: requestFriendshipSpy,
     __acceptFriendshipSpy: acceptFriendshipSpy,

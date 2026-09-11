@@ -4,20 +4,16 @@ import { flushPromises } from '@vue/test-utils'
 import type { TournamentRepository } from '../../app/repositories/TournamentRepository'
 import type {
   FullUserProfileBundle,
-  MyProfile,
   Profile,
-  ProfileViewpoint,
   Teammate,
-  Tournament,
-  TournamentMember,
   UserFreeMatchResult,
   UserProfileBundle,
   UserStats,
   UserTournamentResult,
 } from '../../app/types'
-import { InviteMemberError } from '../../app/types'
 import { useProfileStore } from '../../app/stores/profile'
 import { useIdentityStore } from '../../app/stores/identity'
+import { createRepositoryDouble } from '../helpers/repository-double'
 
 // Tests de l'action loadUserProfile du store profile (extrait du store
 // tournament, Phase J).
@@ -94,81 +90,30 @@ vi.mock('../../app/repositories', () => ({
 type BundleMockRepository = TournamentRepository & {
   __getUserProfileSpy: ReturnType<typeof vi.fn>
   __getProfilesByIdsSpy: ReturnType<typeof vi.fn>
-  __getMyProfileSpy: ReturnType<typeof vi.fn>
 }
 
-// Stub pour les méthodes de l'interface que les tests de ce fichier
-// n'atteignent jamais : le contrôle de types exige qu'elles existent, et un
-// appel accidentel doit échouer bruyamment.
-async function notImplementedInThisMock(): Promise<never> {
-  throw new Error('Not implemented in this test mock')
-}
-
-// Repo in-memory minimal : seules getUserProfile / getProfilesByIds /
-// getMyProfile sont espionnées (les seules touchées par loadUserProfile et
-// le flow de mount). Le reste reste no-op — ces tests n'en dépendent pas.
-function createMockRepository(overrides: Partial<{
-  getUserProfile: (userId: string, viewpoint: ProfileViewpoint) => Promise<UserProfileBundle>
-  getProfilesByIds: (ids: string[]) => Promise<Profile[]>
-  getMyProfile: () => Promise<MyProfile | undefined>
-  getAllTournaments: () => Promise<Tournament[]>
-  getMyMemberships: (userId: string) => Promise<TournamentMember[]>
-}> = {}): BundleMockRepository {
+// Seules getUserProfile / getProfilesByIds sont configurées (et espionnées) :
+// ce sont les seules méthodes que loadUserProfile et refreshUserProfile
+// atteignent. Toute autre méthode appelée échoue bruyamment
+// (cf. tests/helpers/repository-double.ts).
+function createMockRepository(overrides: Partial<Pick<
+  TournamentRepository,
+  'getUserProfile' | 'getProfilesByIds'
+>> = {}): BundleMockRepository {
   const defaultGetUserProfile = async (): Promise<UserProfileBundle> => ({ kind: 'not_found' })
   const defaultGetProfilesByIds = async (): Promise<Profile[]> => []
-  const defaultGetMyProfile = async (): Promise<MyProfile | undefined> => undefined
 
   const getUserProfileSpy = vi.fn(overrides.getUserProfile ?? defaultGetUserProfile)
   const getProfilesByIdsSpy = vi.fn(overrides.getProfilesByIds ?? defaultGetProfilesByIds)
-  const getMyProfileSpy = vi.fn(overrides.getMyProfile ?? defaultGetMyProfile)
 
-  const repo: BundleMockRepository = {
-    getAllTournaments: overrides.getAllTournaments ?? (async () => []),
-    getTournamentById: async () => undefined,
-    createTournament: async () => {},
-    updateTournament: async () => {},
-    deleteTournament: async () => {},
-    getTeamsByTournament: async () => [],
-    createTeam: async () => {
-      throw new Error('Not implemented in this test mock')
-    },
-    updateTeam: async () => {
-      throw new Error('Not implemented in this test mock')
-    },
-    deleteTeam: async () => {},
-    getMatchesByTournament: async () => [],
-    createMatches: async () => {},
-    updateMatch: async () => {},
-    getMembersByTournament: async () => [],
-    getMyMemberships: overrides.getMyMemberships ?? (async () => []),
-    inviteMemberByDisplayName: async () => {
-      throw new InviteMemberError('unknown')
-    },
-    removeMember: async () => {},
-    getMyProfile: getMyProfileSpy,
-    getProfilesByIds: getProfilesByIdsSpy,
-    updateMyProfile: async () => {
-      throw new Error('Not implemented in this test mock')
-    },
-    updateMyProfileVisibility: async () => {},
-    getUserProfile: getUserProfileSpy,
-    // Match libre, recherche de compte et amitié : hors du périmètre de ces
-    // tests.
-    getFreeMatchById: notImplementedInThisMock,
-    createFreeMatch: notImplementedInThisMock,
-    deleteFreeMatch: notImplementedInThisMock,
-    findAccountByDisplayName: notImplementedInThisMock,
-    getFriendships: notImplementedInThisMock,
-    requestFriendship: notImplementedInThisMock,
-    acceptFriendship: notImplementedInThisMock,
-    refuseFriendship: notImplementedInThisMock,
-    cancelFriendshipRequest: notImplementedInThisMock,
-    removeFriendship: notImplementedInThisMock,
+  return {
+    ...createRepositoryDouble({
+      getUserProfile: getUserProfileSpy,
+      getProfilesByIds: getProfilesByIdsSpy,
+    }),
     __getUserProfileSpy: getUserProfileSpy,
     __getProfilesByIdsSpy: getProfilesByIdsSpy,
-    __getMyProfileSpy: getMyProfileSpy,
   }
-  return repo
 }
 
 function makeProfile(overrides: Partial<Profile> = {}): Profile {
