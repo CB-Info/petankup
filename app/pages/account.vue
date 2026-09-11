@@ -35,6 +35,7 @@ const { currentProfile, currentProfileVisibility, hasFetchedCurrentProfile } =
 const identityStore = useIdentityStore();
 const { currentUserId, identityUnavailable } = storeToRefs(identityStore);
 const { showError } = useErrorToast();
+const { announceWriteRefusal } = useWriteRefusedFeedback();
 const toast = useToast();
 const client = useSupabaseClient();
 
@@ -212,9 +213,17 @@ async function confirmVisibilityChange() {
       icon: "i-lucide-check",
     });
   } catch (error) {
-    // La modale reste ouverte, la carte active n'a pas bougé : l'état à
-    // l'écran est toujours celui de la base.
-    showError(error);
+    if (announceWriteRefusal(error)) {
+      // Refus (identité changée, compte disparu) : la carte active n'a pas
+      // bougé. Pas de rechargement en place possible pour son propre
+      // profil (loadCurrentProfile ne recharge pas ce qu'il tient déjà) :
+      // on ferme la modale et on s'en tient à l'annonce.
+      isVisibilityModalOpen.value = false;
+    } else {
+      // La modale reste ouverte, la carte active n'a pas bougé : l'état à
+      // l'écran est toujours celui de la base.
+      showError(error);
+    }
   } finally {
     isSubmittingVisibility.value = false;
   }

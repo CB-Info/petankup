@@ -17,11 +17,15 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "update:open", value: boolean): void;
-  (e: "saved"): void;
+  // saved : score enregistré. refused : la base a refusé l'écriture du
+  // score (tournoi terminé ou modifié ailleurs) — la modale l'a annoncé et
+  // s'est fermée, la page recharge le tournoi.
+  (e: "saved" | "refused"): void;
 }>();
 
 const tournamentStore = useTournamentStore();
 const { showError } = useErrorToast();
+const { announceWriteRefusal } = useWriteRefusedFeedback();
 
 const openModel = computed({
   get: () => props.open,
@@ -116,7 +120,12 @@ async function onSubmit() {
     emit("saved");
     openModel.value = false;
   } catch (error) {
-    showError(error);
+    if (announceWriteRefusal(error)) {
+      openModel.value = false;
+      emit("refused");
+    } else {
+      showError(error);
+    }
   } finally {
     isSubmitting.value = false;
   }

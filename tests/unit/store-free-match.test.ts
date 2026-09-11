@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { flushPromises } from '@vue/test-utils'
 import type { TournamentRepository } from '../../app/repositories/TournamentRepository'
 import type { CreateFreeMatchInput, FreeMatch } from '../../app/types'
-import { FreeMatchError } from '../../app/types'
+import { FreeMatchError, WriteRefusedError } from '../../app/types'
 import { useFreeMatchStore } from '../../app/stores/free-match'
 import { useIdentityStore } from '../../app/stores/identity'
 import { createRepositoryDouble } from '../helpers/repository-double'
@@ -350,6 +350,24 @@ describe('deleteFreeMatch', () => {
 
     expect(repo.__deleteFreeMatchSpy).toHaveBeenCalledWith(MATCH_ID)
     expect(store.currentFreeMatch).toBeNull()
+  })
+
+  it('keeps the current match when the repository refuses the deletion (zero rows)', async () => {
+    // La base a filtré la suppression (non-créateur, match disparu) : le
+    // dépôt lève WriteRefusedError, rien ne bouge localement — la page
+    // annonce et recharge.
+    mockRepositoryRef.current = createMockRepository({
+      getFreeMatchById: async () => makeFreeMatch(),
+      deleteFreeMatch: async () => {
+        throw new WriteRefusedError('nothing_deleted')
+      },
+    })
+    const store = useFreeMatchStore()
+    await store.loadFreeMatch(MATCH_ID)
+
+    await expect(store.deleteFreeMatch(MATCH_ID)).rejects.toBeInstanceOf(WriteRefusedError)
+
+    expect(store.currentFreeMatch?.id).toBe(MATCH_ID)
   })
 
   it('keeps the current match when another one is deleted', async () => {

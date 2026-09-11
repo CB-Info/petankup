@@ -83,7 +83,8 @@ export const useFreeMatchStore = defineStore('freeMatch', () => {
     return withLoading(() => repository.createFreeMatch(input))
   }
 
-  // Supprime un match (créateur seul côté RLS ; 0 ligne silencieuse sinon).
+  // Supprime un match (créateur seul côté RLS ; zéro ligne sinon, que le
+  // dépôt lève en WriteRefusedError — la page annonce et recharge).
   // THROW en cas d'erreur. Au succès : invalide tout chargement en vol (une
   // réponse tardive ne doit pas ressusciter le match) et vide le match
   // consulté s'il s'agit du même.

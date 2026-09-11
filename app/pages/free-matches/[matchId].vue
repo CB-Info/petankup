@@ -31,6 +31,7 @@ const identityStore = useIdentityStore();
 const { currentUserId, identityUnavailable, lastResolveError } =
   storeToRefs(identityStore);
 const { showError } = useErrorToast();
+const { announceWriteRefusal } = useWriteRefusedFeedback();
 const toast = useToast();
 
 const matchId = computed(() => route.params.matchId as string);
@@ -225,7 +226,14 @@ async function confirmDelete() {
     });
     await navigateTo("/");
   } catch (error) {
-    showError(error);
+    if (announceWriteRefusal(error)) {
+      // Rien n'a été supprimé : on reste sur la page et on la recharge —
+      // le match est toujours là (refus), ou introuvable (déjà parti).
+      deleteModalOpen.value = false;
+      await loadDetail(matchId.value);
+    } else {
+      showError(error);
+    }
   } finally {
     isDeleting.value = false;
   }
