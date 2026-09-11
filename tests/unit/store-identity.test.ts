@@ -221,3 +221,22 @@ describe('useIdentityStore — resolution', () => {
     expect(store.currentUserId).toBe(STUB_USER_ID)
   })
 })
+
+describe('useIdentityStore — requireAuthenticatedUserId', () => {
+  it('throws with the exact message when no identity is available', () => {
+    // Ni utilisateur runtime, ni session : le watcher ne résout rien au
+    // montage, les deux sources de la chaîne de repli sont nulles.
+    stubUserRef.value = null
+    stubSessionRef.value = null
+    stubClaimsSub.value = null
+    const store = useIdentityStore()
+
+    expect(() => store.requireAuthenticatedUserId()).toThrowError(/^Aucun utilisateur authentifié$/)
+  })
+
+  it('returns the sub of the current user on the nominal path', () => {
+    const store = useIdentityStore()
+
+    expect(store.requireAuthenticatedUserId()).toBe(STUB_USER_ID)
+  })
+})
