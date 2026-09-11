@@ -427,8 +427,10 @@ Le code applicatif vit dans `app/` (convention Nuxt 4) :
 - `app/utils` — fonctions pures (logique métier)
 - `app/assets/css` — Tailwind + Nuxt UI
 
-À la racine : `tests/unit` (tests Vitest), `supabase/migrations`
-(migrations DDL versionnées).
+À la racine : `tests/unit` (tests Vitest), `tests/helpers` (fabrique du
+faux dépôt des tests de store, `repository-double.ts`), `tests/fixtures`
+(données de test partagées), `supabase/migrations` (migrations DDL
+versionnées).
 
 ## Conventions de code
 

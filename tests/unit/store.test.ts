@@ -6,6 +6,7 @@ import type { TournamentMatch, Team, TeamPlayer, Tournament, TournamentMember } 
 import { InviteMemberError } from '../../app/types'
 import { useTournamentStore } from '../../app/stores/tournament'
 import { useIdentityStore } from '../../app/stores/identity'
+import { createRepositoryDouble } from '../helpers/repository-double'
 
 const STUB_USER_ID = '99999999-9999-4999-8999-999999999999'
 
@@ -121,16 +122,9 @@ function makeTournament(overrides: Partial<Tournament> = {}): Tournament {
   }
 }
 
-// Stub pour les méthodes de l'interface que les tests de ce fichier
-// n'atteignent jamais : le contrôle de types exige qu'elles existent, et un
-// appel accidentel doit échouer bruyamment.
-async function notImplementedInThisMock(): Promise<never> {
-  throw new Error('Not implemented in this test mock')
-}
-
-// Mock en mémoire qui respecte le contrat TournamentRepository, y compris
-// les cascades de suppression (tournament → teams + matches + members ;
-// team → matches où elle apparaît). Reproduit le comportement de
+// Faux dépôt en mémoire qui respecte le contrat TournamentRepository, y
+// compris les cascades de suppression (tournament → teams + matches +
+// members ; team → matches où elle apparaît). Reproduit le comportement de
 // SupabaseRepository (cascades DB) sans toucher au réseau.
 //
 // Convention pour inviteMemberByDisplayName (déterministe par pseudo pour
@@ -142,6 +136,10 @@ async function notImplementedInThisMock(): Promise<never> {
 // Pas de normalisation côté mock (le repo réel est pass-through). Le mock
 // dérive un user_id stable depuis le pseudo afin que la contrainte unique
 // fonctionne entre appels, et un member_email snapshot.
+//
+// Seules les méthodes que les tests de ce fichier atteignent sont
+// configurées ; toute autre méthode appelée échoue bruyamment
+// (cf. tests/helpers/repository-double.ts).
 function createMockRepository(): TournamentRepository {
   let tournaments: Tournament[] = []
   let teams: Team[] = []
@@ -165,7 +163,7 @@ function createMockRepository(): TournamentRepository {
     return `00000000-0000-4000-8000-${padded}`.slice(0, 36).padEnd(36, '0')
   }
 
-  return {
+  return createRepositoryDouble({
     getAllTournaments: async () => [...tournaments],
     getTournamentById: async id => tournaments.find(tournament => tournament.id === id),
     createTournament: async (tournament) => {
@@ -196,20 +194,6 @@ function createMockRepository(): TournamentRepository {
       }
       teams = [...teams, newTeam]
       return newTeam
-    },
-    updateTeam: async (teamId, name, players) => {
-      const existing = teams.find(team => team.id === teamId)
-      const tournamentId = existing?.tournamentId ?? 't-unknown'
-      const updated: Team = {
-        id: teamId,
-        tournamentId,
-        name,
-        players: players.map(player => makeTeamPlayer(teamId, tournamentId, player)),
-        createdAt: existing?.createdAt ?? NOW,
-        updatedAt: NOW,
-      }
-      teams = upsertById(teams, updated)
-      return updated
     },
     deleteTeam: async (id) => {
       teams = teams.filter(team => team.id !== id)
@@ -275,33 +259,10 @@ function createMockRepository(): TournamentRepository {
       )
     },
 
-    // Profile methods : stubs minimaux pour satisfaire l'interface
-    // TournamentRepository (cf. C.2). Les tests de ce fichier ne
-    // touchent jamais aux actions profile — la couverture profile
-    // vit dans tests/unit/store-profiles.test.ts. Si un nouveau
-    // test ici dépend du profil, étendre ces stubs.
-    getMyProfile: async () => undefined,
+    // Atteinte par le flux d'invitation via profileStore.loadProfilesByIds
+    // (best-effort, résultat vide suffisant ici).
     getProfilesByIds: async () => [],
-    updateMyProfile: async () => {
-      throw new Error('Not implemented in this test mock')
-    },
-    updateMyProfileVisibility: async () => {},
-
-    // Bundle de profil, match libre, recherche de compte et amitié : ajoutés
-    // à l'interface après ce mock, jamais atteints par les tests de ce
-    // fichier (leur couverture vit dans les tests de store dédiés).
-    getUserProfile: notImplementedInThisMock,
-    getFreeMatchById: notImplementedInThisMock,
-    createFreeMatch: notImplementedInThisMock,
-    deleteFreeMatch: notImplementedInThisMock,
-    findAccountByDisplayName: notImplementedInThisMock,
-    getFriendships: notImplementedInThisMock,
-    requestFriendship: notImplementedInThisMock,
-    acceptFriendship: notImplementedInThisMock,
-    refuseFriendship: notImplementedInThisMock,
-    cancelFriendshipRequest: notImplementedInThisMock,
-    removeFriendship: notImplementedInThisMock,
-  }
+  })
 }
 
 beforeEach(() => {

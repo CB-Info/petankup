@@ -3,9 +3,10 @@ import { createPinia, setActivePinia } from 'pinia'
 import { flushPromises } from '@vue/test-utils'
 import type { TournamentRepository } from '../../app/repositories/TournamentRepository'
 import type { CreateFreeMatchInput, FreeMatch } from '../../app/types'
-import { FreeMatchError, InviteMemberError } from '../../app/types'
+import { FreeMatchError } from '../../app/types'
 import { useFreeMatchStore } from '../../app/stores/free-match'
 import { useIdentityStore } from '../../app/stores/identity'
+import { createRepositoryDouble } from '../helpers/repository-double'
 
 // Tests du store free-match (H2.b). Setup aligné sur
 // tests/unit/store-profile-bundle.test.ts : stubs hoisted pour
@@ -76,57 +77,23 @@ type FreeMatchMockRepository = TournamentRepository & {
   __deleteFreeMatchSpy: ReturnType<typeof vi.fn>
 }
 
-// Repo in-memory minimal : seules les méthodes « match libre » sont
-// espionnées. Le reste reste no-op — ces tests n'en dépendent pas.
-function createMockRepository(overrides: Partial<{
-  getFreeMatchById: (id: string) => Promise<FreeMatch | undefined>
-  createFreeMatch: (input: CreateFreeMatchInput) => Promise<string>
-  deleteFreeMatch: (id: string) => Promise<void>
-}> = {}): FreeMatchMockRepository {
+// Seules les trois méthodes « match libre » sont configurées (et espionnées) :
+// ce sont les seules que ces tests atteignent. Toute autre méthode appelée
+// échoue bruyamment (cf. tests/helpers/repository-double.ts).
+function createMockRepository(overrides: Partial<Pick<
+  TournamentRepository,
+  'getFreeMatchById' | 'createFreeMatch' | 'deleteFreeMatch'
+>> = {}): FreeMatchMockRepository {
   const getFreeMatchByIdSpy = vi.fn(overrides.getFreeMatchById ?? (async () => undefined))
   const createFreeMatchSpy = vi.fn(overrides.createFreeMatch ?? (async () => MATCH_ID))
   const deleteFreeMatchSpy = vi.fn(overrides.deleteFreeMatch ?? (async () => {}))
 
   return {
-    getAllTournaments: async () => [],
-    getTournamentById: async () => undefined,
-    createTournament: async () => {},
-    updateTournament: async () => {},
-    deleteTournament: async () => {},
-    getTeamsByTournament: async () => [],
-    createTeam: async () => {
-      throw new Error('Not implemented in this test mock')
-    },
-    updateTeam: async () => {
-      throw new Error('Not implemented in this test mock')
-    },
-    deleteTeam: async () => {},
-    getMatchesByTournament: async () => [],
-    createMatches: async () => {},
-    updateMatch: async () => {},
-    getMembersByTournament: async () => [],
-    getMyMemberships: async () => [],
-    inviteMemberByDisplayName: async () => {
-      throw new InviteMemberError('unknown')
-    },
-    removeMember: async () => {},
-    getMyProfile: async () => undefined,
-    getProfilesByIds: async () => [],
-    updateMyProfile: async () => {
-      throw new Error('Not implemented in this test mock')
-    },
-    updateMyProfileVisibility: async () => {},
-    getUserProfile: async () => ({ kind: 'not_found' as const }),
-    getFreeMatchById: getFreeMatchByIdSpy,
-    createFreeMatch: createFreeMatchSpy,
-    deleteFreeMatch: deleteFreeMatchSpy,
-    findAccountByDisplayName: async () => undefined,
-    getFriendships: async () => ({ friends: [], received: [], sent: [] }),
-    requestFriendship: async () => 'pending' as const,
-    acceptFriendship: async () => {},
-    refuseFriendship: async () => {},
-    cancelFriendshipRequest: async () => {},
-    removeFriendship: async () => {},
+    ...createRepositoryDouble({
+      getFreeMatchById: getFreeMatchByIdSpy,
+      createFreeMatch: createFreeMatchSpy,
+      deleteFreeMatch: deleteFreeMatchSpy,
+    }),
     __getFreeMatchByIdSpy: getFreeMatchByIdSpy,
     __createFreeMatchSpy: createFreeMatchSpy,
     __deleteFreeMatchSpy: deleteFreeMatchSpy,

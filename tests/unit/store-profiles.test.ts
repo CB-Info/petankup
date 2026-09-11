@@ -10,12 +10,11 @@ import type {
   ProfileVisibility,
   Team,
   Tournament,
-  TournamentMember,
 } from '../../app/types'
-import { InviteMemberError } from '../../app/types'
 import { useTournamentStore } from '../../app/stores/tournament'
 import { useProfileStore } from '../../app/stores/profile'
 import { useIdentityStore } from '../../app/stores/identity'
+import { createRepositoryDouble } from '../helpers/repository-double'
 
 // Tests des actions du store profile (extrait du store tournament, Phase C.2).
 //
@@ -99,31 +98,29 @@ type ProfileMockRepository = TournamentRepository & {
   __findAccountByDisplayNameSpy: ReturnType<typeof vi.fn>
 }
 
-// Stub pour les méthodes de l'interface que les tests de ce fichier
-// n'atteignent jamais : le contrôle de types exige qu'elles existent, et un
-// appel accidentel doit échouer bruyamment.
-async function notImplementedInThisMock(): Promise<never> {
-  throw new Error('Not implemented in this test mock')
-}
-
 // Repo in-memory côté profiles + spies pour assertions d'appels.
-// Le reste des méthodes (tournaments, members, etc.) reste no-op /
-// liste vide — les tests profile n'en dépendent pas, sauf le test de
-// non-régression "loadCurrentProfile échoue, tournaments OK" qui
-// fournit ses propres listes.
-function createMockRepository(overrides: Partial<{
-  initialProfiles: Profile[]
+// Seules les méthodes que ces tests atteignent sont configurées : les cinq
+// méthodes profile (espionnées) et, pour les deux tests de non-régression
+// qui montent le store tournoi, getAllTournaments / getMyMemberships —
+// fournies par ces tests eux-mêmes, sans valeur par défaut. Toute autre
+// méthode appelée échoue bruyamment (cf. tests/helpers/repository-double.ts).
+type ProfileMockRepositoryOverrides = Partial<Pick<
+  TournamentRepository,
+  | 'getMyProfile'
+  | 'getProfilesByIds'
+  | 'updateMyProfile'
+  | 'updateMyProfileVisibility'
+  | 'findAccountByDisplayName'
+  | 'getAllTournaments'
+  | 'getMyMemberships'
+>> & {
+  initialProfiles?: Profile[]
   // Réglage de confidentialité servi par getMyProfile (public par défaut,
   // comme la base).
-  initialVisibility: ProfileVisibility
-  getMyProfile: () => Promise<MyProfile | undefined>
-  getProfilesByIds: (ids: string[]) => Promise<Profile[]>
-  updateMyProfile: (userId: string, displayName: string) => Promise<Profile>
-  updateMyProfileVisibility: (userId: string, visibility: ProfileVisibility) => Promise<void>
-  findAccountByDisplayName: (displayName: string) => Promise<AccountMatch | undefined>
-  getAllTournaments: () => Promise<Tournament[]>
-  getMyMemberships: (userId: string) => Promise<TournamentMember[]>
-}> = {}): ProfileMockRepository {
+  initialVisibility?: ProfileVisibility
+}
+
+function createMockRepository(overrides: ProfileMockRepositoryOverrides = {}): ProfileMockRepository {
   const profiles: Profile[] = [...(overrides.initialProfiles ?? [])]
 
   // Comme la RPC : la ligne de l'identité du JETON (celle que voit la base),
@@ -178,46 +175,18 @@ function createMockRepository(overrides: Partial<{
     overrides.findAccountByDisplayName ?? defaultFindAccountByDisplayName,
   )
 
-  const repo: ProfileMockRepository = {
-    // Tournament / team / match / member — no-op pour ces tests.
-    getAllTournaments: overrides.getAllTournaments ?? (async () => []),
-    getTournamentById: async () => undefined,
-    createTournament: async () => {},
-    updateTournament: async () => {},
-    deleteTournament: async () => {},
-    getTeamsByTournament: async () => [],
-    createTeam: async () => {
-      throw new Error('Not implemented in this test mock')
-    },
-    updateTeam: async () => {
-      throw new Error('Not implemented in this test mock')
-    },
-    deleteTeam: async () => {},
-    getMatchesByTournament: async () => [],
-    createMatches: async () => {},
-    updateMatch: async () => {},
-    getMembersByTournament: async () => [],
-    getMyMemberships: overrides.getMyMemberships ?? (async () => []),
-    inviteMemberByDisplayName: async () => {
-      throw new InviteMemberError('unknown')
-    },
-    removeMember: async () => {},
-    getMyProfile: getMyProfileSpy,
-    getProfilesByIds: getProfilesByIdsSpy,
-    updateMyProfile: updateMyProfileSpy,
-    updateMyProfileVisibility: updateMyProfileVisibilitySpy,
-    // Bundle de profil et match libre : hors du périmètre de ces tests.
-    getUserProfile: notImplementedInThisMock,
-    getFreeMatchById: notImplementedInThisMock,
-    createFreeMatch: notImplementedInThisMock,
-    deleteFreeMatch: notImplementedInThisMock,
-    findAccountByDisplayName: findAccountByDisplayNameSpy,
-    getFriendships: async () => ({ friends: [], received: [], sent: [] }),
-    requestFriendship: async () => 'pending' as const,
-    acceptFriendship: async () => {},
-    refuseFriendship: async () => {},
-    cancelFriendshipRequest: async () => {},
-    removeFriendship: async () => {},
+  return {
+    ...createRepositoryDouble({
+      getMyProfile: getMyProfileSpy,
+      getProfilesByIds: getProfilesByIdsSpy,
+      updateMyProfile: updateMyProfileSpy,
+      updateMyProfileVisibility: updateMyProfileVisibilitySpy,
+      findAccountByDisplayName: findAccountByDisplayNameSpy,
+      // Sans valeur par défaut : une entrée `undefined` laisse la méthode
+      // non configurée (elle échoue si un test l'atteint sans la fournir).
+      getAllTournaments: overrides.getAllTournaments,
+      getMyMemberships: overrides.getMyMemberships,
+    }),
     __profiles: profiles,
     __getMyProfileSpy: getMyProfileSpy,
     __getProfilesByIdsSpy: getProfilesByIdsSpy,
@@ -225,7 +194,6 @@ function createMockRepository(overrides: Partial<{
     __updateMyProfileVisibilitySpy: updateMyProfileVisibilitySpy,
     __findAccountByDisplayNameSpy: findAccountByDisplayNameSpy,
   }
-  return repo
 }
 
 function makeProfile(overrides: Partial<Profile> = {}): Profile {
