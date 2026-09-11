@@ -195,6 +195,20 @@ function createMockRepository(): TournamentRepository {
       teams = [...teams, newTeam]
       return newTeam
     },
+    updateTeam: async (teamId, name, players) => {
+      const existing = teams.find(team => team.id === teamId)
+      const tournamentId = existing?.tournamentId ?? 't-unknown'
+      const updated: Team = {
+        id: teamId,
+        tournamentId,
+        name,
+        players: players.map(player => makeTeamPlayer(teamId, tournamentId, player)),
+        createdAt: existing?.createdAt ?? NOW,
+        updatedAt: NOW,
+      }
+      teams = upsertById(teams, updated)
+      return updated
+    },
     deleteTeam: async (id) => {
       teams = teams.filter(team => team.id !== id)
       matches = matches.filter(match => match.teamAId !== id && match.teamBId !== id)
@@ -413,6 +427,67 @@ describe('useTournamentStore — teams', () => {
 
     expect(store.teams).toHaveLength(2)
     expect(store.teams.find(team => team.id === teamToDelete.id)).toBeUndefined()
+  })
+  it('updateTeam: replaces the team in place and returns it', async () => {
+    const store = useTournamentStore()
+    const created = await store.createTournament({
+      name: 'Tournoi',
+      date: NOW,
+      format: 'round_robin',
+    })
+    await store.loadTournament(created.id)
+    const first = await store.addTeam({ name: 'Les Boulistes', players: [{ userId: null, displayName: 'Alice' }] })
+    const second = await store.addTeam({ name: 'Les Pointus', players: [{ userId: null, displayName: 'Carla' }] })
+
+    const updated = await store.updateTeam(first.id, 'Les Boulistes réunis', [
+      { userId: null, displayName: 'Alice' },
+      { userId: null, displayName: 'Bob' },
+    ])
+
+    expect(updated.id).toBe(first.id)
+    expect(updated.name).toBe('Les Boulistes réunis')
+    expect(updated.players.map(player => player.displayNameSnapshot)).toEqual(['Alice', 'Bob'])
+    // En place : même position dans la liste, l'autre équipe intacte.
+    expect(store.teams).toHaveLength(2)
+    expect(store.teams[0]).toEqual(updated)
+    expect(store.teams[1]).toEqual(second)
+  })
+
+  it('updateTeam: leaves the list untouched when the returned id is not in it', async () => {
+    const store = useTournamentStore()
+    const created = await store.createTournament({
+      name: 'Tournoi',
+      date: NOW,
+      format: 'round_robin',
+    })
+    await store.loadTournament(created.id)
+    await store.addTeam({ name: 'Les Boulistes', players: [{ userId: null, displayName: 'Alice' }] })
+    const teamsBefore = [...store.teams]
+
+    const unknownTeamId = '00000000-0000-4000-8000-000000000000'
+    const updated = await store.updateTeam(unknownTeamId, 'Les Fantômes', [{ userId: null, displayName: 'Zoé' }])
+
+    expect(updated.id).toBe(unknownTeamId)
+    expect(store.teams).toEqual(teamsBefore)
+  })
+
+  it('updateTeam: propagates the repository error and leaves the team unchanged', async () => {
+    const store = useTournamentStore()
+    const created = await store.createTournament({
+      name: 'Tournoi',
+      date: NOW,
+      format: 'round_robin',
+    })
+    await store.loadTournament(created.id)
+    const team = await store.addTeam({ name: 'Les Boulistes', players: [{ userId: null, displayName: 'Alice' }] })
+    vi.spyOn(mockRepositoryRef.current!, 'updateTeam').mockRejectedValue(new Error('update failed'))
+
+    await expect(
+      store.updateTeam(team.id, 'Les Boulistes réunis', [{ userId: null, displayName: 'Alice' }]),
+    ).rejects.toThrow('update failed')
+
+    expect(store.teams).toHaveLength(1)
+    expect(store.teams[0]?.name).toBe('Les Boulistes')
   })
 })
 

@@ -298,13 +298,6 @@ export const useTournamentStore = defineStore('tournament', () => {
     })
   }
 
-  async function updateTournament(tournament: Tournament): Promise<void> {
-    return withLoading(async () => {
-      const updated: Tournament = { ...tournament, updatedAt: nowIso() }
-      await persistTournamentChange(updated)
-    })
-  }
-
   async function deleteTournament(id: string): Promise<void> {
     return withLoading(async () => {
       await repository.deleteTournament(id)
@@ -615,7 +608,6 @@ export const useTournamentStore = defineStore('tournament', () => {
     loadTournamentsForCurrentSession,
     createTournament,
     loadTournament,
-    updateTournament,
     deleteTournament,
     setTournamentVisibility,
     addTeam,
