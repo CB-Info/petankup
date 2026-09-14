@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { flushPromises } from '@vue/test-utils'
 import type { TournamentRepository } from '../../app/repositories/TournamentRepository'
 import type { TournamentMatch, Team, TeamPlayer, Tournament, TournamentMember } from '../../app/types'
-import { InviteMemberError, WriteRefusedError } from '../../app/types'
+import { InviteMemberError, StartTournamentError, WriteRefusedError } from '../../app/types'
 import { useTournamentStore } from '../../app/stores/tournament'
 import { useIdentityStore } from '../../app/stores/identity'
 import { createRepositoryDouble } from '../helpers/repository-double'
@@ -180,6 +180,18 @@ function createMockRepository(): TournamentRepository {
         member => member.tournamentId !== id,
       )
     },
+    // Comme la RPC : le tournoi passe en cours ET les matchs sont stockés,
+    // ensemble.
+    startTournament: async (tournamentId, matchesToSave) => {
+      tournaments = tournaments.map(tournament =>
+        tournament.id === tournamentId
+          ? { ...tournament, status: 'in_progress' }
+          : tournament,
+      )
+      for (const matchToSave of matchesToSave) {
+        matches = upsertById(matches, matchToSave)
+      }
+    },
 
     getTeamsByTournament: async tournamentId => teams.filter(team => team.tournamentId === tournamentId),
     createTeam: async (tournamentId, name, players) => {
@@ -215,11 +227,6 @@ function createMockRepository(): TournamentRepository {
     },
 
     getMatchesByTournament: async tournamentId => matches.filter(match => match.tournamentId === tournamentId),
-    createMatches: async (matchesToSave) => {
-      for (const matchToSave of matchesToSave) {
-        matches = upsertById(matches, matchToSave)
-      }
-    },
     updateMatch: async (match) => {
       matches = upsertById(matches, match)
     },
@@ -507,19 +514,33 @@ describe('useTournamentStore — matches', () => {
     return { store, tournamentId: created.id }
   }
 
-  it('generateMatches: 4 teams → 6 matches, and the tournament moves to in_progress', async () => {
+  it('startTournament: 4 teams → 6 matches, and the tournament moves to in_progress', async () => {
     const { store, tournamentId } = await setupTournamentWithFourTeams()
 
-    await store.generateMatches()
+    await store.startTournament()
 
     expect(store.matches).toHaveLength(6)
     expect(store.currentTournament?.status).toBe('in_progress')
     expect((await mockRepositoryRef.current!.getTournamentById(tournamentId))?.status).toBe('in_progress')
   })
 
+  it('startTournament: hands the generated matches to the repository in a single call, never a separate tournament update', async () => {
+    // Une seule écriture : la RPC reçoit le tournoi et le lot ensemble. Un
+    // UPDATE séparé du tournoi serait le retour du chemin en deux écritures.
+    const { store, tournamentId } = await setupTournamentWithFourTeams()
+    const startTournamentSpy = vi.spyOn(mockRepositoryRef.current!, 'startTournament')
+    const updateTournamentSpy = vi.spyOn(mockRepositoryRef.current!, 'updateTournament')
+
+    await store.startTournament()
+
+    expect(startTournamentSpy).toHaveBeenCalledTimes(1)
+    expect(startTournamentSpy).toHaveBeenCalledWith(tournamentId, store.matches)
+    expect(updateTournamentSpy).not.toHaveBeenCalled()
+  })
+
   it('submitScore: a valid score completes the match and recomputes the ranking', async () => {
     const { store } = await setupTournamentWithFourTeams()
-    await store.generateMatches()
+    await store.startTournament()
     const matchToScore = store.matches[0]!
 
     const result = await store.submitScore(matchToScore.id, 13, 7)
@@ -536,7 +557,7 @@ describe('useTournamentStore — matches', () => {
 
   it('submitScore: an invalid score (13-13) is rejected and leaves the match unchanged', async () => {
     const { store } = await setupTournamentWithFourTeams()
-    await store.generateMatches()
+    await store.startTournament()
     const matchToScore = store.matches[0]!
 
     const result = await store.submitScore(matchToScore.id, 13, 13)
@@ -551,7 +572,7 @@ describe('useTournamentStore — matches', () => {
 
   it('submitScore: an out-of-bounds score (20-0) is rejected and leaves the match unchanged', async () => {
     const { store } = await setupTournamentWithFourTeams()
-    await store.generateMatches()
+    await store.startTournament()
     const matchToScore = store.matches[0]!
 
     const result = await store.submitScore(matchToScore.id, 20, 0)
@@ -576,7 +597,7 @@ describe('useTournamentStore — completeTournament', () => {
     await store.loadTournament(created.id)
     await store.addTeam({ name: 'A', players: [{ userId: null, displayName: 'Alice' }] })
     await store.addTeam({ name: 'B', players: [{ userId: null, displayName: 'Bob' }] })
-    await store.generateMatches()
+    await store.startTournament()
     expect(store.matches).toHaveLength(1)
     await store.submitScore(store.matches[0]!.id, 13, 5)
 
@@ -598,7 +619,7 @@ describe('useTournamentStore — completeTournament', () => {
     await store.addTeam({ name: 'B', players: [{ userId: null, displayName: 'Bob' }] })
     await store.addTeam({ name: 'C', players: [{ userId: null, displayName: 'Carla' }] })
     await store.addTeam({ name: 'D', players: [{ userId: null, displayName: 'Diego' }] })
-    await store.generateMatches()
+    await store.startTournament()
     await store.submitScore(store.matches[0]!.id, 13, 4)
 
     const result = await store.completeTournament()
@@ -1313,8 +1334,9 @@ describe('useTournamentStore — setTournamentVisibility without the list', () =
 describe('useTournamentStore — refused writes leave the local state untouched', () => {
   // La base a filtré l'écriture (zéro ligne) : le dépôt lève
   // WriteRefusedError, le store ne doit rien avoir modifié — l'écran reflète
-  // toujours la base, jusqu'au rechargement que la page déclenche.
-  async function setupTournamentWithTwoTeamsAndOneMatch() {
+  // toujours la base, jusqu'au rechargement que la page déclenche. Même
+  // règle pour un refus typé de la RPC de démarrage (StartTournamentError).
+  async function setupDraftTournamentWithTwoTeams() {
     const store = useTournamentStore()
     const created = await store.createTournament({
       name: 'Tournoi',
@@ -1324,9 +1346,32 @@ describe('useTournamentStore — refused writes leave the local state untouched'
     await store.loadTournament(created.id)
     await store.addTeam({ name: 'Les Boulistes', players: [{ userId: null, displayName: 'Alice' }] })
     await store.addTeam({ name: 'Les Pointus', players: [{ userId: null, displayName: 'Carla' }] })
-    await store.generateMatches()
     return { store, tournamentId: created.id }
   }
+
+  async function setupTournamentWithTwoTeamsAndOneMatch() {
+    const { store, tournamentId } = await setupDraftTournamentWithTwoTeams()
+    await store.startTournament()
+    return { store, tournamentId }
+  }
+
+  it('startTournament: the tournament stays a draft with no match', async () => {
+    const { store } = await setupDraftTournamentWithTwoTeams()
+    const rankingBefore = store.ranking.map(entry => ({ ...entry }))
+    vi.spyOn(mockRepositoryRef.current!, 'startTournament').mockRejectedValue(
+      new StartTournamentError('tournament_not_draft'),
+    )
+
+    const refusal = store.startTournament()
+    await expect(refusal).rejects.toBeInstanceOf(StartTournamentError)
+    await expect(refusal).rejects.toMatchObject({ code: 'tournament_not_draft' })
+
+    expect(store.matches).toEqual([])
+    expect(store.currentTournament?.status).toBe('draft')
+    expect(store.tournaments[0]?.status).toBe('draft')
+    expect(store.ranking).toEqual(rankingBefore)
+    expect(store.isLoading).toBe(false)
+  })
 
   it('submitScore: the match and the ranking stay as they were', async () => {
     const { store } = await setupTournamentWithTwoTeamsAndOneMatch()

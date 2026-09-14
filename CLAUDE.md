@@ -361,6 +361,14 @@ base restent le filet, jamais la première ligne :
   uniquement** (aucune UI à ce jour, choix assumé) : les stats
   matérialisées sont retirées à la réouverture et recalculées à la
   re-complétion. Jamais de retour en Brouillon.
+- Le **démarrage** (Brouillon → En cours) est **une seule opération en
+  base** : la RPC `start_tournament` passe le statut puis insère les matchs
+  générés par l'application, dans une transaction (tout ou rien ; l'INSERT
+  direct des matchs n'existe plus dans le contrat applicatif). Ses refus
+  typés (`StartTournamentError`) sont traduits par
+  `useStartTournamentFeedback` ; ceux qui disent l'écran périmé (lancé
+  ailleurs, matchs déjà là, plus assez d'équipes) rechargent le tournoi en
+  place.
 - Deux visibilités : `private` (par défaut : owner + membres invités)
   ou `public` (visible de tous les utilisateurs authentifiés).
   Modifiable à tout moment, y compris sur un tournoi terminé

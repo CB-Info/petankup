@@ -336,6 +336,25 @@ export class FreeMatchError extends Error {
   }
 }
 
+// Codes levés par la RPC start_tournament (`raise exception '<code>'`), dans
+// l'ordre de vérification côté base. `unknown` couvre tout le reste (réseau,
+// panne) — jamais affiché tel quel.
+export type StartTournamentErrorCode =
+  | "not_authenticated"
+  | "not_owner"
+  | "tournament_not_draft"
+  | "not_enough_teams"
+  | "matches_already_generated"
+  | "invalid_matches"
+  | "unknown";
+
+export class StartTournamentError extends Error {
+  constructor(public readonly code: StartTournamentErrorCode) {
+    super(code);
+    this.name = "StartTournamentError";
+  }
+}
+
 // --- Amitié (A3) ---
 
 // Une personne dans une relation d'amitié, vue depuis l'utilisateur

@@ -17,15 +17,23 @@ import type {
   TournamentMember,
   UserProfileBundle,
 } from '../types'
-import { FreeMatchError, FriendshipError, InviteMemberError, ProfileError, WriteRefusedError } from '../types'
+import {
+  FreeMatchError,
+  FriendshipError,
+  InviteMemberError,
+  ProfileError,
+  StartTournamentError,
+  WriteRefusedError,
+} from '../types'
 import { parseFreeMatchErrorCode } from '../utils/free-match-errors'
 import { parseFriendshipErrorCode } from '../utils/friendship-errors'
+import { parseStartTournamentErrorCode } from '../utils/start-tournament-errors'
 import type { TournamentRepository } from './TournamentRepository'
 import {
   mapAccountMatchRowToDomain,
   mapCreateFreeMatchInputToRpcPayload,
   mapFreeMatchRowToDomain,
-  mapMatchDomainToInsert,
+  mapMatchDomainToStartPayload,
   mapMatchDomainToUpdate,
   mapMatchRowToDomain,
   mapMyProfileRowToDomain,
@@ -78,7 +86,7 @@ function mapPlayersToRpcPayload(
 // Les cascades de suppression sont gérées par la DB via ON DELETE CASCADE
 // (voir migration initiale) — le repo se contente de DELETE l'entité ciblée.
 //
-// Gestion d'erreur, trois cas selon le contexte :
+// Gestion d'erreur, selon le contexte :
 //   - Par défaut : Error standard portant le message Supabase, propagée au
 //     site d'appel UI qui affiche un toast (cf. composables/useErrorToast).
 //   - inviteMemberByDisplayName / removeMember : InviteMemberError typée
@@ -90,6 +98,10 @@ function mapPlayersToRpcPayload(
 //   - createFreeMatch : FreeMatchError typée, mappée depuis les raise
 //     exception SQL par parseFreeMatchErrorCode (égalité stricte du message,
 //     cf. utils/free-match-errors). La page dispatch via instanceof + code.
+//   - startTournament : StartTournamentError typée, même mécanisme
+//     (parseStartTournamentErrorCode, cf. utils/start-tournament-errors). La
+//     page annonce via useStartTournamentFeedback et recharge le tournoi si
+//     le refus dit l'écran périmé.
 // Le store gère le toggle isLoading dans tous les cas.
 export class SupabaseRepository implements TournamentRepository {
   constructor(private readonly client: SupabaseClient<Database>) {}
@@ -149,6 +161,21 @@ export class SupabaseRepository implements TournamentRepository {
       .eq('id', id)
     if (error !== null) throw new Error(error.message)
     SupabaseRepository.requireOneRowAffected(count, 'nothing_deleted')
+  }
+
+  // Une seule écriture, tout ou rien : la RPC passe le statut en cours puis
+  // insère le lot dans la même transaction. Résultat void — rien à lire.
+  // Tout refus arrive en message = code (raise exception), traduit en
+  // StartTournamentError, jamais en Error nue : aucun code brut n'atteint
+  // un toast.
+  async startTournament(tournamentId: string, matches: TournamentMatch[]): Promise<void> {
+    const { error } = await this.client.rpc('start_tournament', {
+      p_tournament_id: tournamentId,
+      p_matches: matches.map(mapMatchDomainToStartPayload),
+    })
+    if (error !== null) {
+      throw new StartTournamentError(parseStartTournamentErrorCode(error.message))
+    }
   }
 
   // --- Teams ---
@@ -229,13 +256,6 @@ export class SupabaseRepository implements TournamentRepository {
       .eq('tournament_id', tournamentId)
     if (error !== null) throw new Error(error.message)
     return (data ?? []).map(mapMatchRowToDomain)
-  }
-
-  async createMatches(matches: TournamentMatch[]): Promise<void> {
-    const { error } = await this.client
-      .from('tournament_matches')
-      .insert(matches.map(mapMatchDomainToInsert))
-    if (error !== null) throw new Error(error.message)
   }
 
   async updateMatch(match: TournamentMatch): Promise<void> {

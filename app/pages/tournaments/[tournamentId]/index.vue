@@ -8,6 +8,7 @@
 import type { TournamentMatch, Team, TournamentStatus } from "../../../types";
 import type { HeaderAction } from "~/composables/useAppHeader";
 import type { CarteEquipePlayer } from "~/components/CarteEquipe.vue";
+import { startTournamentErrorMeansStaleScreen } from "../../../utils/start-tournament-errors";
 
 const route = useRoute();
 const tournamentStore = useTournamentStore();
@@ -22,6 +23,7 @@ const profileStore = useProfileStore();
 const { profileById } = storeToRefs(profileStore);
 const { showError } = useErrorToast();
 const { announceWriteRefusal } = useWriteRefusedFeedback();
+const { announceStartRefusal } = useStartTournamentFeedback();
 
 // Alias local lisible : tout l'ownership conditionne des actions admin
 // dans le template, on ne le manipule jamais ailleurs.
@@ -104,10 +106,12 @@ async function loadDetail(id: string): Promise<void> {
   }
 }
 
-// Après un refus d'écriture (WriteRefusedError) : l'écran ne reflète plus
-// la base — le tournoi a été terminé, supprimé ou modifié ailleurs. Le
-// refus est annoncé par useWriteRefusedFeedback ; ici on recharge l'objet
-// en place, même chemin que le chargement initial, pour que l'écran
+// Après un refus d'écriture (WriteRefusedError : le tournoi a été terminé,
+// supprimé ou modifié ailleurs), ou un refus de démarrage qui dit l'écran
+// périmé (StartTournamentError, cf. startTournamentErrorMeansStaleScreen :
+// lancé ailleurs, matchs déjà là, plus assez d'équipes) : l'écran ne reflète
+// plus la base. Le refus est annoncé par son composable ; ici on recharge
+// l'objet en place, même chemin que le chargement initial, pour que l'écran
 // retrouve la réalité.
 async function reloadAfterRefusal(): Promise<void> {
   await loadDetail(tournamentId.value);
@@ -317,24 +321,30 @@ const showsTeamActions = computed(
 
 const hasEnoughTeamsToStart = computed(() => teams.value.length >= 2);
 
-const isGeneratingMatches = ref(false);
+const isStartingTournament = ref(false);
 
+// Démarrage : une seule écriture (RPC start_tournament, statut puis matchs
+// dans une transaction). Un refus typé est annoncé traduit ; s'il dit
+// l'écran périmé (lancé ailleurs, matchs déjà là, plus assez d'équipes), on
+// recharge. showError ne reçoit plus que les erreurs étrangères au domaine.
 async function startTournament() {
-  if (isGeneratingMatches.value) return;
-  isGeneratingMatches.value = true;
+  if (isStartingTournament.value) return;
+  isStartingTournament.value = true;
   try {
-    await tournamentStore.generateMatches();
+    await tournamentStore.startTournament();
     activeTab.value = String(
       tabItems.findIndex((tab) => tab.slot === "matches"),
     );
   } catch (error) {
-    if (announceWriteRefusal(error)) {
-      await reloadAfterRefusal();
+    if (announceStartRefusal(error)) {
+      if (startTournamentErrorMeansStaleScreen(error.code)) {
+        await reloadAfterRefusal();
+      }
     } else {
       showError(error);
     }
   } finally {
-    isGeneratingMatches.value = false;
+    isStartingTournament.value = false;
   }
 }
 
@@ -676,7 +686,7 @@ useHead(() => ({
           <UButton
             color="primary"
             block
-            :loading="isGeneratingMatches"
+            :loading="isStartingTournament"
             class="h-13.5 rounded-[14px] font-disp text-[14.5px] font-extrabold tracking-[0.03em] uppercase text-(--pk-cream) shadow-(--pk-shadow-clay-lg)"
             @click="startTournament"
           >

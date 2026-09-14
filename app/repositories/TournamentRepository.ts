@@ -24,8 +24,10 @@ import type {
 // createXxx (INSERT) ou updateXxx (UPDATE ciblé par id). Pas d'upsert
 // fourre-tout : distinguer créer de modifier évite les pièges Postgres (un
 // trigger BEFORE UPDATE ne s'applique pas à la phase INSERT spéculative d'un
-// upsert). Tournois et matchs suivent ce pattern ; teams et members passent
-// par des RPCs dédiées, le profil par un update ciblé — l'ensemble est homogène.
+// upsert). Les tournois suivent ce pattern ; le démarrage d'un tournoi
+// (statut + matchs), les équipes et les membres passent par des RPCs
+// dédiées, les matchs ne sont ensuite que mis à jour, le profil par un
+// update ciblé — l'ensemble est homogène.
 //
 // Refus : une écriture directe (UPDATE / DELETE) qu'une règle d'accès filtre
 // ne lève rien côté base — zéro ligne, pas d'erreur. L'implémentation la
@@ -52,6 +54,13 @@ export interface TournamentRepository {
   createTournament(tournament: Tournament): Promise<void>
   updateTournament(tournament: Tournament): Promise<void>
   deleteTournament(id: string): Promise<void>
+  // Démarre un brouillon : passe le tournoi en cours ET insère le lot de
+  // matchs en une seule transaction (RPC start_tournament, tout ou rien).
+  // Le lot est généré par l'application (generateRoundRobinMatches) ; la
+  // base ne vérifie que sa structure (lot non vide, équipes distinctes de ce
+  // tournoi, pas de paire ni d'id en double, manche ≥ 1 — aucun contrôle de
+  // complétude) et refuse en StartTournamentError typée.
+  startTournament(tournamentId: string, matches: TournamentMatch[]): Promise<void>
 
   getTeamsByTournament(tournamentId: string): Promise<Team[]>
   createTeam(
@@ -67,7 +76,6 @@ export interface TournamentRepository {
   deleteTeam(id: string): Promise<void>
 
   getMatchesByTournament(tournamentId: string): Promise<TournamentMatch[]>
-  createMatches(matches: TournamentMatch[]): Promise<void>
   updateMatch(match: TournamentMatch): Promise<void>
 
   getMembersByTournament(tournamentId: string): Promise<TournamentMember[]>
