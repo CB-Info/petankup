@@ -160,7 +160,7 @@ export const useTournamentStore = defineStore('tournament', () => {
   }
 
   // Garde commune aux actions qui ne font sens que sur un tournoi chargé
-  // (addTeam, generateMatches, submitScore, completeTournament). Lever
+  // (addTeam, startTournament, submitScore, completeTournament). Lever
   // une erreur tôt évite de produire des entités orphelines.
   function requireCurrentTournament(): Tournament {
     if (currentTournament.value === null) {
@@ -197,10 +197,16 @@ export const useTournamentStore = defineStore('tournament', () => {
     }
   }
 
-  async function persistTournamentChange(updatedTournament: Tournament): Promise<void> {
-    await repository.updateTournament(updatedTournament)
+  // Reflète localement un tournoi modifié : dans la liste et, s'il est
+  // affiché, comme tournoi courant.
+  function applyTournamentChangeLocally(updatedTournament: Tournament): void {
     replaceTournamentInList(updatedTournament)
     syncCurrentTournamentIfMatches(updatedTournament)
+  }
+
+  async function persistTournamentChange(updatedTournament: Tournament): Promise<void> {
+    await repository.updateTournament(updatedTournament)
+    applyTournamentChangeLocally(updatedTournament)
   }
 
   // Primitive de fetch : charge `tournaments` ET `myMemberships` en
@@ -356,7 +362,15 @@ export const useTournamentStore = defineStore('tournament', () => {
     })
   }
 
-  async function generateMatches(): Promise<void> {
+  // Démarre le tournoi courant. Les matchs sont générés ici (méthode du
+  // cercle, règles testées dans utils/tournament) et confiés à la base en
+  // UNE écriture, tout ou rien : statut en cours et matchs dans la même
+  // transaction (RPC start_tournament). L'état local ne bouge qu'après le
+  // succès — sur un refus (StartTournamentError, propagée telle quelle :
+  // withLoading n'avale rien), l'écran reflète toujours la base. Pas de
+  // garde sur le nombre d'équipes ici : la base décide (not_enough_teams),
+  // l'écran traduit.
+  async function startTournament(): Promise<void> {
     return withLoading(async () => {
       const tournament = requireCurrentTournament()
       const generatedMatches = generateRoundRobinMatches(
@@ -364,16 +378,15 @@ export const useTournamentStore = defineStore('tournament', () => {
         tournament.id,
         nowIso(),
       )
-      await repository.createMatches(generatedMatches)
-      matches.value = generatedMatches
+      await repository.startTournament(tournament.id, generatedMatches)
 
       const tournamentInProgress: Tournament = {
         ...tournament,
         status: 'in_progress',
         updatedAt: nowIso(),
       }
-      await persistTournamentChange(tournamentInProgress)
-
+      matches.value = generatedMatches
+      applyTournamentChangeLocally(tournamentInProgress)
       refreshRanking()
     })
   }
@@ -613,7 +626,7 @@ export const useTournamentStore = defineStore('tournament', () => {
     addTeam,
     updateTeam,
     deleteTeam,
-    generateMatches,
+    startTournament,
     submitScore,
     refreshRanking,
     completeTournament,

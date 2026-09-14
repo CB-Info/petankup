@@ -43,6 +43,7 @@ const UNCONFIGURED_REPOSITORY: TournamentRepository = {
   createTournament: unconfigured('createTournament'),
   updateTournament: unconfigured('updateTournament'),
   deleteTournament: unconfigured('deleteTournament'),
+  startTournament: unconfigured('startTournament'),
 
   getTeamsByTournament: unconfigured('getTeamsByTournament'),
   createTeam: unconfigured('createTeam'),
@@ -50,7 +51,6 @@ const UNCONFIGURED_REPOSITORY: TournamentRepository = {
   deleteTeam: unconfigured('deleteTeam'),
 
   getMatchesByTournament: unconfigured('getMatchesByTournament'),
-  createMatches: unconfigured('createMatches'),
   updateMatch: unconfigured('updateMatch'),
 
   getMembersByTournament: unconfigured('getMembersByTournament'),

@@ -13,7 +13,7 @@ import type {
   UserProfileBundle,
 } from '../../app/types'
 import {
-  mapMatchDomainToInsert,
+  mapMatchDomainToStartPayload,
   mapMatchDomainToUpdate,
   mapMatchRowToDomain,
   mapMyProfileRowToDomain,
@@ -354,39 +354,8 @@ describe('mapMatchRowToDomain', () => {
   })
 })
 
-describe('mapMatchDomainToInsert', () => {
-  it('translates a domain TournamentMatch to an Insert payload (roundNumber → round_number)', () => {
-    const match: TournamentMatch = {
-      id: MATCH_ID,
-      tournamentId: TOURNAMENT_ID,
-      teamAId: TEAM_A_ID,
-      teamBId: TEAM_B_ID,
-      scoreA: 13,
-      scoreB: 7,
-      winnerId: TEAM_A_ID,
-      status: 'completed',
-      roundNumber: 2,
-      createdAt: NOW,
-      updatedAt: NOW,
-    }
-
-    const insert = mapMatchDomainToInsert(match)
-    expect(insert).toEqual({
-      id: MATCH_ID,
-      tournament_id: TOURNAMENT_ID,
-      team_a_id: TEAM_A_ID,
-      team_b_id: TEAM_B_ID,
-      score_a: 13,
-      score_b: 7,
-      winner_id: TEAM_A_ID,
-      status: 'completed',
-      round_number: 2,
-    })
-    expect(insert).not.toHaveProperty('created_at')
-    expect(insert).not.toHaveProperty('updated_at')
-  })
-
-  it('preserves null for pending match scores and winner', () => {
+describe('mapMatchDomainToStartPayload', () => {
+  it('maps exactly id, team_a_id, team_b_id and round_number — nothing else', () => {
     const match: TournamentMatch = {
       id: MATCH_ID,
       tournamentId: TOURNAMENT_ID,
@@ -401,10 +370,35 @@ describe('mapMatchDomainToInsert', () => {
       updatedAt: NOW,
     }
 
-    const insert = mapMatchDomainToInsert(match)
-    expect(insert.score_a).toBeNull()
-    expect(insert.score_b).toBeNull()
-    expect(insert.winner_id).toBeNull()
+    // toStrictEqual refuse toute clé en trop : ni tournament_id (premier
+    // argument de la RPC), ni score, vainqueur, statut ou horodatage (fixés
+    // par la base).
+    expect(mapMatchDomainToStartPayload(match)).toStrictEqual({
+      id: MATCH_ID,
+      team_a_id: TEAM_A_ID,
+      team_b_id: TEAM_B_ID,
+      round_number: 1,
+    })
+  })
+
+  it('ignores score, winner and status even on a completed match', () => {
+    const match: TournamentMatch = {
+      id: MATCH_ID,
+      tournamentId: TOURNAMENT_ID,
+      teamAId: TEAM_A_ID,
+      teamBId: TEAM_B_ID,
+      scoreA: 13,
+      scoreB: 7,
+      winnerId: TEAM_A_ID,
+      status: 'completed',
+      roundNumber: 2,
+      createdAt: NOW,
+      updatedAt: NOW,
+    }
+
+    const payload = mapMatchDomainToStartPayload(match)
+    expect(Object.keys(payload).sort()).toEqual(['id', 'round_number', 'team_a_id', 'team_b_id'])
+    expect(payload.round_number).toBe(2)
   })
 })
 

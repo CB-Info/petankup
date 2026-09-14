@@ -36,7 +36,6 @@ type TeamPlayerRow = Database['public']['Tables']['team_players']['Row']
 // teams est toujours lu avec ses joueurs embarqués (select '*, team_players(*)').
 type TeamRowWithPlayers = TeamRow & { team_players: TeamPlayerRow[] }
 type MatchRow = Database['public']['Tables']['tournament_matches']['Row']
-type MatchInsert = Database['public']['Tables']['tournament_matches']['Insert']
 type MatchUpdate = Database['public']['Tables']['tournament_matches']['Update']
 type TournamentMemberRow = Database['public']['Tables']['tournament_members']['Row']
 type ProfileRow = Database['public']['Tables']['profiles']['Row']
@@ -157,16 +156,26 @@ export function mapMatchRowToDomain(row: MatchRow): TournamentMatch {
   }
 }
 
-export function mapMatchDomainToInsert(match: TournamentMatch): MatchInsert {
+// Domain → lot de démarrage : la forme exacte attendue par la RPC
+// start_tournament pour chaque match généré. Scores, vainqueur, statut et
+// tournament_id sont volontairement absents — la base fixe elle-même « en
+// attente, sans score », et l'id du tournoi est le premier argument de la
+// RPC. Alias d'objet (pas d'interface) : c'est ce qui le rend assignable au
+// type Json des arguments générés. Json accepte `undefined` : c'est le type
+// domaine (roundNumber: number) qui garantit la présence de chaque clé. Pas
+// de mapper Domain → Insert : les matchs ne sont plus insérés en direct.
+export type StartTournamentMatchPayload = {
+  id: string
+  team_a_id: string
+  team_b_id: string
+  round_number: number
+}
+
+export function mapMatchDomainToStartPayload(match: TournamentMatch): StartTournamentMatchPayload {
   return {
     id: match.id,
-    tournament_id: match.tournamentId,
     team_a_id: match.teamAId,
     team_b_id: match.teamBId,
-    score_a: match.scoreA,
-    score_b: match.scoreB,
-    winner_id: match.winnerId,
-    status: match.status,
     round_number: match.roundNumber,
   }
 }

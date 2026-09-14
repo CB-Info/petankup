@@ -562,6 +562,10 @@ export type Database = {
         Args: { p_display_name: string }
         Returns: Database["public"]["Enums"]["friendship_status"]
       }
+      start_tournament: {
+        Args: { p_matches: Json; p_tournament_id: string }
+        Returns: undefined
+      }
       text_array_has_no_blank_values: {
         Args: { arr: string[] }
         Returns: boolean

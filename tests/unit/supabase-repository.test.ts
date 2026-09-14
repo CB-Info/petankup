@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '../../app/types/database.types'
 import type { TournamentMatch, Tournament, TournamentMember, UserProfileBundle } from '../../app/types'
-import { InviteMemberError, ProfileError, WriteRefusedError } from '../../app/types'
+import { InviteMemberError, ProfileError, StartTournamentError, WriteRefusedError } from '../../app/types'
 import { SupabaseRepository } from '../../app/repositories/SupabaseRepository'
 
 // Mock du client Supabase. Le builder Supabase est un objet PromiseLike :
@@ -67,16 +67,18 @@ function makeRepoWithChain(chain: MockChain): {
 function makeRepoWithRpcResult(result: ChainResult): {
   repo: SupabaseRepository
   rpc: ReturnType<typeof vi.fn>
+  from: ReturnType<typeof vi.fn>
 } {
   const thenable = {
     then: (onFulfilled: (value: ChainResult) => unknown) => onFulfilled(result),
   }
   const rpc = vi.fn(() => thenable)
-  // Les tests RPC ne touchent pas à client.from, mais on l'expose comme
-  // no-op pour rester compatible avec le typage SupabaseClient<Database>.
+  // Les tests RPC ne touchent pas à client.from : exposé comme no-op pour
+  // rester compatible avec le typage SupabaseClient<Database>, et rendu pour
+  // qu'un test puisse affirmer qu'aucune table n'a été écrite en direct.
   const from = vi.fn()
   const client = { from, rpc } as unknown as SupabaseClient<Database>
-  return { repo: new SupabaseRepository(client), rpc }
+  return { repo: new SupabaseRepository(client), rpc, from }
 }
 
 // Helper pour les RPCs qui écrivent puis refetch (createTeam / updateTeam) :
@@ -611,28 +613,62 @@ describe('SupabaseRepository — updateMatch', () => {
   })
 })
 
-describe('SupabaseRepository — createMatches (batch)', () => {
-  it('inserts an array of mapped Insert payloads', async () => {
-    const chain = makeChainWithResult({ data: null, error: null })
-    const { repo, from } = makeRepoWithChain(chain)
+describe('SupabaseRepository — startTournament', () => {
+  it('calls the start_tournament RPC once with the tournament id and the mapped batch, and writes no table directly', async () => {
+    const { repo, rpc, from } = makeRepoWithRpcResult({ data: null, error: null })
     const firstMatch = makeMatchDomain()
     const secondMatch: TournamentMatch = { ...firstMatch, id: 'other', roundNumber: 2 }
 
-    await repo.createMatches([firstMatch, secondMatch])
+    await expect(repo.startTournament(TOURNAMENT_ID, [firstMatch, secondMatch])).resolves.toBeUndefined()
 
-    expect(from).toHaveBeenCalledWith('tournament_matches')
-    const insertArg = chain.insert.mock.calls[0]![0] as Array<{ id: string, round_number: number }>
-    expect(insertArg).toHaveLength(2)
-    expect(insertArg[0]!.id).toBe(MATCH_ID)
-    expect(insertArg[1]!.id).toBe('other')
-    expect(insertArg[1]!.round_number).toBe(2)
+    // L'égalité profonde refuse toute clé en trop dans le lot : ni score, ni
+    // vainqueur, ni statut, ni tournament_id (premier argument).
+    expect(rpc).toHaveBeenCalledTimes(1)
+    expect(rpc).toHaveBeenCalledWith('start_tournament', {
+      p_tournament_id: TOURNAMENT_ID,
+      p_matches: [
+        { id: MATCH_ID, team_a_id: TEAM_A_ID, team_b_id: TEAM_B_ID, round_number: 1 },
+        { id: 'other', team_a_id: TEAM_A_ID, team_b_id: TEAM_B_ID, round_number: 2 },
+      ],
+    })
+    expect(from).not.toHaveBeenCalled()
   })
 
-  it('throws when Supabase returns an error', async () => {
-    const chain = makeChainWithResult({ data: null, error: { message: 'batch failed' } })
-    const { repo } = makeRepoWithChain(chain)
+  it.each([
+    'not_authenticated',
+    'not_owner',
+    'tournament_not_draft',
+    'not_enough_teams',
+    'matches_already_generated',
+    'invalid_matches',
+  ] as const)('throws StartTournamentError(%s) when the RPC raises that code', async (code) => {
+    const { repo } = makeRepoWithRpcResult({ data: null, error: { message: code, code: 'P0001' } })
 
-    await expect(repo.createMatches([makeMatchDomain()])).rejects.toThrow('batch failed')
+    const refusal = repo.startTournament(TOURNAMENT_ID, [makeMatchDomain()])
+    await expect(refusal).rejects.toBeInstanceOf(StartTournamentError)
+    await expect(refusal).rejects.toMatchObject({ code })
+  })
+
+  it('throws StartTournamentError(unknown) on an unrecognized error message, never a raw Error', async () => {
+    const { repo } = makeRepoWithRpcResult({
+      data: null,
+      error: { message: 'new row violates row-level security policy', code: '42501' },
+    })
+
+    const refusal = repo.startTournament(TOURNAMENT_ID, [makeMatchDomain()])
+    await expect(refusal).rejects.toBeInstanceOf(StartTournamentError)
+    await expect(refusal).rejects.toMatchObject({ code: 'unknown' })
+  })
+
+  it('throws StartTournamentError(unknown) when the error carries no message at all, never a TypeError', async () => {
+    // Hors PostgREST (passerelle en panne, corps 502 `{"error": …}`), le
+    // client ne rejette pas : il rend le corps tel quel, sans `message`. Le
+    // cast reproduit cette forme que le type de test n'exprime pas.
+    const { repo } = makeRepoWithRpcResult({ data: null, error: {} as { message: string } })
+
+    const refusal = repo.startTournament(TOURNAMENT_ID, [makeMatchDomain()])
+    await expect(refusal).rejects.toBeInstanceOf(StartTournamentError)
+    await expect(refusal).rejects.toMatchObject({ code: 'unknown' })
   })
 })
 
