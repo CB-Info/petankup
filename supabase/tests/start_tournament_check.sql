@@ -13,22 +13,25 @@
 --     dans les RPC SECURITY DEFINER.
 --   - set local role authenticated / reset role éprouve les DROITS réels :
 --     l'enveloppe publique et la fonction privée sous le rôle de
---     l'application (cas 1, 4), le refus d'anon (cas 2h), et la RLS du
---     chemin direct (cas 5).
+--     l'application (cas 0, 1, 4), le refus d'anon (cas 2h), et la
+--     fermeture du chemin direct (cas 5).
 --
--- Sonde « statut d'abord » : la garde que posera le lot DB-2 (aucun match
--- sur un brouillon) est simulée par un trigger jetable, posé après les
--- fixtures et retiré avant le cas 5. Avec elle, une fonction qui insérerait
--- les matchs AVANT de passer le tournoi en cours échouerait au cas 1 — sans
--- elle, l'ordre des deux écritures n'est pas observable.
+-- Statut d'abord : depuis DB-2 (20260925120000_match_lifecycle_guard), la
+-- base elle-même refuse tout match sur un brouillon. Une fonction qui
+-- insérerait les matchs AVANT de passer le tournoi en cours échouerait au
+-- cas 1 — l'ordre des deux écritures est observable sans sonde.
 --
 -- Sémantique attendue :
 --   - refus de la RPC   → raise exception '<code>' (P0001), message = le code
 --   - lot invalide      → 'invalid_matches', et RIEN n'a été écrit
+--   - lot incomplet     → 'incomplete_matches' (DB-2), et RIEN n'a été écrit
+--   - 'matches_already_generated' n'est plus observable depuis DB-2 (un
+--     brouillon n'a jamais de match) : garde de la RPC conservée en défense
 --   - tout ou rien      → un lot dont le DERNIER élément est invalide laisse
 --                         zéro match ET le statut draft (écriture 1 annulée)
 --   - anon              → 42501 (EXECUTE révoqué)
---   - chemin direct     → INSERT matchs + UPDATE tournoi sous RLS : passent
+--   - chemin direct     → INSERT direct d'un match : 42501 (privilège révoqué
+--                         par DB-2) ; en postgres, P0001 'tournament_not_started'
 -- ============================================================================
 
 begin;
@@ -37,13 +40,16 @@ begin;
 -- Parité d'environnement : sur le projet hébergé, authenticated a les
 -- privilèges DML sur les tables applicatives — ces GRANT y sont des no-ops.
 -- Une stack locale peut ne pas les poser : posés ici, DANS la transaction
--- (annulés par le rollback final).
+-- (annulés par le rollback final). VOLONTAIREMENT pas d'insert sur
+-- tournament_matches : DB-2 l'a révoqué, le reposer ici testerait un état
+-- qui n'existe plus.
 -- ----------------------------------------------------------------------------
 
 grant select, insert, update, delete
-  on public.tournaments, public.teams, public.tournament_matches,
+  on public.tournaments, public.teams,
      public.team_players, public.tournament_members, public.profiles
   to authenticated;
+grant select, update, delete on public.tournament_matches to authenticated;
 
 -- ----------------------------------------------------------------------------
 -- Helpers d'assertion (pg_temp : jetés au rollback / fin de session).
@@ -167,12 +173,12 @@ $$;
 -- handle_new_user_profile crée les profiles.
 --   S1 : brouillon, 3 équipes                      → nominal
 --   S2 : brouillon, 1 équipe                       → not_enough_teams
---   S3 : en cours, 2 équipes, 1 match en attente   → tournament_not_draft
---   S4 : terminé, 2 équipes, 1 match complété      → tournament_not_draft
---   S5 : brouillon, 2 équipes, 1 match déjà là     → matches_already_generated
---        (l'état bloqué que ce lot corrige)
+--   S3 : inséré en cours, 2 équipes, 1 match       → tournament_not_draft
+--   S4 : inséré en cours puis terminé, 1 match     → tournament_not_draft
 --   S6 : brouillon sain, 2 équipes                 → lots invalides, tout ou rien
---   S7 : brouillon sain, 2 équipes                 → chemin direct intact
+--   S7 : brouillon sain, 2 équipes                 → chemin direct fermé
+-- Aucune fixture n'insère de match sur un brouillon : depuis DB-2, la base
+-- l'interdit (S3 et S4 naissent en cours).
 -- ----------------------------------------------------------------------------
 
 insert into auth.users (id, email, aud, role, created_at, updated_at) values
@@ -182,9 +188,8 @@ insert into auth.users (id, email, aud, role, created_at, updated_at) values
 insert into public.tournaments (id, owner_id, name, date, status) values
   ('f2000000-0000-4000-8000-000000000001', 'e0000000-0000-4000-8000-000000000001', 'start-check-nominal',    current_date, 'draft'),
   ('f2000000-0000-4000-8000-000000000002', 'e0000000-0000-4000-8000-000000000001', 'start-check-une-equipe', current_date, 'draft'),
-  ('f2000000-0000-4000-8000-000000000003', 'e0000000-0000-4000-8000-000000000001', 'start-check-en-cours',   current_date, 'draft'),
-  ('f2000000-0000-4000-8000-000000000004', 'e0000000-0000-4000-8000-000000000001', 'start-check-termine',    current_date, 'draft'),
-  ('f2000000-0000-4000-8000-000000000005', 'e0000000-0000-4000-8000-000000000001', 'start-check-bloque',     current_date, 'draft'),
+  ('f2000000-0000-4000-8000-000000000003', 'e0000000-0000-4000-8000-000000000001', 'start-check-en-cours',   current_date, 'in_progress'),
+  ('f2000000-0000-4000-8000-000000000004', 'e0000000-0000-4000-8000-000000000001', 'start-check-termine',    current_date, 'in_progress'),
   ('f2000000-0000-4000-8000-000000000006', 'e0000000-0000-4000-8000-000000000001', 'start-check-sain',       current_date, 'draft'),
   ('f2000000-0000-4000-8000-000000000007', 'e0000000-0000-4000-8000-000000000001', 'start-check-direct',     current_date, 'draft');
 
@@ -198,8 +203,6 @@ insert into public.teams (id, tournament_id, name) values
   ('b2000000-0000-4000-8000-000000000003', 'f2000000-0000-4000-8000-000000000003', 'Bravo'),
   ('a2000000-0000-4000-8000-000000000004', 'f2000000-0000-4000-8000-000000000004', 'Alpha'),
   ('b2000000-0000-4000-8000-000000000004', 'f2000000-0000-4000-8000-000000000004', 'Bravo'),
-  ('a2000000-0000-4000-8000-000000000005', 'f2000000-0000-4000-8000-000000000005', 'Alpha'),
-  ('b2000000-0000-4000-8000-000000000005', 'f2000000-0000-4000-8000-000000000005', 'Bravo'),
   ('a2000000-0000-4000-8000-000000000006', 'f2000000-0000-4000-8000-000000000006', 'Alpha'),
   ('b2000000-0000-4000-8000-000000000006', 'f2000000-0000-4000-8000-000000000006', 'Bravo'),
   ('a2000000-0000-4000-8000-000000000007', 'f2000000-0000-4000-8000-000000000007', 'Alpha'),
@@ -210,40 +213,14 @@ insert into public.team_players (team_id, tournament_id, user_id, display_name) 
   ('a2000000-0000-4000-8000-000000000004', 'f2000000-0000-4000-8000-000000000004', 'e0000000-0000-4000-8000-000000000001', 'start-owner'),
   ('b2000000-0000-4000-8000-000000000004', 'f2000000-0000-4000-8000-000000000004', 'e0000000-0000-4000-8000-000000000002', 'start-other');
 
--- S3 et S5 : un match en attente ; S4 : un match complété.
+-- S3 : un match en attente ; S4 : un match complété (tous deux en cours).
 insert into public.tournament_matches (tournament_id, team_a_id, team_b_id, score_a, score_b, winner_id, status, round_number) values
   ('f2000000-0000-4000-8000-000000000003', 'a2000000-0000-4000-8000-000000000003', 'b2000000-0000-4000-8000-000000000003', null, null, null, 'pending', 1),
-  ('f2000000-0000-4000-8000-000000000004', 'a2000000-0000-4000-8000-000000000004', 'b2000000-0000-4000-8000-000000000004', 13, 7, 'a2000000-0000-4000-8000-000000000004', 'completed', 1),
-  ('f2000000-0000-4000-8000-000000000005', 'a2000000-0000-4000-8000-000000000005', 'b2000000-0000-4000-8000-000000000005', null, null, null, 'pending', 1);
+  ('f2000000-0000-4000-8000-000000000004', 'a2000000-0000-4000-8000-000000000004', 'b2000000-0000-4000-8000-000000000004', 13, 7, 'a2000000-0000-4000-8000-000000000004', 'completed', 1);
 
-update public.tournaments set status = 'in_progress'
- where id = 'f2000000-0000-4000-8000-000000000003';
+-- S4 : complétion (matérialisation réelle).
 update public.tournaments set status = 'completed'
  where id = 'f2000000-0000-4000-8000-000000000004';
-
--- ----------------------------------------------------------------------------
--- Sonde « statut d'abord » (cf. bannière) : jetable, posée APRÈS les fixtures
--- (elles insèrent des matchs sur des brouillons), retirée AVANT le cas 5.
--- ----------------------------------------------------------------------------
-
-create function public.start_check_probe_no_match_on_draft() returns trigger
-language plpgsql
-set search_path = ''
-as $$
-begin
-  if exists (
-    select 1 from public.tournaments t
-     where t.id = new.tournament_id and t.status = 'draft'
-  ) then
-    raise exception 'sonde : match inséré sur un brouillon — le statut n''a pas été passé en cours avant';
-  end if;
-  return new;
-end;
-$$;
-
-create trigger start_check_probe_no_match_on_draft
-  before insert on public.tournament_matches
-  for each row execute function public.start_check_probe_no_match_on_draft();
 
 -- Identité simulée = owner, pour auth.uid() (RPC) et la RLS (role authenticated).
 select set_config(
@@ -253,8 +230,27 @@ select set_config(
   true);
 
 -- ----------------------------------------------------------------------------
+-- Cas 0 — lot incomplet (DB-2), sous le rôle de l'application : brouillon à
+-- 3 équipes, lot de 2 matchs sur 3 paires → refus typé, rien écrit.
+-- ----------------------------------------------------------------------------
+
+set local role authenticated;
+
+select pg_temp.assert_blocked(
+  $sql$ select public.start_tournament('f2000000-0000-4000-8000-000000000001',
+          '[{"id": "de000000-0000-4000-8000-000000000011", "team_a_id": "a2000000-0000-4000-8000-000000000001", "team_b_id": "b2000000-0000-4000-8000-000000000001", "round_number": 1},
+            {"id": "de000000-0000-4000-8000-000000000012", "team_a_id": "c2000000-0000-4000-8000-000000000001", "team_b_id": "a2000000-0000-4000-8000-000000000001", "round_number": 2}]'::jsonb) $sql$,
+  'P0001', 'incomplete_matches', 'cas 0: lot incomplet');
+
+reset role;
+
+select pg_temp.assert_untouched_draft('f2000000-0000-4000-8000-000000000001', 'cas 0');
+
+-- ----------------------------------------------------------------------------
 -- Cas 1 — nominal, sous le rôle de l'application : brouillon à 3 équipes,
--- lot de 3 matchs → en cours, 3 matchs fidèles au lot.
+-- lot de 3 matchs → en cours, 3 matchs fidèles au lot. La garde de DB-2
+-- (aucun match sur un brouillon) prouve au passage que le statut est écrit
+-- AVANT les matchs.
 -- ----------------------------------------------------------------------------
 
 set local role authenticated;
@@ -309,12 +305,9 @@ select pg_temp.assert_blocked(
   'P0001', 'not_enough_teams', 'cas 2c: une seule équipe');
 select pg_temp.assert_untouched_draft('f2000000-0000-4000-8000-000000000002', 'cas 2c');
 
--- 2d : des matchs existent déjà (l'état bloqué).
-select pg_temp.assert_blocked(
-  $sql$ select public.start_tournament('f2000000-0000-4000-8000-000000000005',
-          '[{"id": "de000000-0000-4000-8000-000000000051", "team_a_id": "a2000000-0000-4000-8000-000000000005", "team_b_id": "b2000000-0000-4000-8000-000000000005", "round_number": 1}]'::jsonb) $sql$,
-  'P0001', 'matches_already_generated', 'cas 2d: matchs déjà présents');
-select pg_temp.assert_state('f2000000-0000-4000-8000-000000000005', 'draft', 1, 'cas 2d');
+-- (Pas de cas 2d : « brouillon avec des matchs » est un état impossible
+-- depuis DB-2 — la garde matches_already_generated de la RPC reste, en
+-- défense en profondeur, mais n'est plus observable.)
 
 -- 2e : tournoi inexistant → not_owner (anti-fuite).
 select pg_temp.assert_blocked(
@@ -462,40 +455,58 @@ select pg_temp.assert_eq_int(
   1, 'cas 4: le match est fidèle au lot');
 
 -- ----------------------------------------------------------------------------
--- Sonde retirée : le chemin direct insère encore sur un brouillon, par
--- construction, jusqu'au lot DB-2.
+-- Cas 5 — le chemin direct est fermé (DB-2) : la RPC est la seule voie
+-- d'entrée d'un match. Le statut, lui, reste modifiable en direct.
 -- ----------------------------------------------------------------------------
 
-drop trigger start_check_probe_no_match_on_draft on public.tournament_matches;
-drop function public.start_check_probe_no_match_on_draft();
-
--- ----------------------------------------------------------------------------
--- Cas 5 — le chemin direct reste intact (RLS réelle, role authenticated) :
--- l'application déployée insère les matchs puis passe le tournoi en cours.
--- ----------------------------------------------------------------------------
-
+-- 5a : owner, INSERT direct sur un brouillon → 42501 (privilège révoqué).
 set local role authenticated;
-
-select pg_temp.assert_row_count(
+select pg_temp.assert_blocked(
   $sql$ insert into public.tournament_matches (tournament_id, team_a_id, team_b_id, status, round_number)
         values ('f2000000-0000-4000-8000-000000000007',
                 'a2000000-0000-4000-8000-000000000007',
                 'b2000000-0000-4000-8000-000000000007',
                 'pending', 1) $sql$,
-  1, 'cas 5a: INSERT direct des matchs sur un brouillon');
+  '42501', null, 'cas 5a: INSERT direct sur un brouillon (owner)');
+reset role;
 
+-- 5b : même INSERT en postgres (hors privilèges) → la garde répond.
+select pg_temp.assert_blocked(
+  $sql$ insert into public.tournament_matches (tournament_id, team_a_id, team_b_id, status, round_number)
+        values ('f2000000-0000-4000-8000-000000000007',
+                'a2000000-0000-4000-8000-000000000007',
+                'b2000000-0000-4000-8000-000000000007',
+                'pending', 1) $sql$,
+  'P0001', 'tournament_not_started', 'cas 5b: INSERT direct sur un brouillon (postgres)');
+select pg_temp.assert_untouched_draft('f2000000-0000-4000-8000-000000000007', 'cas 5a/5b');
+
+-- 5c : owner, UPDATE direct du statut → passe toujours (hors périmètre de
+-- DB-2 : un tournoi en cours sans match n'est pas un match sur un brouillon).
+set local role authenticated;
 select pg_temp.assert_row_count(
   $sql$ update public.tournaments set status = 'in_progress'
          where id = 'f2000000-0000-4000-8000-000000000007' $sql$,
-  1, 'cas 5b: UPDATE direct du statut');
-
+  1, 'cas 5c: UPDATE direct du statut');
 reset role;
 
--- Cohérence des deux chemins : la RPC refuse un tournoi déjà lancé.
+-- 5d : la RPC refuse un tournoi déjà lancé.
 select pg_temp.assert_blocked(
   $sql$ select public.start_tournament('f2000000-0000-4000-8000-000000000007',
           '[{"id": "de000000-0000-4000-8000-000000000071", "team_a_id": "a2000000-0000-4000-8000-000000000007", "team_b_id": "b2000000-0000-4000-8000-000000000007", "round_number": 1}]'::jsonb) $sql$,
-  'P0001', 'tournament_not_draft', 'cas 5c: RPC après le chemin direct');
+  'P0001', 'tournament_not_draft', 'cas 5d: RPC après le passage en cours');
+
+-- 5e : owner, INSERT direct sur un tournoi en cours → 42501 aussi : le
+-- privilège répond avant toute règle de ligne.
+set local role authenticated;
+select pg_temp.assert_blocked(
+  $sql$ insert into public.tournament_matches (tournament_id, team_a_id, team_b_id, status, round_number)
+        values ('f2000000-0000-4000-8000-000000000007',
+                'a2000000-0000-4000-8000-000000000007',
+                'b2000000-0000-4000-8000-000000000007',
+                'pending', 1) $sql$,
+  '42501', null, 'cas 5e: INSERT direct sur un tournoi en cours (owner)');
+reset role;
+select pg_temp.assert_state('f2000000-0000-4000-8000-000000000007', 'in_progress', 0, 'cas 5e');
 
 -- ----------------------------------------------------------------------------
 -- Récapitulatif lisible avant rollback.

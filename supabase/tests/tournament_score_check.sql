@@ -14,8 +14,10 @@
 -- Tout se joue en postgres (INSERT/UPDATE directs, hors RLS — filet de
 -- sécurité au niveau des CHECK, motif des cas 6g/6h de free_match_check).
 -- Aucun bloc GRANT ni simulation d'identité : la RLS n'est pas le sujet.
--- Le tournoi de fixtures RESTE en draft : aucun trigger de matérialisation
--- ne se déclenche, le harnais n'éprouve que les CHECK de la table des matchs.
+-- Le tournoi de fixtures est inséré directement EN COURS (depuis DB-2, la
+-- base interdit tout match sur un brouillon) et y reste : aucun trigger de
+-- matérialisation ne se déclenche, le harnais n'éprouve que les CHECK de la
+-- table des matchs.
 --
 -- Point de vigilance — CONTRAINTE CITÉE par le 23514 : plusieurs CHECK
 -- peuvent être violées simultanément ; Postgres les évalue en ordre
@@ -95,8 +97,8 @@ end;
 $$;
 
 -- ----------------------------------------------------------------------------
--- Fixtures (en postgres, owner des tables : bypass RLS). Le tournoi reste en
--- draft. Quatre équipes : l'index unique tournament_matches_unique_pair_per_
+-- Fixtures (en postgres, owner des tables : bypass RLS). Le tournoi naît en
+-- cours. Quatre équipes : l'index unique tournament_matches_unique_pair_per_
 -- tournament interdit deux matchs de la même paire — les trois matchs
 -- acceptés et le pending consomment quatre paires distinctes ; les INSERT
 -- refusés ne persistent rien et réutilisent tous la paire Bravo-Delta.
@@ -106,7 +108,7 @@ insert into auth.users (id, email, aud, role, created_at, updated_at) values
   ('d1000000-0000-4000-8000-000000000001', 'score-check-owner@petankup.test', 'authenticated', 'authenticated', now(), now());
 
 insert into public.tournaments (id, owner_id, name, date, status) values
-  ('f6000000-0000-4000-8000-000000000001', 'd1000000-0000-4000-8000-000000000001', 'score-check-T1', current_date, 'draft');
+  ('f6000000-0000-4000-8000-000000000001', 'd1000000-0000-4000-8000-000000000001', 'score-check-T1', current_date, 'in_progress');
 
 insert into public.teams (id, tournament_id, name) values
   ('a6000000-0000-4000-8000-000000000001', 'f6000000-0000-4000-8000-000000000001', 'Alpha'),

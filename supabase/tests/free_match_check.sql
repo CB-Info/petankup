@@ -560,7 +560,7 @@ select pg_temp.assert_free_stats('c1000000-0000-4000-8000-000000000002', 5, 1, 4
 -- ----------------------------------------------------------------------------
 
 insert into public.tournaments (id, owner_id, name, date, status) values
-  ('f5000000-0000-4000-8000-000000000001', 'c1000000-0000-4000-8000-000000000001', 'fm-check-T1', current_date, 'draft');
+  ('f5000000-0000-4000-8000-000000000001', 'c1000000-0000-4000-8000-000000000001', 'fm-check-T1', current_date, 'in_progress');
 insert into public.teams (id, tournament_id, name) values
   ('a5555555-5555-4555-8555-000000000001', 'f5000000-0000-4000-8000-000000000001', 'Alpha'),
   ('b5555555-5555-4555-8555-000000000001', 'f5000000-0000-4000-8000-000000000001', 'Bravo');
@@ -569,7 +569,7 @@ insert into public.team_players (team_id, tournament_id, user_id, display_name) 
   ('b5555555-5555-4555-8555-000000000001', 'f5000000-0000-4000-8000-000000000001', 'c1000000-0000-4000-8000-000000000004', 'u4');
 insert into public.tournament_matches (tournament_id, team_a_id, team_b_id, score_a, score_b, winner_id, status, round_number) values
   ('f5000000-0000-4000-8000-000000000001', 'a5555555-5555-4555-8555-000000000001', 'b5555555-5555-4555-8555-000000000001', 13, 7, 'a5555555-5555-4555-8555-000000000001', 'completed', 1);
-update public.tournaments set status = 'in_progress' where id = 'f5000000-0000-4000-8000-000000000001';
+-- T1 naît en cours (depuis DB-2, aucun match sur un brouillon) ; complétion.
 update public.tournaments set status = 'completed'   where id = 'f5000000-0000-4000-8000-000000000001';
 
 select pg_temp.assert_eq_int(

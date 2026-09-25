@@ -24,7 +24,10 @@
 -- Sémantique attendue des échecs (asymétrie assumée, précédent phase_b_4) :
 --   - RPC DEFINER            → raise exception 'tournament_completed' (P0001)
 --   - trigger tournoi        → raise exception 'tournament_completed' (P0001)
---   - INSERT direct sous gel → 42501 (RLS WITH CHECK)
+--   - INSERT direct sous gel → 42501 (privilège INSERT révoqué par DB-2 ; la
+--                              politique INSERT du gel n'existe plus — le gel
+--                              des matchs ne vit plus que dans les politiques
+--                              UPDATE / DELETE, cas 1a)
 --   - UPDATE/DELETE direct   → no-op silencieux, 0 ligne (RLS USING filtre)
 -- ============================================================================
 
@@ -36,13 +39,16 @@ begin;
 -- ces GRANT y sont des no-ops. Sur une stack locale `supabase db start`,
 -- la baseline de l'image ne les pose pas : on les pose ici, DANS la
 -- transaction (annulés par le rollback final). Volontairement PAS de grant
--- sur user_tournament_results / user_stats (deny-total de la Phase I).
+-- sur user_tournament_results / user_stats (deny-total de la Phase I), ni
+-- d'insert sur tournament_matches (révoqué par DB-2 : le reposer testerait
+-- un état qui n'existe plus).
 -- ----------------------------------------------------------------------------
 
 grant select, insert, update, delete
-  on public.tournaments, public.teams, public.tournament_matches,
+  on public.tournaments, public.teams,
      public.team_players, public.tournament_members, public.profiles
   to authenticated;
+grant select, update, delete on public.tournament_matches to authenticated;
 
 -- ----------------------------------------------------------------------------
 -- Helpers d'assertion (pg_temp : jetés au rollback / fin de session).
@@ -129,8 +135,10 @@ insert into auth.users (id, email, aud, role, created_at, updated_at) values
   ('d0000000-0000-4000-8000-000000000002', 'freeze-player@petankup.test', 'authenticated', 'authenticated', now(), now());
 
 insert into public.tournaments (id, owner_id, name, date, status) values
-  ('f1000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000001', 'freeze-check-gele',       current_date, 'draft'),
-  ('f1000000-0000-4000-8000-000000000002', 'd0000000-0000-4000-8000-000000000001', 'freeze-check-inprogress', current_date, 'draft');
+  -- Nés en cours : depuis DB-2, aucun match ne peut être inséré sur un
+  -- brouillon, même par les fixtures.
+  ('f1000000-0000-4000-8000-000000000001', 'd0000000-0000-4000-8000-000000000001', 'freeze-check-gele',       current_date, 'in_progress'),
+  ('f1000000-0000-4000-8000-000000000002', 'd0000000-0000-4000-8000-000000000001', 'freeze-check-inprogress', current_date, 'in_progress');
 
 insert into public.teams (id, tournament_id, name) values
   ('a1111111-1111-4111-8111-000000000001', 'f1000000-0000-4000-8000-000000000001', 'Alpha'),
@@ -146,11 +154,9 @@ insert into public.tournament_matches (tournament_id, team_a_id, team_b_id, scor
   ('f1000000-0000-4000-8000-000000000001', 'a1111111-1111-4111-8111-000000000001', 'b1111111-1111-4111-8111-000000000001', 13, 7, 'a1111111-1111-4111-8111-000000000001', 'completed', 1),
   ('f1000000-0000-4000-8000-000000000002', 'a1111111-1111-4111-8111-000000000002', 'b1111111-1111-4111-8111-000000000002', null, null, null, 'pending', 1);
 
--- Complétion de T1 (matérialise les stats) ; T2 passe in_progress.
+-- Complétion de T1 (matérialise les stats) ; T2 reste en cours.
 update public.tournaments set status = 'completed'
  where id = 'f1000000-0000-4000-8000-000000000001';
-update public.tournaments set status = 'in_progress'
- where id = 'f1000000-0000-4000-8000-000000000002';
 
 -- Sanity : la matérialisation initiale a bien produit 2 lignes.
 select pg_temp.assert_eq_int(
@@ -182,7 +188,7 @@ select pg_temp.assert_blocked(
                 'a1111111-1111-4111-8111-000000000001',
                 'b1111111-1111-4111-8111-000000000001',
                 'pending', 2) $sql$,
-  '42501', null, 'cas 1b: INSERT match sous gel');
+  '42501', null, 'cas 1b: INSERT match sous gel (privilège révoqué par DB-2)');
 
 reset role;
 

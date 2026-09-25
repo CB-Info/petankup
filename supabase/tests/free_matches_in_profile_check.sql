@@ -299,11 +299,12 @@ as $$
   select display_name from pg_temp.fixture_profile where id = p_user;
 $$;
 
--- T1 : tournoi public de U1, Alpha (U1 + un joueur libre) bat Bravo (U2)
--- 13-5, puis complétion par le chemin de production (trigger de
--- matérialisation → user_tournament_results / user_stats).
+-- T1 : tournoi public de U1, né en cours (depuis DB-2, aucun match sur un
+-- brouillon), Alpha (U1 + un joueur libre) bat Bravo (U2) 13-5, puis
+-- complétion par le chemin de production (trigger de matérialisation →
+-- user_tournament_results / user_stats).
 insert into public.tournaments (id, owner_id, name, date, status, visibility) values
-  ('f3000000-0000-4000-8000-000000000001', 'c3000000-0000-4000-8000-000000000001', 'fmp-tournoi', current_date, 'draft', 'public');
+  ('f3000000-0000-4000-8000-000000000001', 'c3000000-0000-4000-8000-000000000001', 'fmp-tournoi', current_date, 'in_progress', 'public');
 
 insert into public.teams (id, tournament_id, name) values
   ('a3333333-3333-4333-8333-000000000001', 'f3000000-0000-4000-8000-000000000001', 'Alpha'),

@@ -74,10 +74,12 @@ insert into auth.users (id, email, aud, role, created_at, updated_at) values
   ('c0000000-0000-4000-8000-000000000001', 'viewer-a@petankup.test', 'authenticated', 'authenticated', now(), now()),
   ('c0000000-0000-4000-8000-000000000002', 'viewer-b@petankup.test', 'authenticated', 'authenticated', now(), now());
 
+-- Nés en cours (depuis DB-2, aucun match ne s'insère sur un brouillon),
+-- terminés après les matchs.
 insert into public.tournaments (id, owner_id, name, date, status, visibility) values
-  ('f2000000-0000-4000-8000-000000000001', 'c0000000-0000-4000-8000-000000000001', 'vco-public',        current_date, 'draft', 'public'),
-  ('f2000000-0000-4000-8000-000000000002', 'c0000000-0000-4000-8000-000000000001', 'vco-prive-ferme',   current_date, 'draft', 'private'),
-  ('f2000000-0000-4000-8000-000000000003', 'c0000000-0000-4000-8000-000000000001', 'vco-prive-partage', current_date, 'draft', 'private');
+  ('f2000000-0000-4000-8000-000000000001', 'c0000000-0000-4000-8000-000000000001', 'vco-public',        current_date, 'in_progress', 'public'),
+  ('f2000000-0000-4000-8000-000000000002', 'c0000000-0000-4000-8000-000000000001', 'vco-prive-ferme',   current_date, 'in_progress', 'private'),
+  ('f2000000-0000-4000-8000-000000000003', 'c0000000-0000-4000-8000-000000000001', 'vco-prive-partage', current_date, 'in_progress', 'private');
 
 -- B est membre de T3 (posé AVANT complétion : le gel des membres
 -- s'applique aux tournois terminés).

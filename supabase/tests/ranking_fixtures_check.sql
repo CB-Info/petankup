@@ -89,9 +89,10 @@ insert into auth.users (id, email, aud, role, created_at, updated_at) values
   ('e0000000-0000-4000-8000-000000000004', 'ranking-fixture-4@petankup.test', 'authenticated', 'authenticated', now(), now());
 
 -- ============================================================================
--- Helper de structure : pour CHAQUE vecteur on insère un tournoi draft, ses
--- équipes (team_id à préfixe-lettre dominant → ordre a<b<c<d intra-tournoi,
--- suffixe = numéro de vecteur pour l'unicité globale du PK), un joueur lié par
+-- Helper de structure : pour CHAQUE vecteur on insère un tournoi EN COURS
+-- (depuis DB-2, aucun match ne s'insère sur un brouillon), ses équipes
+-- (team_id à préfixe-lettre dominant → ordre a<b<c<d intra-tournoi, suffixe
+-- = numéro de vecteur pour l'unicité globale du PK), un joueur lié par
 -- équipe, et les matchs completed. Puis on passe le tournoi à `completed` pour
 -- déclencher la matérialisation réelle, et on asserte les rangs.
 --
@@ -103,7 +104,7 @@ insert into auth.users (id, email, aud, role, created_at, updated_at) values
 -- Vecteur 1 — clean-4-team-no-tie → a1 b2 c3 d4
 -- ----------------------------------------------------------------------------
 insert into public.tournaments (id, owner_id, name, date, status) values
-  ('f0000000-0000-4000-8000-000000000001', 'e0000000-0000-4000-8000-000000000001', 'fixture-clean-4-team-no-tie', current_date, 'draft');
+  ('f0000000-0000-4000-8000-000000000001', 'e0000000-0000-4000-8000-000000000001', 'fixture-clean-4-team-no-tie', current_date, 'in_progress');
 
 insert into public.teams (id, tournament_id, name) values
   ('aaaaaaaa-aaaa-4aaa-8aaa-000000000001', 'f0000000-0000-4000-8000-000000000001', 'A'),
@@ -137,7 +138,7 @@ select pg_temp.assert_rank('f0000000-0000-4000-8000-000000000001', 'dddddddd-ddd
 -- Matchs : a>c, a>b, d>a, c>b, c>d, b>d
 -- ----------------------------------------------------------------------------
 insert into public.tournaments (id, owner_id, name, date, status) values
-  ('f0000000-0000-4000-8000-000000000002', 'e0000000-0000-4000-8000-000000000001', 'fixture-4-team-two-tied-pairs', current_date, 'draft');
+  ('f0000000-0000-4000-8000-000000000002', 'e0000000-0000-4000-8000-000000000001', 'fixture-4-team-two-tied-pairs', current_date, 'in_progress');
 
 insert into public.teams (id, tournament_id, name) values
   ('aaaaaaaa-aaaa-4aaa-8aaa-000000000002', 'f0000000-0000-4000-8000-000000000002', 'A'),
@@ -171,7 +172,7 @@ select pg_temp.assert_rank('f0000000-0000-4000-8000-000000000002', 'dddddddd-ddd
 -- Matchs : a>b, b>c, c>a (cycle parfait, scalaires égaux)
 -- ----------------------------------------------------------------------------
 insert into public.tournaments (id, owner_id, name, date, status) values
-  ('f0000000-0000-4000-8000-000000000003', 'e0000000-0000-4000-8000-000000000001', 'fixture-perfect-3-cycle-entry-equals-id-order', current_date, 'draft');
+  ('f0000000-0000-4000-8000-000000000003', 'e0000000-0000-4000-8000-000000000001', 'fixture-perfect-3-cycle-entry-equals-id-order', current_date, 'in_progress');
 
 insert into public.teams (id, tournament_id, name) values
   ('aaaaaaaa-aaaa-4aaa-8aaa-000000000003', 'f0000000-0000-4000-8000-000000000003', 'A'),
@@ -198,7 +199,7 @@ select pg_temp.assert_rank('f0000000-0000-4000-8000-000000000003', 'cccccccc-ccc
 -- Vecteur 4 — perfect-3-cycle-entry-c-a-b → a1 b2 c3 (SQL identique au vecteur 3)
 -- ----------------------------------------------------------------------------
 insert into public.tournaments (id, owner_id, name, date, status) values
-  ('f0000000-0000-4000-8000-000000000004', 'e0000000-0000-4000-8000-000000000001', 'fixture-perfect-3-cycle-entry-c-a-b', current_date, 'draft');
+  ('f0000000-0000-4000-8000-000000000004', 'e0000000-0000-4000-8000-000000000001', 'fixture-perfect-3-cycle-entry-c-a-b', current_date, 'in_progress');
 
 insert into public.teams (id, tournament_id, name) values
   ('aaaaaaaa-aaaa-4aaa-8aaa-000000000004', 'f0000000-0000-4000-8000-000000000004', 'A'),
@@ -225,7 +226,7 @@ select pg_temp.assert_rank('f0000000-0000-4000-8000-000000000004', 'cccccccc-ccc
 -- Vecteur 5 — perfect-3-cycle-entry-b-c-a → a1 b2 c3 (SQL identique au vecteur 3)
 -- ----------------------------------------------------------------------------
 insert into public.tournaments (id, owner_id, name, date, status) values
-  ('f0000000-0000-4000-8000-000000000005', 'e0000000-0000-4000-8000-000000000001', 'fixture-perfect-3-cycle-entry-b-c-a', current_date, 'draft');
+  ('f0000000-0000-4000-8000-000000000005', 'e0000000-0000-4000-8000-000000000001', 'fixture-perfect-3-cycle-entry-b-c-a', current_date, 'in_progress');
 
 insert into public.teams (id, tournament_id, name) values
   ('aaaaaaaa-aaaa-4aaa-8aaa-000000000005', 'f0000000-0000-4000-8000-000000000005', 'A'),
@@ -253,7 +254,7 @@ select pg_temp.assert_rank('f0000000-0000-4000-8000-000000000005', 'cccccccc-ccc
 -- Matchs : a>b, b>c, c>a (cycle au sommet) + a>d, b>d, c>d
 -- ----------------------------------------------------------------------------
 insert into public.tournaments (id, owner_id, name, date, status) values
-  ('f0000000-0000-4000-8000-000000000006', 'e0000000-0000-4000-8000-000000000001', 'fixture-4-team-3way-cycle-top-entry-reversed', current_date, 'draft');
+  ('f0000000-0000-4000-8000-000000000006', 'e0000000-0000-4000-8000-000000000001', 'fixture-4-team-3way-cycle-top-entry-reversed', current_date, 'in_progress');
 
 insert into public.teams (id, tournament_id, name) values
   ('aaaaaaaa-aaaa-4aaa-8aaa-000000000006', 'f0000000-0000-4000-8000-000000000006', 'A'),

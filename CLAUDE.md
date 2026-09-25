@@ -367,8 +367,19 @@ base restent le filet, jamais la première ligne :
   direct des matchs n'existe plus dans le contrat applicatif). Ses refus
   typés (`StartTournamentError`) sont traduits par
   `useStartTournamentFeedback` ; ceux qui disent l'écran périmé (lancé
-  ailleurs, matchs déjà là, plus assez d'équipes) rechargent le tournoi en
-  place.
+  ailleurs, plus assez d'équipes) rechargent le tournoi en place.
+- **Garde en base** (migration `20260925120000_match_lifecycle_guard`) :
+  aucun match ne peut exister sur un Brouillon, quel que soit le chemin
+  DML (triggers sur les matchs et sur la création d'un brouillon) ;
+  l'insertion directe d'un match est révoquée aux rôles applicatifs (la RPC
+  est la seule voie d'entrée) ; jamais de retour en Brouillon (trigger sur
+  les tournois, code `tournament_started`) ; la RPC exige un lot qui couvre
+  toutes les paires d'équipes (`incomplete_matches`) — elle vérifie, elle
+  ne recalcule pas. **Dette APP** : ces deux codes ne sont pas encore
+  traduits par l'application (`incomplete_matches` tombe sur le message
+  générique sans rechargement ; `tournament_started` peut atteindre l'écran
+  brut via un UPDATE de métadonnées qui renvoie un statut périmé) — lot APP
+  à venir : traduction + rechargement en place.
 - Deux visibilités : `private` (par défaut : owner + membres invités)
   ou `public` (visible de tous les utilisateurs authentifiés).
   Modifiable à tout moment, y compris sur un tournoi terminé
